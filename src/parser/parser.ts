@@ -2,6 +2,7 @@ import type { Token, TokenKind } from "../lexer/tokenize.ts";
 import { SqliteError, unsupported } from "../errors/index.ts";
 import type {
   AlterTableStmt,
+  AttachStmt,
   BeginStmt,
   BinaryOp,
   CaseExpr,
@@ -12,9 +13,13 @@ import type {
   ConflictAction,
   CreateIndexStmt,
   CreateTableStmt,
+  CreateTriggerStmt,
   CreateViewStmt,
+  CreateVirtualTableStmt,
+  DropTriggerStmt,
   Cte,
   DeleteStmt,
+  DetachStmt,
   DropIndexStmt,
   DropTableStmt,
   DropViewStmt,
@@ -155,7 +160,24 @@ export class Parser {
   }
 
   private parseTableName(): string {
-    return this.parseQualifiedTableName().name;
+    const qname = this.parseQualifiedTableName();
+    return qname.schema ? `${qname.schema}.${qname.name}` : qname.name;
+  }
+
+  private parseAttachStmt(): AttachStmt {
+    this.expect("ATTACH");
+    this.match("DATABASE");
+    const filename = this.parseExpr();
+    this.expect("AS");
+    const schema = this.parseIdent();
+    return { type: "attach", filename, schema };
+  }
+
+  private parseDetachStmt(): DetachStmt {
+    this.expect("DETACH");
+    this.match("DATABASE");
+    const schema = this.parseIdent();
+    return { type: "detach", schema };
   }
 
   private optionalAlias(): string | null {
@@ -210,8 +232,8 @@ export class Parser {
     if (this.at("RELEASE")) return this.parseReleaseStmt();
     if (this.at("PRAGMA")) return this.parsePragmaStmt();
 
-    if (this.at("ATTACH")) unsupported("ATTACH DATABASE");
-    if (this.at("DETACH")) unsupported("DETACH DATABASE");
+    if (this.at("ATTACH")) return this.parseAttachStmt();
+    if (this.at("DETACH")) return this.parseDetachStmt();
 
     this.syntaxError(`unexpected token ${this.current().kind}`);
   }
@@ -481,10 +503,10 @@ export class Parser {
 
     const alias = this.optionalAlias();
     if (this.match("INDEXED")) {
-      unsupported("INDEXED BY");
-    }
-    if (this.match("NOT") && this.at("INDEXED")) {
-      unsupported("NOT INDEXED");
+      this.expect("BY");
+      this.parseIdent(); // index hint — planner is a no-op
+    } else if (this.match("NOT") && this.at("INDEXED")) {
+      this.advance(); // INDEXED
     }
     return {
       type: "table",
@@ -720,9 +742,9 @@ export class Parser {
     const temp = this.match("TEMP") || this.match("TEMPORARY");
     if (this.match("VIRTUAL")) {
       this.expect("TABLE");
-      unsupported("CREATE VIRTUAL TABLE");
+      return this.parseCreateVirtualTable();
     }
-    if (this.match("TRIGGER")) unsupported("CREATE TRIGGER");
+    if (this.match("TRIGGER")) return this.parseCreateTrigger(temp);
     if (this.match("UNIQUE")) {
       this.expect("INDEX");
       return this.parseCreateIndex(true, temp);
@@ -731,6 +753,26 @@ export class Parser {
     if (this.match("VIEW")) return this.parseCreateView(temp);
     this.expect("TABLE");
     return this.parseCreateTable(temp);
+  }
+
+  private parseCreateVirtualTable(): CreateVirtualTableStmt {
+    const ifNotExists = this.parseIfNotExists();
+    const name = this.parseTableName();
+    this.expect("USING");
+    const module = this.parseIdent();
+    const moduleArgs: string[] = [];
+    if (this.match("LPAREN")) {
+      do {
+        if (this.at("STRING")) {
+          moduleArgs.push(String(this.current().literal));
+          this.advance();
+        } else {
+          moduleArgs.push(this.parseIdent());
+        }
+      } while (this.match("COMMA"));
+      this.expect("RPAREN");
+    }
+    return { type: "create_virtual_table", ifNotExists, name, module, moduleArgs };
   }
 
   private parseIfNotExists(): boolean {
@@ -771,6 +813,7 @@ export class Parser {
         columns: [],
         constraints: [],
         asSelect,
+        withoutRowid: false,
       };
     }
 
@@ -785,11 +828,14 @@ export class Parser {
       }
     } while (this.match("COMMA"));
     this.expect("RPAREN");
+    let withoutRowid = false;
     if (this.match("WITHOUT")) {
-      unsupported("WITHOUT ROWID");
+      const word = this.parseIdent();
+      if (word.toUpperCase() !== "ROWID") this.syntaxError("expected ROWID after WITHOUT");
+      withoutRowid = true;
     }
 
-    return { type: "create_table", ifNotExists, temp, name, columns, constraints, asSelect: null };
+    return { type: "create_table", ifNotExists, temp, name, columns, constraints, asSelect: null, withoutRowid };
   }
 
   private parseColumnDef(): ColumnDef {
@@ -885,9 +931,29 @@ export class Parser {
       return this.parseReferencesConstraint();
     }
     if (this.match("GENERATED")) {
-      unsupported("GENERATED ALWAYS AS columns");
+      const always = this.parseIdent();
+      if (always.toUpperCase() !== "ALWAYS") this.syntaxError("expected ALWAYS after GENERATED");
+      this.expect("AS");
+      return this.parseGeneratedConstraint();
+    }
+    if (this.match("AS") && this.at("LPAREN")) {
+      return this.parseGeneratedConstraint();
     }
     this.syntaxError("expected column constraint");
+  }
+
+  private parseGeneratedConstraint(): ColumnConstraint {
+    this.expect("LPAREN");
+    const expr = this.parseExpr();
+    this.expect("RPAREN");
+    let stored = false;
+    if (this.current().kind === "IDENT" || this.at("VIRTUAL")) {
+      const word = this.parseIdent().toUpperCase();
+      if (word === "STORED") stored = true;
+      else if (word === "VIRTUAL") stored = false;
+      else this.syntaxError("expected STORED or VIRTUAL after generated column expression");
+    }
+    return { type: "generated", expr, stored };
   }
 
   private parseReferencesConstraint(): ColumnConstraint {
@@ -1045,6 +1111,75 @@ export class Parser {
     return { type: "create_view", ifNotExists, temp, name, columns, select };
   }
 
+  private parseCreateTrigger(temp: boolean): CreateTriggerStmt {
+    const ifNotExists = this.parseIfNotExists();
+    const name = this.parseTableName();
+    let timing: CreateTriggerStmt["timing"];
+    if (this.match("BEFORE")) timing = "BEFORE";
+    else if (this.match("AFTER")) timing = "AFTER";
+    else if (this.match("INSTEAD")) {
+      this.expect("OF");
+      timing = "INSTEAD";
+    } else {
+      this.syntaxError("expected BEFORE, AFTER, or INSTEAD OF");
+    }
+
+    let event: CreateTriggerStmt["event"];
+    if (this.match("INSERT")) event = "INSERT";
+    else if (this.match("DELETE")) event = "DELETE";
+    else if (this.match("UPDATE")) event = "UPDATE";
+    else this.syntaxError("expected INSERT, DELETE, or UPDATE");
+
+    let updateColumns: string[] | null = null;
+    if (event === "UPDATE" && this.match("OF")) {
+      updateColumns = [];
+      do {
+        updateColumns.push(this.parseIdent());
+      } while (this.match("COMMA"));
+    }
+
+    this.expect("ON");
+    const table = this.parseTableName();
+
+    let forEachRow = false;
+    if (this.match("FOR")) {
+      this.expect("EACH");
+      this.expect("ROW");
+      forEachRow = true;
+    }
+
+    let when: Expr | null = null;
+    if (this.match("WHEN")) when = this.parseExpr();
+
+    this.expect("BEGIN");
+    const body = this.parseTriggerBody();
+
+    return {
+      type: "create_trigger",
+      ifNotExists,
+      temp,
+      name,
+      timing,
+      event,
+      table,
+      updateColumns,
+      forEachRow,
+      when,
+      body,
+    };
+  }
+
+  private parseTriggerBody(): Statement[] {
+    const body: Statement[] = [];
+    while (!this.at("END") && !this.at("EOF")) {
+      if (this.match("SEMI")) continue;
+      body.push(this.parseStatement());
+      this.match("SEMI");
+    }
+    this.expect("END");
+    return body;
+  }
+
   // ── DROP ────────────────────────────────────────────────────────────────
 
   private parseDropStmt(): Statement {
@@ -1052,7 +1187,7 @@ export class Parser {
     if (this.match("TABLE")) return this.parseDropTable();
     if (this.match("INDEX")) return this.parseDropIndex();
     if (this.match("VIEW")) return this.parseDropView();
-    if (this.match("TRIGGER")) unsupported("DROP TRIGGER");
+    if (this.match("TRIGGER")) return this.parseDropTrigger();
     this.syntaxError("expected TABLE, INDEX, or VIEW after DROP");
   }
 
@@ -1072,6 +1207,12 @@ export class Parser {
     const ifExists = this.parseIfExists();
     const name = this.parseIdent();
     return { type: "drop_view", ifExists, name };
+  }
+
+  private parseDropTrigger(): DropTriggerStmt {
+    const ifExists = this.parseIfExists();
+    const name = this.parseTableName();
+    return { type: "drop_trigger", ifExists, name };
   }
 
   // ── ALTER TABLE ─────────────────────────────────────────────────────────

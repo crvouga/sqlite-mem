@@ -14,9 +14,14 @@ import { evalExpr } from "../expressions/eval.ts";
 import { buildSqliteMaster, buildSqliteSchema } from "../schema/catalog.ts";
 import type { Table } from "../storage/table.ts";
 import { compareWithCollation } from "../types/collation.ts";
-import { compareSql, isTruthySql, sqlValueEquals, toInteger, type SqlValue } from "../types/value.ts";
+import { applyAffinity, compareSql, isTruthySql, sqlValueEquals, toInteger, type SqlValue, type Affinity } from "../types/value.ts";
+import { evaluateTableFunction } from "../functions/table-valued.ts";
 import type { ExecutionEnv, ScopeRow } from "./env.ts";
 import { resultValues, valuesToResult, type ResultSet } from "./result.ts";
+
+function applyAffinityLocal(value: SqlValue, affinity: Affinity): SqlValue {
+  return applyAffinity(value, affinity);
+}
 
 interface OutputRow {
   values: SqlValue[];
@@ -167,46 +172,65 @@ function executeSelectCore(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalCon
   return valuesToResult(columns, output.map((row) => row.values), 0, env.state.lastInsertRowid);
 }
 
-function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext): ScopeRow[] {
+export function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext): ScopeRow[] {
   if (item.type === "join") {
-    if (item.joinType === "RIGHT" || item.joinType === "FULL") unsupported(`${item.joinType} JOIN`);
     const left = scanFrom(item.left, env, parent);
     const right = scanFrom(item.right, env, parent);
     const using = resolveUsingColumns(item, left, right, env);
+    const leftShape = (left[0]?.cells ?? shapeOf(item.left, env));
     const rightShape = (right[0]?.cells ?? shapeOf(item.right, env)).map((cell) =>
       using?.some((name) => name.toLowerCase() === cell.name.toLowerCase())
         ? { ...cell, hiddenByUsing: true }
         : cell
     );
+    const nullLeft = leftShape.map((cell) => ({ ...cell, value: null as SqlValue }));
+    const nullRight = rightShape.map((cell) => ({ ...cell, value: null as SqlValue }));
     const result: ScopeRow[] = [];
+    const matchedRight = new Set<number>();
+
+    const joinOk = (lhs: ScopeRow, rhs: ScopeRow, joined: ScopeRow): boolean => {
+      if (using) {
+        return using.every((name) => {
+          const l = lhs.cells.find((cell) => cell.name.toLowerCase() === name.toLowerCase())?.value ?? null;
+          const r = rhs.cells.find((cell) => cell.name.toLowerCase() === name.toLowerCase())?.value ?? null;
+          return l !== null && r !== null && sqlValueEquals(l, r);
+        });
+      }
+      if (item.on) return isTruthySql(evalExpr(item.on, env.createEvalContext(joined, parent))) === true;
+      return true;
+    };
+
     for (const lhs of left) {
       let matched = false;
-      for (const rhs of right) {
+      right.forEach((rhs, rightIndex) => {
         const rightCells = using
           ? rhs.cells.map((cell) => using.some((name) => name.toLowerCase() === cell.name.toLowerCase())
             ? { ...cell, hiddenByUsing: true }
             : cell)
           : rhs.cells;
         const joined = { cells: [...lhs.cells, ...rightCells] };
-        let ok = true;
-        if (using) {
-          ok = using.every((name) => {
-            const l = lhs.cells.find((cell) => cell.name.toLowerCase() === name.toLowerCase())?.value ?? null;
-            const r = rhs.cells.find((cell) => cell.name.toLowerCase() === name.toLowerCase())?.value ?? null;
-            return l !== null && r !== null && sqlValueEquals(l, r);
-          });
-        } else if (item.on) {
-          ok = isTruthySql(evalExpr(item.on, env.createEvalContext(joined, parent))) === true;
-        }
-        if (ok) {
-          matched = true;
-          result.push(joined);
-        }
-      }
-      if (!matched && item.joinType === "LEFT") {
-        result.push({ cells: [...lhs.cells, ...rightShape.map((cell) => ({ ...cell, value: null }))] });
+        if (!joinOk(lhs, rhs, joined)) return;
+        matched = true;
+        matchedRight.add(rightIndex);
+        result.push(joined);
+      });
+      if (!matched && (item.joinType === "LEFT" || item.joinType === "FULL")) {
+        result.push({ cells: [...lhs.cells, ...nullRight] });
       }
     }
+
+    if (item.joinType === "RIGHT" || item.joinType === "FULL") {
+      right.forEach((rhs, rightIndex) => {
+        if (matchedRight.has(rightIndex)) return;
+        const rightCells = using
+          ? rhs.cells.map((cell) => using.some((name) => name.toLowerCase() === cell.name.toLowerCase())
+            ? { ...cell, hiddenByUsing: true }
+            : cell)
+          : rhs.cells;
+        result.push({ cells: [...nullLeft, ...rightCells] });
+      });
+    }
+
     return result;
   }
   if (item.type === "subquery") {
@@ -215,16 +239,20 @@ function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext): Scop
       cells: result.columns.map((name, index) => ({ table: item.alias, name, value: values[index] ?? null })),
     }));
   }
-  if (item.type === "table_func") unsupported(`table-valued function ${item.name}`);
+  if (item.type === "table_func") {
+    return evaluateTableFunction(item.name, item.args, item.alias, env).rows;
+  }
 
   const alias = item.alias ?? item.name;
+  const qualified = item.schema ? `${item.schema}.${item.name}` : item.name;
+  const db = env.state.databaseForSchema(item.schema, qualified);
   const cte = env.ctes.get(item.name.toLowerCase());
   if (cte) {
     return resultValues(cte).map((values) => ({
       cells: cte.columns.map((name, index) => ({ table: alias, name, value: values[index] ?? null })),
     }));
   }
-  const view = env.state.views.get(item.name.toLowerCase());
+  const view = db.views.get(item.name.toLowerCase());
   if (view) {
     const result = executeSelect(view.select, env, parent);
     const names = view.columns ?? result.columns;
@@ -232,23 +260,62 @@ function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext): Scop
       cells: names.map((name, index) => ({ table: alias, name, value: values[index] ?? null })),
     }));
   }
+  const virtual = db.virtualTables.get(item.name.toLowerCase());
+  if (virtual) {
+    return virtual.scan().map((row) => ({
+      rowid: row.rowid,
+      rowidName: "rowid",
+      sourceTable: virtual.name,
+      cells: virtual.columns.map((column) => ({
+        table: alias,
+        name: column,
+        value: row.values.get(column.toLowerCase()) ?? null,
+      })),
+    }));
+  }
   let table: Table;
-  if (item.name.toLowerCase() === "sqlite_schema") table = buildSqliteSchema(env.state);
-  else if (item.name.toLowerCase() === "sqlite_master") table = buildSqliteMaster(env.state);
-  else table = env.state.getTable(item.name);
-  return [...table.scan()].map((row) => ({
-    rowid: row.rowid,
-    rowidName: table.columns.find((column) =>
+  if (item.name.toLowerCase() === "sqlite_schema") table = buildSqliteSchema(db);
+  else if (item.name.toLowerCase() === "sqlite_master") table = buildSqliteMaster(db);
+  else table = db.getTable(item.name);
+  const integerPkAlias = table.withoutRowid
+    ? undefined
+    : table.columns.find((column) =>
       column.primaryKey && column.typeName?.trim().toUpperCase() === "INTEGER"
-    )?.name ?? "rowid",
-    sourceTable: table.name,
-    cells: table.columns.map((column) => ({
+    )?.name;
+  return [...table.scan()].map((row) => {
+    const baseCells = table.columns.filter((c) => !c.generated || c.generated.stored).map((column) => ({
       table: alias,
       name: column.name,
       value: row.values.get(column.name.toLowerCase()) ?? null,
       affinity: column.affinity,
-    })),
-  }));
+      collate: column.collate,
+    }));
+    const cells = table.columns.map((column) => {
+      if (column.generated && !column.generated.stored) {
+        const ctx = env.createEvalContext({ cells: baseCells, sourceTable: table.name }, parent);
+        return {
+          table: alias,
+          name: column.name,
+          value: applyAffinityLocal(evalExpr(column.generated.expr, ctx), column.affinity),
+          affinity: column.affinity,
+          collate: column.collate,
+        };
+      }
+      return {
+        table: alias,
+        name: column.name,
+        value: row.values.get(column.name.toLowerCase()) ?? null,
+        affinity: column.affinity,
+        collate: column.collate,
+      };
+    });
+    return {
+      ...(table.withoutRowid ? {} : { rowid: row.rowid }),
+      rowidName: integerPkAlias ?? (table.withoutRowid ? undefined : "rowid"),
+      sourceTable: table.name,
+      cells,
+    };
+  });
 }
 
 function shapeOf(item: FromItem, env: ExecutionEnv): ScopeRow["cells"] {
@@ -264,17 +331,27 @@ function shapeOf(item: FromItem, env: ExecutionEnv): ScopeRow["cells"] {
     ];
   }
   if (item.type === "subquery") return resultColumnNames(item.select.columns).map((name) => ({ table: item.alias, name, value: null }));
-  if (item.type === "table_func") return [];
+  if (item.type === "table_func") {
+    return evaluateTableFunction(item.name, item.args, item.alias, env).columns.map((name) => ({
+      table: item.alias ?? item.name,
+      name,
+      value: null,
+    }));
+  }
   const alias = item.alias ?? item.name;
+  const qualified = item.schema ? `${item.schema}.${item.name}` : item.name;
+  const db = env.state.databaseForSchema(item.schema, qualified);
   const cte = env.ctes.get(item.name.toLowerCase());
   if (cte) return cte.columns.map((name) => ({ table: alias, name, value: null }));
-  const view = env.state.views.get(item.name.toLowerCase());
+  const view = db.views.get(item.name.toLowerCase());
   if (view) return (view.columns ?? resultColumnNames(view.select.columns)).map((name) => ({ table: alias, name, value: null }));
+  const virtual = db.virtualTables.get(item.name.toLowerCase());
+  if (virtual) return virtual.columns.map((name) => ({ table: alias, name, value: null }));
   const table = item.name.toLowerCase() === "sqlite_schema"
-    ? buildSqliteSchema(env.state)
+    ? buildSqliteSchema(db)
     : item.name.toLowerCase() === "sqlite_master"
-      ? buildSqliteMaster(env.state)
-      : env.state.getTable(item.name);
+      ? buildSqliteMaster(db)
+      : db.getTable(item.name);
   return table.columns.map((column) => ({ table: alias, name: column.name, value: null, affinity: column.affinity }));
 }
 
@@ -455,7 +532,7 @@ function compareScopes(a: ScopeRow, b: ScopeRow, order: OrderByItem[], env: Exec
   for (const item of order) {
     const left = evalExpr(item.expr, env.createEvalContext(a, parent));
     const right = evalExpr(item.expr, env.createEvalContext(b, parent));
-    const result = compareNullable(left, right, item);
+    const result = compareNullable(left, right, item, a);
     if (result !== 0) return result;
   }
   return 0;
@@ -474,20 +551,30 @@ function compareOutput(a: OutputRow, b: OutputRow, order: OrderByItem[], columns
       }
       return evalExpr(item.expr, env.createEvalContext(row.scope, parent));
     };
-    const result = compareNullable(value(a), value(b), item);
+    const result = compareNullable(value(a), value(b), item, a.scope);
     if (result !== 0) return result;
   }
   return 0;
 }
 
-function compareNullable(left: SqlValue, right: SqlValue, item: OrderByItem): number {
+function compareNullable(left: SqlValue, right: SqlValue, item: OrderByItem, scope?: ScopeRow): number {
   if (left === null || right === null) {
     if (left === right) return 0;
     const nullFirst = item.nulls ? item.nulls === "FIRST" : item.dir === "ASC";
     return (left === null ? -1 : 1) * (nullFirst ? 1 : -1);
   }
-  const comparison = item.expr.type === "collate"
-    ? compareWithCollation(left, right, item.expr.collation)
+  let collation: string | null = null;
+  if (item.expr.type === "collate") collation = item.expr.collation;
+  else if (scope && item.expr.type === "column") {
+    const key = item.expr.name.toLowerCase();
+    const match = scope.cells.find((cell) =>
+      cell.name.toLowerCase() === key &&
+      (item.expr.type === "column" && (item.expr.table === null || cell.table?.toLowerCase() === item.expr.table.toLowerCase())),
+    );
+    collation = match?.collate ?? null;
+  }
+  const comparison = collation
+    ? compareWithCollation(left, right, collation)
     : compareSql(left, right);
   return (comparison ?? 0) * (item.dir === "DESC" ? -1 : 1);
 }

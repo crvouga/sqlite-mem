@@ -94,13 +94,28 @@ function compareResult(op: BinaryOp, left: SqlValue, right: SqlValue, collation?
 }
 
 function evalBinary(op: BinaryOp, leftExpr: Expr, rightExpr: Expr, ctx: EvalContext): SqlValue {
+  if (op === "MATCH") {
+    if (leftExpr.type !== "column") {
+      throw new SqliteError("unable to use function MATCH in the requested context", "unsupported");
+    }
+    const query = textValue(evalExpr(rightExpr, ctx));
+    if (!ctx.matchFts) {
+      throw new SqliteError("unable to use function MATCH in the requested context", "unsupported");
+    }
+    return booleanValue(ctx.matchFts(leftExpr.table, leftExpr.name, query));
+  }
   const left = evalExpr(leftExpr, ctx);
   if (op === "AND") return sqlAnd(left, () => evalExpr(rightExpr, ctx));
   if (op === "OR") return sqlOr(left, () => evalExpr(rightExpr, ctx));
   const right = evalExpr(rightExpr, ctx);
 
   if (["=", "==", "!=", "<>", "<", "<=", ">", ">=", "IS", "IS NOT"].includes(op)) {
-    return compareResult(op, left, right, explicitCollation(leftExpr) ?? explicitCollation(rightExpr) ?? undefined);
+    return compareResult(
+      op,
+      left,
+      right,
+      resolveComparisonCollation(leftExpr, rightExpr, ctx) ?? undefined,
+    );
   }
   if (op === "LIKE" || op === "NOT LIKE" || op === "GLOB" || op === "NOT GLOB") {
     if (left === null || right === null) return null;
@@ -141,8 +156,6 @@ function evalBinary(op: BinaryOp, leftExpr: Expr, rightExpr: Expr, ctx: EvalCont
     case "IN":
     case "NOT IN":
       throw new SqliteError(`${op} requires an IN expression node`, "misuse");
-    case "MATCH":
-      throw new SqliteError("unable to use function MATCH in the requested context", "unsupported");
     default:
       throw new SqliteError(`unsupported binary operator: ${op}`, "unsupported");
   }
@@ -171,6 +184,26 @@ function explicitCollation(expr: Expr): string | null {
         (expr.else && explicitCollation(expr.else)) ??
         null;
     case "row": return expr.values.map(explicitCollation).find((name) => name !== null) ?? null;
+    default: return null;
+  }
+}
+
+/** Explicit COLLATE wins; otherwise inherit declared column collation (left then right). */
+function resolveComparisonCollation(leftExpr: Expr, rightExpr: Expr, ctx: EvalContext): string | null {
+  const explicit = explicitCollation(leftExpr) ?? explicitCollation(rightExpr);
+  if (explicit) return explicit;
+  return inheritedCollation(leftExpr, ctx) ?? inheritedCollation(rightExpr, ctx);
+}
+
+function inheritedCollation(expr: Expr, ctx: EvalContext): string | null {
+  switch (expr.type) {
+    case "collate": return inheritedCollation(expr.expr, ctx);
+    case "column":
+      return ctx.resolveCollation?.(expr.table, expr.name)
+        ?? ctx.parent?.resolveCollation?.(expr.table, expr.name)
+        ?? null;
+    case "unary":
+    case "cast": return inheritedCollation(expr.expr, ctx);
     default: return null;
   }
 }
@@ -211,8 +244,11 @@ export function evalExpr(expr: Expr, ctx: EvalContext): SqlValue {
     case "binary": return evalBinary(expr.op, expr.left, expr.right, ctx);
     case "between": {
       const value = evalExpr(expr.expr, ctx);
-      const lower = compareResult(">=", value, evalExpr(expr.lower, ctx));
-      const result = sqlAnd(lower, () => compareResult("<=", value, evalExpr(expr.upper, ctx)));
+      const collation = resolveComparisonCollation(expr.expr, expr.lower, ctx)
+        ?? resolveComparisonCollation(expr.expr, expr.upper, ctx)
+        ?? undefined;
+      const lower = compareResult(">=", value, evalExpr(expr.lower, ctx), collation);
+      const result = sqlAnd(lower, () => compareResult("<=", value, evalExpr(expr.upper, ctx), collation));
       if (result === null) return null;
       return expr.not ? booleanValue(result === 0) : result;
     }
@@ -249,6 +285,10 @@ export function evalExpr(expr: Expr, ctx: EvalContext): SqlValue {
     case "cast": return castSqlValue(evalExpr(expr.expr, ctx), expr.typeName);
     case "function": {
       if (expr.args === "*") throw new SqliteError(`wrong number of arguments to function ${expr.name}()`, "misuse");
+      if (expr.name.toLowerCase() === "raise") {
+        evalRaiseFunction(expr.args, ctx);
+        throw new SqliteError("RAISE() did not abort execution", "misuse");
+      }
       if (
         expr.name.toLowerCase() === "typeof" &&
         expr.args.length === 1 &&
@@ -277,4 +317,32 @@ export function evalExpr(expr: Expr, ctx: EvalContext): SqlValue {
     case "row":
       throw new SqliteError("row value cannot be used as a scalar value", "misuse");
   }
+}
+
+function evalRaiseFunction(args: Expr[], ctx: EvalContext): never {
+  if (!ctx.raise) throw new SqliteError("RAISE() may only be used within a trigger-program", "other");
+  if (args.length < 1 || args.length > 2) {
+    throw new SqliteError("wrong number of arguments to function RAISE()", "misuse");
+  }
+  const action = raiseActionName(args[0]!);
+  if (!action) throw new SqliteError("bad argument to RAISE()", "other");
+  let message: string | undefined;
+  if (args.length === 2) {
+    const value = evalExpr(args[1]!, ctx);
+    message = value === null ? undefined : String(value);
+  }
+  ctx.raise(action, message);
+  throw new SqliteError(message ?? "RAISE", "other");
+}
+
+function raiseActionName(expr: Expr): "IGNORE" | "ABORT" | "FAIL" | "ROLLBACK" | null {
+  if (expr.type === "column" && expr.table === null) {
+    const name = expr.name.toUpperCase();
+    if (name === "IGNORE" || name === "ABORT" || name === "FAIL" || name === "ROLLBACK") return name;
+  }
+  if (expr.type === "literal" && typeof expr.value === "string") {
+    const name = expr.value.toUpperCase();
+    if (name === "IGNORE" || name === "ABORT" || name === "FAIL" || name === "ROLLBACK") return name;
+  }
+  return null;
 }

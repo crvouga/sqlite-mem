@@ -6,10 +6,16 @@ import type { StorageClass } from "../types/value.ts";
 export interface EvalContext {
   resolveColumn(table: string | null, name: string): SqlValue;
   resolveStorageClass?(table: string | null, name: string): StorageClass;
+  /** Declared column collation when available (for inheritance). */
+  resolveCollation?(table: string | null, name: string): string | null;
   getParameter(name: string | number): SqlValue;
   /** Execute a scalar, IN, or EXISTS subquery. */
   executeSelect?(select: SelectStmt): { columns: string[]; rows: SqlValue[][] };
+  /** Evaluate FTS MATCH against the current row when available. */
+  matchFts?(table: string | null, column: string, query: string): boolean;
   /** Context used to resolve correlated column references. */
+  /** When set, RAISE() is allowed in expression evaluation. */
+  raise?: (action: "IGNORE" | "ABORT" | "FAIL" | "ROLLBACK", message?: string) => never;
   parent?: EvalContext;
   /** Optional per-database function registry and database hooks. */
   functions?: FunctionRegistry;

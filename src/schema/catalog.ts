@@ -2,7 +2,7 @@ import type { SqlValue } from "../types/value.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
 import { makeColumnInfo, Table } from "../storage/table.ts";
 
-export type SchemaObjectType = "table" | "index" | "view";
+export type SchemaObjectType = "table" | "index" | "view" | "trigger";
 
 export interface SchemaCatalogRow {
   type: SchemaObjectType;
@@ -16,6 +16,7 @@ export function schemaCatalogRows(state: DatabaseState): SchemaCatalogRow[] {
   const tables = [...state.tables.values()].sort((a, b) => compareNames(a.name, b.name));
   const indexes = [...state.indexes.values()].sort((a, b) => compareNames(a.name, b.name));
   const views = [...state.views.values()].sort((a, b) => compareNames(a.name, b.name));
+  const triggers = [...state.triggers.values()].sort((a, b) => compareNames(a.name, b.name));
 
   const rows: SchemaCatalogRow[] = [];
   let rootpage = 2;
@@ -45,6 +46,15 @@ export function schemaCatalogRows(state: DatabaseState): SchemaCatalogRow[] {
       tbl_name: view.name,
       rootpage: 0,
       sql: view.originalSql,
+    });
+  }
+  for (const trigger of triggers) {
+    rows.push({
+      type: "trigger",
+      name: trigger.name,
+      tbl_name: trigger.tableName,
+      rootpage: 0,
+      sql: trigger.originalSql,
     });
   }
   return rows;

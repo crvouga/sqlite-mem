@@ -85,11 +85,15 @@ export function executeAlterTable(stmt: AlterTableStmt, env: ExecutionEnv): Resu
     const unique = action.column.constraints.some((item) => item.type === "unique");
     if ((primary || unique) && table.rows.size > 0) throw new SqliteError("Cannot add a PRIMARY KEY or UNIQUE column", "other");
     const defaultExpr = action.column.constraints.find((item) => item.type === "default")?.expr ?? null;
+    const collate = action.column.constraints.find((item) => item.type === "collate");
+    const generated = action.column.constraints.find((item) => item.type === "generated");
     const column = makeColumnInfo(action.column.name, action.column.typeName, {
       notNull: action.column.constraints.some((item) => item.type === "not_null"),
       primaryKey: primary,
       unique,
       defaultExpr,
+      collate: collate?.type === "collate" ? collate.name : null,
+      generated: generated?.type === "generated" ? { expr: generated.expr, stored: generated.stored } : null,
     });
     const defaultValue = defaultExpr ? evalExpr(defaultExpr, env.createEvalContext()) : null;
     if (column.notNull && defaultValue === null && table.rows.size > 0) throw new SqliteError("Cannot add a NOT NULL column with default value NULL", "other");

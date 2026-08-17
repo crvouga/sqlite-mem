@@ -1,5 +1,6 @@
 import type { Expr, TableConstraint } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
+import { compareWithCollation, normalizeForCollation } from "../types/collation.ts";
 import type { Affinity, SqlValue } from "../types/value.ts";
 import { affinityFromTypeName, applyAffinity, cloneSqlValue, compareSql } from "../types/value.ts";
 import type { Row, Rowid, RowValues } from "./row.ts";
@@ -14,6 +15,10 @@ export interface ColumnInfo {
   autoincrement: boolean;
   defaultExpr: Expr | null;
   unique: boolean;
+  /** Declared column collation (BINARY/NOCASE/RTRIM); null means BINARY. */
+  collate: string | null;
+  /** GENERATED ALWAYS AS (...) — VIRTUAL computed on read, STORED materialized. */
+  generated: { expr: Expr; stored: boolean } | null;
 }
 
 export interface InsertRow {
@@ -25,6 +30,7 @@ export interface TableOptions {
   constraints?: TableConstraint[];
   indexes?: string[];
   originalSql?: string | null;
+  withoutRowid?: boolean;
 }
 
 export class Table {
@@ -35,6 +41,9 @@ export class Table {
   constraints: TableConstraint[];
   indexes: string[];
   originalSql: string | null;
+  withoutRowid: boolean;
+  /** Clustered PK key string → row for WITHOUT ROWID tables. */
+  clusteredRows: Map<string, Row>;
 
   constructor(name: string, columns: ColumnInfo[], options: TableOptions = {}) {
     this.name = name;
@@ -44,11 +53,31 @@ export class Table {
     this.constraints = cloneAst(options.constraints ?? []);
     this.indexes = [...(options.indexes ?? [])];
     this.originalSql = options.originalSql ?? null;
+    this.withoutRowid = options.withoutRowid ?? false;
+    this.clusteredRows = new Map();
   }
 
   insert(input: InsertRow | RowValues): Rowid {
     const supplied = isInsertRow(input) ? input : { values: input };
     const values = this.prepareValues(supplied.values);
+
+    if (this.withoutRowid) {
+      if (supplied.rowid !== undefined) {
+        throw new SqliteError(`table ${this.name} has no column named rowid`, "other");
+      }
+      const rowid = canonicalRowid(this.allocateRowid());
+      const candidate: Row = { rowid, values };
+      this.validate(candidate);
+      const clusterKey = this.makeClusterKey(values);
+      if (this.clusteredRows.has(clusterKey)) {
+        throw primaryKeyConflict(this.name, this.primaryKeyColumns());
+      }
+      this.clusteredRows.set(clusterKey, candidate);
+      this.rows.set(rowid, candidate);
+      this.advanceNextRowid(rowid);
+      return rowid;
+    }
+
     const alias = this.integerPrimaryKeyAlias();
     let rowid = supplied.rowid;
 
@@ -82,6 +111,20 @@ export class Table {
       values.set(normalizeColumnName(column.name), applyAffinity(cloneSqlValue(value), column.affinity));
     }
 
+    if (this.withoutRowid) {
+      const oldClusterKey = this.makeClusterKey(existing.values);
+      const newClusterKey = this.makeClusterKey(values);
+      if (newClusterKey !== oldClusterKey && this.clusteredRows.has(newClusterKey)) {
+        throw primaryKeyConflict(this.name, this.primaryKeyColumns());
+      }
+      const candidate: Row = { rowid: key, values };
+      this.validate(candidate, key);
+      if (newClusterKey !== oldClusterKey) this.clusteredRows.delete(oldClusterKey);
+      this.clusteredRows.set(newClusterKey, candidate);
+      this.rows.set(key, candidate);
+      return candidate;
+    }
+
     const alias = this.integerPrimaryKeyAlias();
     const targetKey = alias ? asRowid(values.get(normalizeColumnName(alias.name)) ?? null, alias.name) : key;
     if (targetKey !== key && this.rows.has(targetKey)) {
@@ -97,10 +140,19 @@ export class Table {
   }
 
   delete(rowid: Rowid): boolean {
-    return this.rows.delete(canonicalRowid(rowid));
+    const key = canonicalRowid(rowid);
+    const existing = this.rows.get(key);
+    if (!existing) return false;
+    if (this.withoutRowid) this.clusteredRows.delete(this.makeClusterKey(existing.values));
+    return this.rows.delete(key);
   }
 
   *scan(): Iterable<Row> {
+    if (this.withoutRowid) {
+      const rows = [...this.clusteredRows.values()].sort((a, b) => this.comparePrimaryKeys(a, b));
+      yield* rows;
+      return;
+    }
     const rows = [...this.rows.values()].sort((a, b) => compareRowids(a.rowid, b.rowid));
     yield* rows;
   }
@@ -110,10 +162,21 @@ export class Table {
       constraints: this.constraints,
       indexes: this.indexes,
       originalSql: this.originalSql,
+      withoutRowid: this.withoutRowid,
     });
     copy.nextRowid = this.nextRowid;
     for (const [rowid, row] of this.rows) copy.rows.set(rowid, cloneRow(row));
+    for (const [clusterKey, row] of this.clusteredRows) copy.clusteredRows.set(clusterKey, cloneRow(row));
     return copy;
+  }
+
+  /** Rebuild clustered storage after snapshot decode or bulk load. */
+  rebuildClusteredRows(): void {
+    if (!this.withoutRowid) return;
+    this.clusteredRows.clear();
+    for (const row of this.rows.values()) {
+      this.clusteredRows.set(this.makeClusterKey(row.values), row);
+    }
   }
 
   private prepareValues(input: RowValues): Map<string, SqlValue> {
@@ -151,7 +214,12 @@ export class Table {
       if (values.some((value) => value === null)) continue;
       for (const other of this.rows.values()) {
         if (excludedRowid !== undefined && other.rowid === excludedRowid) continue;
-        if (values.every((value, index) => compareSql(value, other.values.get(normalizeColumnName(names[index]!)) ?? null) === 0)) {
+        if (values.every((value, index) => {
+          const column = this.column(names[index]!);
+          const otherValue = other.values.get(normalizeColumnName(names[index]!)) ?? null;
+          const collation = column.collate ?? "BINARY";
+          return compareWithCollation(value, otherValue, collation) === 0;
+        })) {
           const qualified = names.map((name) => `${this.name}.${name}`).join(", ");
           throw new SqliteError(`UNIQUE constraint failed: ${qualified}`, "constraint_unique", "SQLITE_CONSTRAINT_UNIQUE");
         }
@@ -175,7 +243,38 @@ export class Table {
     return sets;
   }
 
+  private primaryKeyColumns(): ColumnInfo[] {
+    const tablePrimary = this.constraints.find((constraint) => constraint.type === "primary_key");
+    if (tablePrimary) {
+      return tablePrimary.columns.map((column) => this.column(column.name));
+    }
+    return this.columns.filter((column) => column.primaryKey);
+  }
+
+  private makeClusterKey(values: Map<string, SqlValue>): string {
+    return this.primaryKeyColumns()
+      .map((column) => {
+        const value = values.get(normalizeColumnName(column.name)) ?? null;
+        const normalized = normalizeForCollation(value, column.collate ?? "BINARY");
+        return serializePkComponent(normalized);
+      })
+      .join("\0");
+  }
+
+  private comparePrimaryKeys(left: Row, right: Row): number {
+    for (const column of this.primaryKeyColumns()) {
+      const leftValue = left.values.get(normalizeColumnName(column.name)) ?? null;
+      const rightValue = right.values.get(normalizeColumnName(column.name)) ?? null;
+      const comparison = column.collate
+        ? compareWithCollation(leftValue, rightValue, column.collate)
+        : compareSql(leftValue, rightValue);
+      if (comparison !== 0) return comparison ?? 0;
+    }
+    return 0;
+  }
+
   private integerPrimaryKeyAlias(): ColumnInfo | undefined {
+    if (this.withoutRowid) return undefined;
     const primary = this.columns.filter((column) => column.primaryKey);
     if (primary.length !== 1 || primary[0]!.typeName?.trim().toUpperCase() !== "INTEGER") return undefined;
     return primary[0];
@@ -206,6 +305,8 @@ export function makeColumnInfo(
     autoincrement: options.autoincrement ?? false,
     defaultExpr: options.defaultExpr ?? null,
     unique: options.unique ?? false,
+    collate: options.collate ?? null,
+    generated: options.generated ?? null,
   };
 }
 
@@ -213,6 +314,9 @@ function cloneColumn(column: ColumnInfo): ColumnInfo {
   return {
     ...column,
     defaultExpr: column.defaultExpr === null ? null : cloneAst(column.defaultExpr),
+    generated: column.generated === null
+      ? null
+      : { expr: cloneAst(column.generated.expr), stored: column.generated.stored },
   };
 }
 
@@ -249,4 +353,17 @@ function compareRowids(left: Rowid, right: Rowid): number {
   const a = typeof left === "bigint" ? left : BigInt(left);
   const b = typeof right === "bigint" ? right : BigInt(right);
   return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function serializePkComponent(value: SqlValue): string {
+  if (value === null) return "\0n";
+  if (typeof value === "bigint") return `\0b:${value.toString()}`;
+  if (typeof value === "number") return `\0i:${value}`;
+  if (typeof value === "string") return `\0s:${value}`;
+  return `\0x:${Array.from(value).join(",")}`;
+}
+
+function primaryKeyConflict(tableName: string, columns: ColumnInfo[]): never {
+  const qualified = columns.map((column) => `${tableName}.${column.name}`).join(", ");
+  throw new SqliteError(`UNIQUE constraint failed: ${qualified}`, "constraint_primary", "SQLITE_CONSTRAINT_PRIMARYKEY");
 }

@@ -2,6 +2,7 @@ import type {
   CreateIndexStmt,
   CreateTableStmt,
   CreateViewStmt,
+  CreateVirtualTableStmt,
   Expr,
   IndexedColumn,
   SelectStmt,
@@ -12,6 +13,7 @@ import { affinityFromTypeName } from "../types/value.ts";
 import type { Rowid } from "./row.ts";
 import type { ColumnInfo } from "./table.ts";
 import { Table } from "./table.ts";
+import { Fts5VirtualTable } from "../vtable/fts5.ts";
 
 export interface ViewInfo {
   name: string;
@@ -30,27 +32,111 @@ export interface IndexInfo {
   store: IndexStore;
 }
 
+export interface TriggerInfo {
+  name: string;
+  tableName: string;
+  timing: "BEFORE" | "AFTER" | "INSTEAD";
+  event: "INSERT" | "UPDATE" | "DELETE";
+  when: Expr | null;
+  forEachRow: boolean;
+  /** Statements in the trigger body (already parsed). */
+  body: import("../ast/nodes.ts").Statement[];
+  updateColumns: string[] | null;
+  originalSql: string | null;
+}
+
 export class DatabaseState {
   tables = new Map<string, Table>();
+  virtualTables = new Map<string, Fts5VirtualTable>();
   views = new Map<string, ViewInfo>();
   indexes = new Map<string, IndexInfo>();
+  triggers = new Map<string, TriggerInfo>();
+  /** Attached databases: schema name → state + filename label. */
+  attached = new Map<string, { state: DatabaseState; filename: string }>();
   lastInsertRowid: Rowid = 0;
   changes = 0;
   totalChanges = 0;
   foreignKeysEnabled = false;
   schemaVersion = 0;
+  userVersion = 0;
+
+  databaseForSchema(schema: string | null, qualifiedForError?: string): DatabaseState {
+    if (schema === null || schema.toLowerCase() === "main") return this;
+    const entry = this.attached.get(schema.toLowerCase());
+    if (!entry) {
+      throw new SqliteError(`no such table: ${qualifiedForError ?? schema}`, "no_such_table");
+    }
+    return entry.state;
+  }
+
+  databaseForTable(table: Table): DatabaseState {
+    if (this.tables.get(keyOf(table.name)) === table) return this;
+    for (const { state } of this.attached.values()) {
+      if (state.tables.get(keyOf(table.name)) === table) return state;
+    }
+    return this;
+  }
 
   getTable(name: string): Table {
-    const table = this.tables.get(keyOf(name));
+    const { schema, bare } = splitQualifiedName(name);
+    if (schema !== null) {
+      return this.databaseForSchema(schema, name).getTable(bare);
+    }
+    const key = keyOf(bare);
+    if (this.virtualTables.has(key)) {
+      throw new SqliteError(`no such table: ${name}`, "no_such_table");
+    }
+    const table = this.tables.get(key);
     if (!table) throw new SqliteError(`no such table: ${name}`, "no_such_table");
     return table;
   }
 
+  getVirtualTable(name: string): Fts5VirtualTable {
+    const { schema, bare } = splitQualifiedName(name);
+    if (schema !== null) {
+      return this.databaseForSchema(schema, name).getVirtualTable(bare);
+    }
+    const key = keyOf(bare);
+    const table = this.virtualTables.get(key);
+    if (!table) throw new SqliteError(`no such table: ${name}`, "no_such_table");
+    return table;
+  }
+
+  isVirtualTable(name: string): boolean {
+    const { schema, bare } = splitQualifiedName(name);
+    if (schema !== null) {
+      return this.databaseForSchema(schema, name).isVirtualTable(bare);
+    }
+    return this.virtualTables.has(keyOf(bare));
+  }
+
+  createVirtualTable(stmt: CreateVirtualTableStmt, originalSql: string | null = null): Fts5VirtualTable {
+    const { schema, bare } = splitQualifiedName(stmt.name);
+    if (schema !== null) {
+      return this.databaseForSchema(schema, stmt.name).createVirtualTable({ ...stmt, name: bare }, originalSql);
+    }
+    const key = keyOf(bare);
+    const existing = this.virtualTables.get(key);
+    if (existing && stmt.ifNotExists) return existing;
+    this.assertSchemaNameAvailable(bare);
+    if (stmt.module.toLowerCase() !== "fts5") {
+      throw new SqliteError(`unknown virtual table module: ${stmt.module}`, "unsupported");
+    }
+    const table = new Fts5VirtualTable(bare, stmt.moduleArgs, originalSql);
+    this.virtualTables.set(key, table);
+    this.schemaVersion++;
+    return table;
+  }
+
   createTable(stmt: CreateTableStmt, originalSql: string | null = null): Table {
-    const key = keyOf(stmt.name);
+    const { schema, bare } = splitQualifiedName(stmt.name);
+    if (schema !== null) {
+      return this.databaseForSchema(schema, stmt.name).createTable({ ...stmt, name: bare }, originalSql);
+    }
+    const key = keyOf(bare);
     const existing = this.tables.get(key);
     if (existing && stmt.ifNotExists) return existing;
-    this.assertSchemaNameAvailable(stmt.name);
+    this.assertSchemaNameAvailable(bare);
 
     const seenColumns = new Set<string>();
     const tablePrimaryNames = new Set(
@@ -79,6 +165,8 @@ export class DatabaseState {
       if (autoincrement && definition.typeName?.trim().toUpperCase() !== "INTEGER") {
         throw new SqliteError("AUTOINCREMENT is only allowed on an INTEGER PRIMARY KEY", "unsupported");
       }
+      const collateConstraint = definition.constraints.find((constraint) => constraint.type === "collate");
+      const generatedConstraint = definition.constraints.find((constraint) => constraint.type === "generated");
 
       return {
         name: definition.name,
@@ -89,6 +177,10 @@ export class DatabaseState {
         autoincrement,
         defaultExpr: definition.constraints.find((constraint) => constraint.type === "default")?.expr ?? null,
         unique: definition.constraints.some((constraint) => constraint.type === "unique"),
+        collate: collateConstraint?.type === "collate" ? collateConstraint.name : null,
+        generated: generatedConstraint?.type === "generated"
+          ? { expr: generatedConstraint.expr, stored: generatedConstraint.stored }
+          : null,
       };
     });
 
@@ -131,51 +223,84 @@ export class DatabaseState {
         }
       }
     }
-    const table = new Table(stmt.name, columns, {
+    const table = new Table(bare, columns, {
       constraints: normalizedConstraints,
       originalSql,
+      withoutRowid: stmt.withoutRowid,
     });
+    if (stmt.withoutRowid) {
+      const pk = columns.filter((column) => column.primaryKey);
+      if (pk.length === 0) {
+        throw new SqliteError("PRIMARY KEY missing on table " + bare, "other");
+      }
+    }
     this.tables.set(key, table);
     this.schemaVersion++;
     return table;
   }
 
   dropTable(name: string, ifExists = false): boolean {
-    const key = keyOf(name);
+    const { schema, bare } = splitQualifiedName(name);
+    if (schema !== null) {
+      return this.databaseForSchema(schema, name).dropTable(bare, ifExists);
+    }
+    const key = keyOf(bare);
     const table = this.tables.get(key);
-    if (!table) {
+    const virtual = this.virtualTables.get(key);
+    if (!table && !virtual) {
       if (ifExists) return false;
       throw new SqliteError(`no such table: ${name}`, "no_such_table");
+    }
+    if (virtual) {
+      this.virtualTables.delete(key);
+      this.schemaVersion++;
+      return true;
     }
     for (const [indexKey, index] of this.indexes) {
       if (keyOf(index.tableName) === key) this.indexes.delete(indexKey);
     }
+    this.dropTriggersForTable(bare);
     this.tables.delete(key);
     this.schemaVersion++;
     return true;
   }
 
   renameTable(oldName: string, newName: string): Table {
-    const oldKey = keyOf(oldName);
+    const { schema: oldSchema, bare: oldBare } = splitQualifiedName(oldName);
+    if (oldSchema !== null) {
+      return this.databaseForSchema(oldSchema, oldName).renameTable(oldBare, splitQualifiedName(newName).bare);
+    }
+    const oldKey = keyOf(oldBare);
     const table = this.getTable(oldName);
-    this.assertSchemaNameAvailable(newName);
+    const { schema: newSchema, bare: newBare } = splitQualifiedName(newName);
+    if (newSchema !== null) {
+      throw new SqliteError(`no such table: ${newName}`, "no_such_table");
+    }
+    this.assertSchemaNameAvailable(newBare);
     this.tables.delete(oldKey);
-    table.name = newName;
-    this.tables.set(keyOf(newName), table);
+    table.name = newBare;
+    this.tables.set(keyOf(newBare), table);
     for (const index of this.indexes.values()) {
-      if (keyOf(index.tableName) === oldKey) index.tableName = newName;
+      if (keyOf(index.tableName) === oldKey) index.tableName = newBare;
+    }
+    for (const trigger of this.triggers.values()) {
+      if (keyOf(trigger.tableName) === oldKey) trigger.tableName = newBare;
     }
     this.schemaVersion++;
     return table;
   }
 
   createView(stmt: CreateViewStmt, originalSql: string | null = null): ViewInfo {
-    const key = keyOf(stmt.name);
+    const { schema, bare } = splitQualifiedName(stmt.name);
+    if (schema !== null) {
+      return this.databaseForSchema(schema, stmt.name).createView({ ...stmt, name: bare }, originalSql);
+    }
+    const key = keyOf(bare);
     const existing = this.views.get(key);
     if (existing && stmt.ifNotExists) return existing;
-    this.assertSchemaNameAvailable(stmt.name);
+    this.assertSchemaNameAvailable(bare);
     const view: ViewInfo = {
-      name: stmt.name,
+      name: bare,
       columns: stmt.columns ? [...stmt.columns] : null,
       select: structuredClone(stmt.select),
       originalSql,
@@ -186,50 +311,92 @@ export class DatabaseState {
   }
 
   dropView(name: string, ifExists = false): boolean {
-    const deleted = this.views.delete(keyOf(name));
+    const { schema, bare } = splitQualifiedName(name);
+    if (schema !== null) {
+      return this.databaseForSchema(schema, name).dropView(bare, ifExists);
+    }
+    const deleted = this.views.delete(keyOf(bare));
     if (!deleted && !ifExists) throw new SqliteError(`no such view: ${name}`, "other");
     if (deleted) this.schemaVersion++;
     return deleted;
   }
 
   createIndex(stmt: CreateIndexStmt, originalSql: string | null = null): IndexInfo {
-    const key = keyOf(stmt.name);
-    const existing = this.indexes.get(key);
-    if (existing && stmt.ifNotExists) return existing;
-    this.assertSchemaNameAvailable(stmt.name);
     const table = this.getTable(stmt.table);
+    const { schema, bare } = splitQualifiedName(stmt.name);
+    const target = schema !== null ? this.databaseForSchema(schema, stmt.name) : this.databaseForTable(table);
+    const key = keyOf(bare);
+    const existing = target.indexes.get(key);
+    if (existing && stmt.ifNotExists) return existing;
+    target.assertSchemaNameAvailable(bare);
     for (const indexed of stmt.columns) {
       if (!table.columns.some((column) => keyOf(column.name) === keyOf(indexed.name))) {
         throw new SqliteError(`no such column: ${indexed.name}`, "no_such_column");
       }
     }
     const index: IndexInfo = {
-      name: stmt.name,
+      name: bare,
       tableName: table.name,
       unique: stmt.unique,
       columns: structuredClone(stmt.columns),
       where: stmt.where ? structuredClone(stmt.where) : null,
       originalSql,
-      store: new IndexStore(stmt.name),
+      store: new IndexStore(bare),
     };
-    this.indexes.set(key, index);
+    target.indexes.set(key, index);
     table.indexes.push(index.name);
-    this.schemaVersion++;
+    target.schemaVersion++;
     return index;
   }
 
   dropIndex(name: string, ifExists = false): boolean {
-    const key = keyOf(name);
-    const index = this.indexes.get(key);
+    const { schema, bare } = splitQualifiedName(name);
+    const target = schema !== null ? this.databaseForSchema(schema, name) : this;
+    const key = keyOf(bare);
+    const index = target.indexes.get(key);
     if (!index) {
       if (ifExists) return false;
       throw new SqliteError(`no such index: ${name}`, "other");
     }
-    this.indexes.delete(key);
-    const table = this.tables.get(keyOf(index.tableName));
+    target.indexes.delete(key);
+    const table = target.tables.get(keyOf(index.tableName));
     if (table) table.indexes = table.indexes.filter((item) => keyOf(item) !== key);
-    this.schemaVersion++;
+    target.schemaVersion++;
     return true;
+  }
+
+  createTrigger(info: TriggerInfo): TriggerInfo {
+    const { schema, bare } = splitQualifiedName(info.name);
+    const target = schema !== null ? this.databaseForSchema(schema, info.name) : this;
+    const key = keyOf(bare);
+    target.assertSchemaNameAvailable(bare);
+    const trigger: TriggerInfo = {
+      ...info,
+      name: bare,
+      body: structuredClone(info.body),
+      when: info.when ? structuredClone(info.when) : null,
+      updateColumns: info.updateColumns ? [...info.updateColumns] : null,
+    };
+    target.triggers.set(key, trigger);
+    target.schemaVersion++;
+    return trigger;
+  }
+
+  dropTrigger(name: string, ifExists = false): boolean {
+    const { schema, bare } = splitQualifiedName(name);
+    const target = schema !== null ? this.databaseForSchema(schema, name) : this;
+    const key = keyOf(bare);
+    const deleted = target.triggers.delete(key);
+    if (!deleted && !ifExists) throw new SqliteError(`no such trigger: ${name}`, "other");
+    if (deleted) target.schemaVersion++;
+    return deleted;
+  }
+
+  dropTriggersForTable(tableName: string): void {
+    const key = keyOf(tableName);
+    for (const [triggerKey, trigger] of this.triggers) {
+      if (keyOf(trigger.tableName) === key) this.triggers.delete(triggerKey);
+    }
   }
 
   recordChange(count: number, lastInsertRowid?: Rowid): void {
@@ -241,6 +408,7 @@ export class DatabaseState {
   clone(): DatabaseState {
     const copy = new DatabaseState();
     for (const [key, table] of this.tables) copy.tables.set(key, table.clone());
+    for (const [key, table] of this.virtualTables) copy.virtualTables.set(key, table.clone());
     for (const [key, view] of this.views) {
       copy.views.set(key, {
         name: view.name,
@@ -260,6 +428,22 @@ export class DatabaseState {
         store: index.store.clone(),
       });
     }
+    for (const [key, trigger] of this.triggers) {
+      copy.triggers.set(key, {
+        name: trigger.name,
+        tableName: trigger.tableName,
+        timing: trigger.timing,
+        event: trigger.event,
+        when: trigger.when ? structuredClone(trigger.when) : null,
+        forEachRow: trigger.forEachRow,
+        body: structuredClone(trigger.body),
+        updateColumns: trigger.updateColumns ? [...trigger.updateColumns] : null,
+        originalSql: trigger.originalSql,
+      });
+    }
+    for (const [name, attached] of this.attached) {
+      copy.attached.set(name, { state: attached.state.clone(), filename: attached.filename });
+    }
     copy.lastInsertRowid = this.lastInsertRowid;
     copy.changes = this.changes;
     copy.totalChanges = this.totalChanges;
@@ -271,8 +455,11 @@ export class DatabaseState {
   replaceWith(state: DatabaseState): void {
     const copy = state.clone();
     this.tables = copy.tables;
+    this.virtualTables = copy.virtualTables;
     this.views = copy.views;
     this.indexes = copy.indexes;
+    this.triggers = copy.triggers;
+    this.attached = copy.attached;
     this.lastInsertRowid = copy.lastInsertRowid;
     this.changes = copy.changes;
     this.totalChanges = copy.totalChanges;
@@ -282,10 +469,16 @@ export class DatabaseState {
 
   private assertSchemaNameAvailable(name: string): void {
     const key = keyOf(name);
-    if (this.tables.has(key) || this.views.has(key) || this.indexes.has(key)) {
+    if (this.tables.has(key) || this.views.has(key) || this.indexes.has(key) || this.virtualTables.has(key) || this.triggers.has(key)) {
       throw new SqliteError(`object already exists: ${name}`, "other");
     }
   }
+}
+
+export function splitQualifiedName(name: string): { schema: string | null; bare: string } {
+  const dot = name.indexOf(".");
+  if (dot < 0) return { schema: null, bare: name };
+  return { schema: name.slice(0, dot), bare: name.slice(dot + 1) };
 }
 
 function keyOf(name: string): string {

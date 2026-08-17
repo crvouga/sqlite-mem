@@ -1,11 +1,12 @@
 # sqlite-mem
 
-Pure TypeScript, completely in-memory SQLite implementation.
+Pure TypeScript, completely in-memory SQLite implementation aiming for **full SQLite3 SQL dialect parity** (same statements → same results).
 
 - Runs in modern browsers and Node.js / Bun
 - **Zero** WASM, native bindings, workers, or filesystem dependencies
 - Entire database stored in memory
-- SQLite behavioral compatibility validated via differential contract tests against real SQLite (`bun:sqlite`)
+- Behavioral compatibility validated via differential contract tests against real SQLite (`bun:sqlite`)
+- Intentional differences: deterministic `random()` / `'now'` by default, and a custom snapshot format (not `.sqlite` files)
 
 ## Install
 

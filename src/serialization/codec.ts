@@ -128,6 +128,7 @@ interface TableMeta {
   constraints: TableConstraint[];
   indexes: string[];
   originalSql: string | null;
+  withoutRowid?: boolean;
 }
 
 interface IndexMeta {
@@ -156,6 +157,7 @@ export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRunti
       constraints: table.constraints,
       indexes: [...table.indexes].sort(compareNames),
       originalSql: table.originalSql,
+      withoutRowid: table.withoutRowid || undefined,
     });
     writer.value(table.nextRowid);
     const rows = [...table.rows.values()].sort((a, b) => compareRowids(a.rowid, b.rowid));
@@ -207,6 +209,7 @@ export function decodeDatabaseState(snapshot: Uint8Array): DecodedSnapshot {
       constraints: meta.constraints,
       indexes: meta.indexes,
       originalSql: meta.originalSql,
+      withoutRowid: meta.withoutRowid ?? false,
     });
     table.nextRowid = asRowid(reader.value());
     const rowCount = reader.u32();
@@ -218,6 +221,7 @@ export function decodeDatabaseState(snapshot: Uint8Array): DecodedSnapshot {
       for (const column of table.columns) values.set(column.name.toLowerCase(), reader.value());
       table.rows.set(rowid, { rowid, values });
     }
+    table.rebuildClusteredRows();
     state.tables.set(table.name.toLowerCase(), table);
   }
   const viewCount = reader.u32();

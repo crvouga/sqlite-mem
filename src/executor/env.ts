@@ -1,5 +1,5 @@
 import type { SelectStmt } from "../ast/nodes.ts";
-import { SqliteError } from "../errors/index.ts";
+import { SqliteError, TriggerRaiseError } from "../errors/index.ts";
 import type { EvalContext } from "../expressions/context.ts";
 import { defaultFunctionRegistry, type FunctionRegistry } from "../functions/registry.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
@@ -14,6 +14,7 @@ export interface Cell {
   name: string;
   value: SqlValue;
   affinity?: Affinity;
+  collate?: string | null;
   /** Right-hand duplicate of a column merged by JOIN ... USING. */
   hiddenByUsing?: boolean;
 }
@@ -45,6 +46,11 @@ export class ExecutionEnv {
   readonly hooks: ExecutionHooks;
   selectRunner?: SelectRunner;
 
+  /** Nesting depth while executing trigger programs. */
+  triggerDepth = 0;
+  /** OLD/NEW column scope for the active trigger program. */
+  triggerScope: ScopeRow | null = null;
+
   constructor(
     state: DatabaseState,
     transactions: TransactionManager,
@@ -65,7 +71,8 @@ export class ExecutionEnv {
   }
 
   createEvalContext(row: ScopeRow | null = null, parent?: EvalContext): EvalContext {
-    const cells = row?.cells ?? [];
+    const scope = row ?? this.triggerScope;
+    const cells = scope?.cells ?? [];
     const context: EvalContext = {
       parent,
       functions: this.functions,
@@ -76,11 +83,16 @@ export class ExecutionEnv {
         random: this.hooks.random,
         randomU64: this.hooks.randomU64,
       },
+      raise: this.triggerScope
+        ? (action, message) => {
+            throw new TriggerRaiseError(action, message);
+          }
+        : undefined,
       resolveColumn: (table, name) => {
         const key = name.toLowerCase();
         const tableMatches = table === null || cells.some((cell) => cell.table?.toLowerCase() === table.toLowerCase());
-        if (tableMatches && (key === "rowid" || key === "_rowid_" || key === "oid") && row?.rowid !== undefined) {
-          return row.rowid;
+        if (tableMatches && (key === "rowid" || key === "_rowid_" || key === "oid") && scope?.rowid !== undefined) {
+          return scope.rowid;
         }
         const matches = cells.filter((cell) =>
           cell.name.toLowerCase() === key &&
@@ -105,6 +117,17 @@ export class ExecutionEnv {
           ? "real"
           : storageClassOf(cell.value);
       },
+      resolveCollation: (table, name) => {
+        const key = name.toLowerCase();
+        const matches = cells.filter((cell) =>
+          cell.name.toLowerCase() === key &&
+          (table !== null || !cell.hiddenByUsing) &&
+          (table === null || cell.table?.toLowerCase() === table.toLowerCase()),
+        );
+        if (matches.length === 0) return null;
+        if (matches.length > 1 && table === null) return null;
+        return matches[0]!.collate ?? null;
+      },
       getParameter: (name) => {
         if (typeof name === "number") {
           if (name < 1 || name > this.positional.length) throw new SqliteError(`binding parameter ${name} is not supplied`, "misuse");
@@ -124,6 +147,16 @@ export class ExecutionEnv {
           rows: result.values?.map((row) => [...row])
             ?? result.rows.map((record) => result.columns.map((column) => record[column] ?? null)),
         };
+      },
+      matchFts: (table, column, query) => {
+        if (row?.rowid === undefined || !row.sourceTable) {
+          throw new SqliteError("unable to use function MATCH in the requested context", "unsupported");
+        }
+        if (!this.state.isVirtualTable(row.sourceTable)) {
+          throw new SqliteError("unable to use function MATCH in the requested context", "unsupported");
+        }
+        const fts = this.state.getVirtualTable(row.sourceTable);
+        return fts.matches(row.rowid, table, column, query);
       },
     };
     return context;

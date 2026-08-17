@@ -212,12 +212,17 @@ export type Statement =
   | DropIndexStmt
   | CreateViewStmt
   | DropViewStmt
+  | CreateTriggerStmt
+  | DropTriggerStmt
   | BeginStmt
   | CommitStmt
   | RollbackStmt
   | SavepointStmt
   | ReleaseStmt
   | PragmaStmt
+  | AttachStmt
+  | DetachStmt
+  | CreateVirtualTableStmt
   | ExplainStmt;
 
 export interface SelectStmt {
@@ -342,6 +347,7 @@ export interface CreateTableStmt {
   columns: ColumnDef[];
   constraints: TableConstraint[];
   asSelect: SelectStmt | null;
+  withoutRowid: boolean;
 }
 
 export interface ColumnDef {
@@ -422,6 +428,34 @@ export interface DropViewStmt {
   name: string;
 }
 
+export interface CreateTriggerStmt {
+  type: "create_trigger";
+  ifNotExists: boolean;
+  temp: boolean;
+  name: string;
+  timing: "BEFORE" | "AFTER" | "INSTEAD";
+  event: "INSERT" | "UPDATE" | "DELETE";
+  table: string;
+  updateColumns: string[] | null;
+  forEachRow: boolean;
+  when: Expr | null;
+  body: Statement[];
+}
+
+export interface DropTriggerStmt {
+  type: "drop_trigger";
+  ifExists: boolean;
+  name: string;
+}
+
+export interface CreateVirtualTableStmt {
+  type: "create_virtual_table";
+  ifNotExists: boolean;
+  name: string;
+  module: string;
+  moduleArgs: string[];
+}
+
 export interface BeginStmt {
   type: "begin";
   mode: "DEFERRED" | "IMMEDIATE" | "EXCLUSIVE" | null;
@@ -450,6 +484,17 @@ export interface PragmaStmt {
   type: "pragma";
   name: string;
   value: Expr | null;
+}
+
+export interface AttachStmt {
+  type: "attach";
+  filename: Expr;
+  schema: string;
+}
+
+export interface DetachStmt {
+  type: "detach";
+  schema: string;
 }
 
 export interface ExplainStmt {

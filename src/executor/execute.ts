@@ -1,6 +1,4 @@
 import type { Statement } from "../ast/nodes.ts";
-import { evalExpr } from "../expressions/eval.ts";
-import { isTruthySql, type SqlValue } from "../types/value.ts";
 import type { ExecutionEnv } from "./env.ts";
 import {
   executeAlterTable,
@@ -13,7 +11,11 @@ import {
 } from "./ddl.ts";
 import { executeDelete, executeInsert, executeUpdate } from "./dml.ts";
 import { emptyResult, valuesToResult, type ResultSet } from "./result.ts";
+import { executePragma } from "./pragma.ts";
 import { executeSelect } from "./select.ts";
+import { executeAttach, executeDetach } from "./attach.ts";
+import { executeCreateTrigger, executeDropTrigger } from "./triggers.ts";
+import { executeCreateVirtualTable } from "./vtable.ts";
 
 export function executeStatement(stmt: Statement, env: ExecutionEnv): ResultSet {
   env.selectRunner = executeSelect;
@@ -29,6 +31,11 @@ export function executeStatement(stmt: Statement, env: ExecutionEnv): ResultSet 
     case "drop_index": return executeDropIndex(stmt, env);
     case "create_view": return executeCreateView(stmt, env);
     case "drop_view": return executeDropView(stmt, env);
+    case "create_trigger": return executeCreateTrigger(stmt, env);
+    case "drop_trigger": return executeDropTrigger(stmt, env);
+    case "create_virtual_table": return executeCreateVirtualTable(stmt, env);
+    case "attach": return executeAttach(stmt, env);
+    case "detach": return executeDetach(stmt, env);
     case "begin":
       env.transactions.begin();
       return emptyResult(0, env.state.lastInsertRowid);
@@ -53,20 +60,4 @@ export function executeStatement(stmt: Statement, env: ExecutionEnv): ResultSet 
         env.state.lastInsertRowid,
       );
   }
-}
-
-function executePragma(name: string, expr: import("../ast/nodes.ts").Expr | null, env: ExecutionEnv): ResultSet {
-  if (name.toLowerCase() !== "foreign_keys") return emptyResult(0, env.state.lastInsertRowid);
-  if (expr === null) {
-    return valuesToResult(["foreign_keys"], [[env.state.foreignKeysEnabled ? 1 : 0]], 0, env.state.lastInsertRowid);
-  }
-  let value: SqlValue;
-  if (expr.type === "column" && expr.table === null) {
-    const keyword = expr.name.toLowerCase();
-    if (keyword === "on" || keyword === "true" || keyword === "yes") value = 1;
-    else if (keyword === "off" || keyword === "false" || keyword === "no") value = 0;
-    else value = expr.name;
-  } else value = evalExpr(expr, env.createEvalContext());
-  if (!env.transactions.inTransaction) env.state.foreignKeysEnabled = isTruthySql(value) === true;
-  return emptyResult(0, env.state.lastInsertRowid);
 }
