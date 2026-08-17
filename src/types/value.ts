@@ -16,7 +16,24 @@ export class SqlReal {
   }
 }
 
-export type SqlValue = null | number | bigint | string | Uint8Array | SqlReal;
+/** SQLite JSON subtype (74 / 'J') — text that nested JSON APIs treat as JSON, not a string. */
+export const JSON_SUBTYPE = 74;
+
+export class SqlJsonText {
+  readonly value: string;
+  readonly subtype = JSON_SUBTYPE;
+  constructor(value: string) {
+    this.value = value;
+  }
+  valueOf(): string {
+    return this.value;
+  }
+  toString(): string {
+    return this.value;
+  }
+}
+
+export type SqlValue = null | number | bigint | string | Uint8Array | SqlReal | SqlJsonText;
 
 export type Affinity = "TEXT" | "NUMERIC" | "INTEGER" | "REAL" | "BLOB";
 
@@ -33,6 +50,25 @@ export function isSqlReal(value: SqlValue): value is SqlReal {
   return value instanceof SqlReal;
 }
 
+export function isSqlJsonText(value: SqlValue): value is SqlJsonText {
+  return value instanceof SqlJsonText;
+}
+
+export function asSqlJsonText(value: string): SqlJsonText {
+  return new SqlJsonText(value);
+}
+
+/** Strip ephemeral JSON subtype for table storage / non-JSON contexts. */
+export function unwrapSqlValue(value: SqlValue): SqlValue {
+  if (value instanceof SqlJsonText) return value.value;
+  return value;
+}
+
+export function subtypeOf(value: SqlValue): number {
+  if (value instanceof SqlJsonText) return JSON_SUBTYPE;
+  return 0;
+}
+
 export function numberValueOf(value: number | bigint | SqlReal): number {
   if (typeof value === "bigint") return Number(value);
   if (value instanceof SqlReal) return value.value;
@@ -42,6 +78,7 @@ export function numberValueOf(value: number | bigint | SqlReal): number {
 export function storageClassOf(value: SqlValue): StorageClass {
   if (value === null) return "null";
   if (value instanceof SqlReal) return "real";
+  if (value instanceof SqlJsonText) return "text";
   if (typeof value === "bigint") return "integer";
   if (typeof value === "number") {
     return Number.isInteger(value) ? "integer" : "real";
@@ -76,6 +113,7 @@ export function applyAffinity(value: SqlValue, affinity: Affinity): SqlValue {
   switch (affinity) {
     case "TEXT":
       if (value instanceof Uint8Array) return utf8Decode(value);
+      if (value instanceof SqlJsonText) return value.value;
       if (typeof value === "string") return value;
       if (value instanceof SqlReal) return String(value.value);
       return String(value);
@@ -104,6 +142,7 @@ export function applyAffinity(value: SqlValue, affinity: Affinity): SqlValue {
 export function coerceToNumber(value: SqlValue): number | null {
   if (value === null) return null;
   if (value instanceof SqlReal) return value.value;
+  if (value instanceof SqlJsonText) return coerceToNumber(value.value);
   if (typeof value === "number") return canonicalizeNumber(value);
   if (typeof value === "bigint") return Number(value);
   if (typeof value === "string") {
@@ -125,6 +164,7 @@ export function toInteger(value: SqlValue): number | bigint | null {
   if (value === null) return null;
   if (typeof value === "bigint") return value;
   if (value instanceof SqlReal) return Math.trunc(value.value);
+  if (value instanceof SqlJsonText) return toInteger(value.value);
   if (typeof value === "number") return Math.trunc(value);
   if (typeof value === "string") {
     const n = coerceToNumber(value);
@@ -140,8 +180,8 @@ export function sqlValueEquals(a: SqlValue, b: SqlValue): boolean {
     for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
     return true;
   }
-  const an = a instanceof SqlReal ? a.value : a;
-  const bn = b instanceof SqlReal ? b.value : b;
+  const an = a instanceof SqlReal ? a.value : a instanceof SqlJsonText ? a.value : a;
+  const bn = b instanceof SqlReal ? b.value : b instanceof SqlJsonText ? b.value : b;
   if (typeof an === "bigint" || typeof bn === "bigint") {
     try {
       return BigInt(an as number | bigint) === BigInt(bn as number | bigint);
@@ -191,8 +231,8 @@ export function compareSql(a: SqlValue, b: SqlValue): number | null {
   }
 
   if (ca === 2) {
-    const sa = String(a);
-    const sb = String(b);
+    const sa = a instanceof SqlJsonText ? a.value : String(a);
+    const sb = b instanceof SqlJsonText ? b.value : String(b);
     if (sa < sb) return -1;
     if (sa > sb) return 1;
     return 0;
@@ -215,7 +255,7 @@ export function compareSql(a: SqlValue, b: SqlValue): number | null {
 function comparisonClass(v: SqlValue): number {
   if (v === null) return 0;
   if (v instanceof SqlReal || typeof v === "number" || typeof v === "bigint") return 1;
-  if (typeof v === "string") return 2;
+  if (typeof v === "string" || v instanceof SqlJsonText) return 2;
   return 3;
 }
 
@@ -230,6 +270,7 @@ export function utf8Decode(b: Uint8Array): string {
 export function cloneSqlValue(v: SqlValue): SqlValue {
   if (v instanceof Uint8Array) return new Uint8Array(v);
   if (v instanceof SqlReal) return new SqlReal(v.value);
+  if (v instanceof SqlJsonText) return new SqlJsonText(v.value);
   return v;
 }
 
@@ -242,8 +283,8 @@ export function isTruthySql(v: SqlValue): boolean | null {
   if (v instanceof SqlReal) return v.value !== 0;
   if (typeof v === "number") return v !== 0 && !Number.isNaN(v);
   if (typeof v === "bigint") return v !== 0n;
-  if (typeof v === "string" || v instanceof Uint8Array) {
-    const n = coerceToNumber(v);
+  if (typeof v === "string" || v instanceof Uint8Array || v instanceof SqlJsonText) {
+    const n = coerceToNumber(v instanceof SqlJsonText ? v.value : v);
     return n !== null && n !== 0 && !Number.isNaN(n);
   }
   return false;

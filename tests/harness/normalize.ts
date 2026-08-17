@@ -16,6 +16,14 @@ export function normalizeValue(value: SqlValue): NormalizedValue {
       ? { kind: "integer", value }
       : { kind: "real", value };
   }
+  // SqlReal / SqlJsonText and similar wrappers
+  if (typeof value === "object" && value !== null && "value" in value) {
+    const inner = (value as { value: unknown }).value;
+    if (typeof inner === "number") {
+      return Number.isInteger(inner) ? { kind: "integer", value: inner } : { kind: "real", value: inner };
+    }
+    if (typeof inner === "string") return { kind: "text", value: inner };
+  }
   return { kind: "text", value: String(value) };
 }
 

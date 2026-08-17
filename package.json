@@ -26,6 +26,7 @@
     "test:contract": "bun test tests/contract",
     "test:fuzz": "bun test tests/fuzz",
     "test:browser": "bun run tests/browser/run.ts",
+    "inventory": "bun run scripts/sqlite-inventory.ts",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },

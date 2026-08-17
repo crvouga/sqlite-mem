@@ -1,4 +1,5 @@
 import type { BinaryOp, Expr, SelectStmt } from "../ast/nodes.ts";
+import { jsonArrow } from "../functions/json.ts";
 import { SqliteError } from "../errors/index.ts";
 import { castSqlValue } from "../functions/scalar.ts";
 import { defaultFunctionRegistry } from "../functions/registry.ts";
@@ -31,7 +32,11 @@ function integerValue(value: SqlValue): bigint {
 }
 
 function textValue(value: SqlValue): string {
-  return value instanceof Uint8Array ? utf8Decode(value) : String(value);
+  if (value instanceof Uint8Array) return utf8Decode(value);
+  if (typeof value === "object" && value !== null && "value" in value && typeof (value as { value: unknown }).value === "string") {
+    return (value as { value: string }).value;
+  }
+  return String(value);
 }
 
 function booleanValue(value: boolean): SqlValue {
@@ -73,11 +78,12 @@ function sqlOr(left: SqlValue, right: () => SqlValue): SqlValue {
 }
 
 function compareResult(op: BinaryOp, left: SqlValue, right: SqlValue, collation?: string): SqlValue {
-  if (op === "IS" || op === "IS NOT") {
+  if (op === "IS" || op === "IS NOT" || op === "IS DISTINCT FROM" || op === "IS NOT DISTINCT FROM") {
     const equal = left === null || right === null
       ? left === right
       : (collation ? compareWithCollation(left, right, collation) : compareSql(left, right)) === 0;
-    return booleanValue(op === "IS" ? equal : !equal);
+    if (op === "IS" || op === "IS NOT DISTINCT FROM") return booleanValue(equal);
+    return booleanValue(!equal);
   }
   const comparison = collation ? compareWithCollation(left, right, collation) : compareSql(left, right);
   if (comparison === null) return null;
@@ -110,7 +116,11 @@ function evalBinary(op: BinaryOp, leftExpr: Expr, rightExpr: Expr, ctx: EvalCont
   if (op === "OR") return sqlOr(left, () => evalExpr(rightExpr, ctx));
   const right = evalExpr(rightExpr, ctx);
 
-  if (["=", "==", "!=", "<>", "<", "<=", ">", ">=", "IS", "IS NOT"].includes(op)) {
+  if (op === "->" || op === "->>") {
+    return jsonArrow(left, right, op);
+  }
+
+  if (["=", "==", "!=", "<>", "<", "<=", ">", ">=", "IS", "IS NOT", "IS DISTINCT FROM", "IS NOT DISTINCT FROM"].includes(op)) {
     return compareResult(
       op,
       left,

@@ -7,7 +7,7 @@ import { DatabaseState, type IndexInfo, type ViewInfo } from "../storage/databas
 import type { Rowid } from "../storage/row.ts";
 import { Table, type ColumnInfo } from "../storage/table.ts";
 import { normalizeForCollation } from "../types/collation.ts";
-import { isTruthySql, utf8Decode, utf8Encode, SqlReal, asSqlReal, type SqlValue } from "../types/value.ts";
+import { isTruthySql, utf8Decode, utf8Encode, SqlReal, SqlJsonText, asSqlReal, type SqlValue } from "../types/value.ts";
 
 const MAGIC = utf8Encode("SQLM");
 /** Snapshot format: v1 = schema/rows only; v2 appends PRNG state + clock ms. */
@@ -70,6 +70,10 @@ class Writer {
     if (typeof value === "string") {
       this.u8(3);
       return this.text(value);
+    }
+    if (value instanceof SqlJsonText) {
+      this.u8(3);
+      return this.text(value.value);
     }
     this.u8(4);
     this.u32(value.length);

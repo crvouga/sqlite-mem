@@ -175,6 +175,31 @@ function executeSelectCore(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalCon
 export function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext): ScopeRow[] {
   if (item.type === "join") {
     const left = scanFrom(item.left, env, parent);
+
+    // Correlated table-valued functions (e.g. json_each(t.data)) are evaluated per left row.
+    if (item.right.type === "table_func") {
+      const result: ScopeRow[] = [];
+      const rightShape = shapeOf(item.right, env);
+      const nullRight = rightShape.map((cell) => ({ ...cell, value: null as SqlValue }));
+      for (const lhs of left) {
+        const tvf = evaluateTableFunction(item.right.name, item.right.args, item.right.alias, env, lhs, parent);
+        if (tvf.rows.length === 0) {
+          if (item.joinType === "LEFT" || item.joinType === "FULL") {
+            result.push({ cells: [...lhs.cells, ...nullRight] });
+          }
+          continue;
+        }
+        for (const rhs of tvf.rows) {
+          const joined = { cells: [...lhs.cells, ...rhs.cells] };
+          if (item.on) {
+            if (isTruthySql(evalExpr(item.on, env.createEvalContext(joined, parent))) !== true) continue;
+          }
+          result.push(joined);
+        }
+      }
+      return result;
+    }
+
     const right = scanFrom(item.right, env, parent);
     const using = resolveUsingColumns(item, left, right, env);
     const leftShape = (left[0]?.cells ?? shapeOf(item.left, env));
@@ -332,7 +357,13 @@ function shapeOf(item: FromItem, env: ExecutionEnv): ScopeRow["cells"] {
   }
   if (item.type === "subquery") return resultColumnNames(item.select.columns).map((name) => ({ table: item.alias, name, value: null }));
   if (item.type === "table_func") {
-    return evaluateTableFunction(item.name, item.args, item.alias, env).columns.map((name) => ({
+    const columns =
+      item.name.toLowerCase() === "generate_series"
+        ? ["value"]
+        : item.name.toLowerCase() === "json_each" || item.name.toLowerCase() === "json_tree"
+          ? ["key", "value", "type", "atom", "id", "parent", "fullkey", "path"]
+          : evaluateTableFunction(item.name, item.args, item.alias, env).columns;
+    return columns.map((name) => ({
       table: item.alias ?? item.name,
       name,
       value: null,
@@ -665,8 +696,11 @@ function expressionName(expr: Expr): string {
   if (expr.type === "null") return "NULL";
   if (expr.type === "function" || expr.type === "aggregate") {
     if (expr.args === "*") return `${expr.name.toLowerCase()}(*)`;
-    const args = expr.args.map((arg) => expressionName(arg)).join(",");
+    const args = expr.args.map((arg) => expressionName(arg)).join(", ");
     return `${expr.name.toLowerCase()}(${args})`;
+  }
+  if (expr.type === "binary") {
+    return `${expressionName(expr.left)} ${expr.op} ${expressionName(expr.right)}`;
   }
   return expr.type;
 }

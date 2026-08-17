@@ -73,6 +73,7 @@ const IDENT_KEYWORDS: ReadonlySet<TokenKind> = new Set<TokenKind>([
 
 const AGGREGATE_FUNCTIONS = new Set([
   "AVG", "COUNT", "GROUP_CONCAT", "MAX", "MIN", "SUM", "TOTAL",
+  "JSON_GROUP_ARRAY", "JSON_GROUP_OBJECT", "JSONB_GROUP_ARRAY", "JSONB_GROUP_OBJECT",
 ]);
 
 /** SQLite binary operator precedence (higher binds tighter). */
@@ -87,6 +88,7 @@ const PREC = {
   ADD: 50,
   MUL: 60,
   CONCAT: 70,
+  JSON_ARROW: 80,
 } as const;
 
 export class Parser {
@@ -1352,6 +1354,21 @@ export class Parser {
 
       if (this.at("IS") && PREC.IS_IN_LIKE >= minPrec) {
         this.advance();
+        if (this.at("NOT") && this.peek().kind === "DISTINCT") {
+          this.advance();
+          this.advance();
+          this.expect("FROM");
+          const right = this.parseExprPrec(PREC.IS_IN_LIKE + 1);
+          left = { type: "binary", op: "IS NOT DISTINCT FROM", left, right };
+          continue;
+        }
+        if (this.at("DISTINCT")) {
+          this.advance();
+          this.expect("FROM");
+          const right = this.parseExprPrec(PREC.IS_IN_LIKE + 1);
+          left = { type: "binary", op: "IS DISTINCT FROM", left, right };
+          continue;
+        }
         const not = this.match("NOT");
         const right = this.parseIsRhs();
         left = { type: "binary", op: not ? "IS NOT" : "IS", left, right };
@@ -1404,6 +1421,8 @@ export class Parser {
       case "OR": return { op: "OR", prec: PREC.OR };
       case "AND": return { op: "AND", prec: PREC.AND };
       case "CONCAT": return { op: "||", prec: PREC.CONCAT };
+      case "JSON_ARROW": return { op: "->", prec: PREC.JSON_ARROW };
+      case "JSON_ARROW2": return { op: "->>", prec: PREC.JSON_ARROW };
       case "PLUS": return { op: "+", prec: PREC.ADD };
       case "MINUS": return { op: "-", prec: PREC.ADD };
       case "STAR": return { op: "*", prec: PREC.MUL };

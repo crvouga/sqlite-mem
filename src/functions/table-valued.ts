@@ -2,6 +2,7 @@ import type { Expr } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
 import { evalExpr } from "../expressions/eval.ts";
 import type { ExecutionEnv, ScopeRow } from "../executor/env.ts";
+import { jsonEachRows, jsonTreeRows } from "../json/tvf.ts";
 import { toInteger, type SqlValue } from "../types/value.ts";
 
 export interface TableValuedResult {
@@ -12,6 +13,26 @@ export interface TableValuedResult {
 type TableValuedFn = (args: SqlValue[], alias: string | null, env: ExecutionEnv) => TableValuedResult;
 
 const registry = new Map<string, TableValuedFn>();
+
+const JSON_TVF_COLUMNS = ["key", "value", "type", "atom", "id", "parent", "fullkey", "path"] as const;
+
+function jsonTvfResult(
+  alias: string | null,
+  defaultName: string,
+  rows: ReturnType<typeof jsonEachRows>,
+): TableValuedResult {
+  const table = alias ?? defaultName;
+  return {
+    columns: [...JSON_TVF_COLUMNS],
+    rows: rows.map((row) => ({
+      cells: JSON_TVF_COLUMNS.map((name) => ({
+        table,
+        name,
+        value: row[name],
+      })),
+    })),
+  };
+}
 
 registry.set("generate_series", (args, alias) => {
   if (args.length < 2 || args.length > 3) {
@@ -45,6 +66,20 @@ registry.set("generate_series", (args, alias) => {
   return { columns: ["value"], rows };
 });
 
+registry.set("json_each", (args, alias) => {
+  if (args.length < 1 || args.length > 2) {
+    throw new SqliteError("wrong number of arguments to function json_each()", "misuse");
+  }
+  return jsonTvfResult(alias, "json_each", jsonEachRows(args[0]!, args[1]));
+});
+
+registry.set("json_tree", (args, alias) => {
+  if (args.length < 1 || args.length > 2) {
+    throw new SqliteError("wrong number of arguments to function json_tree()", "misuse");
+  }
+  return jsonTvfResult(alias, "json_tree", jsonTreeRows(args[0]!, args[1]));
+});
+
 function safeInt(value: bigint): number | bigint {
   return value <= BigInt(Number.MAX_SAFE_INTEGER) && value >= BigInt(Number.MIN_SAFE_INTEGER)
     ? Number(value)
@@ -56,9 +91,15 @@ export function evaluateTableFunction(
   args: Expr[],
   alias: string | null,
   env: ExecutionEnv,
+  scope?: ScopeRow | null,
+  parent?: import("../expressions/context.ts").EvalContext,
 ): TableValuedResult {
   const fn = registry.get(name.toLowerCase());
   if (!fn) throw new SqliteError(`no such table-valued function: ${name}`, "no_such_table");
-  const values = args.map((arg) => evalExpr(arg, env.createEvalContext()));
+  const values = args.map((arg) => evalExpr(arg, env.createEvalContext(scope ?? null, parent)));
   return fn(values, alias, env);
+}
+
+export function listTableValuedFunctions(): string[] {
+  return [...registry.keys()].sort();
 }

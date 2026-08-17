@@ -1,6 +1,7 @@
 import type { SqlValue } from "../types/value.ts";
 import { aggregateFunctions, type AggregateAccumulator, type AggregateFactory } from "./aggregate.ts";
 import { dateTimeFunctions } from "./datetime.ts";
+import { jsonAggregateFunctions, jsonScalarFunctions } from "./json.ts";
 import { getScalarFunctions } from "./scalar.ts";
 
 export interface FunctionContext {
@@ -23,7 +24,9 @@ export class FunctionRegistry {
   constructor() {
     for (const [name, fn] of Object.entries(getScalarFunctions())) this.scalars.set(name, fn);
     for (const [name, fn] of Object.entries(dateTimeFunctions)) this.scalars.set(name, fn);
+    for (const [name, fn] of Object.entries(jsonScalarFunctions)) this.scalars.set(name, fn);
     for (const [name, factory] of Object.entries(aggregateFunctions)) this.aggregates.set(name, factory);
+    for (const [name, factory] of Object.entries(jsonAggregateFunctions)) this.aggregates.set(name, factory);
   }
 
   registerScalar(name: string, fn: ScalarFunction): void {

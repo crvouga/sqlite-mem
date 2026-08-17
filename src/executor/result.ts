@@ -1,4 +1,4 @@
-import { isSqlReal, type SqlValue } from "../types/value.ts";
+import { isSqlJsonText, isSqlReal, type SqlValue } from "../types/value.ts";
 
 export interface ResultSet {
   columns: string[];
@@ -13,9 +13,11 @@ export function emptyResult(changes = 0, lastInsertRowid: number | bigint = 0): 
   return { columns: [], rows: [], changes, lastInsertRowid };
 }
 
-/** Export engine values to the public JS surface (SqlReal → number). */
+/** Export engine values to the public JS surface (SqlReal → number, SqlJsonText → string). */
 export function exportSqlValue(value: SqlValue): SqlValue {
-  return isSqlReal(value) ? value.value : value;
+  if (isSqlReal(value)) return value.value;
+  if (isSqlJsonText(value)) return value.value;
+  return value;
 }
 
 export function valuesToResult(

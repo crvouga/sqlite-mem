@@ -30,6 +30,8 @@ export type TokenKind =
   | "PIPE"
   | "LSHIFT"
   | "RSHIFT"
+  | "JSON_ARROW"
+  | "JSON_ARROW2"
   | "TILDE"
   // keywords
   | "ABORT"
@@ -547,6 +549,19 @@ export function tokenize(input: string): Token[] {
       push("CONCAT", start, startLine, startCol, "||");
       continue;
     }
+    if (three === "->>") {
+      advance();
+      advance();
+      advance();
+      push("JSON_ARROW2", start, startLine, startCol, "->>");
+      continue;
+    }
+    if (two === "->") {
+      advance();
+      advance();
+      push("JSON_ARROW", start, startLine, startCol, "->");
+      continue;
+    }
     if (two === "<<") {
       advance();
       advance();
@@ -641,5 +656,5 @@ export function isKeyword(kind: TokenKind): boolean {
     kind !== "BLOB" &&
     kind !== "PARAM_POS" &&
     kind !== "PARAM_NAMED" &&
-    !["DOT", "COMMA", "SEMI", "LPAREN", "RPAREN", "PLUS", "MINUS", "STAR", "SLASH", "PERCENT", "EQ", "EQEQ", "NE", "LT", "LE", "GT", "GE", "CONCAT", "AMP", "PIPE", "LSHIFT", "RSHIFT", "TILDE"].includes(kind);
+    !["DOT", "COMMA", "SEMI", "LPAREN", "RPAREN", "PLUS", "MINUS", "STAR", "SLASH", "PERCENT", "EQ", "EQEQ", "NE", "LT", "LE", "GT", "GE", "CONCAT", "AMP", "PIPE", "LSHIFT", "RSHIFT", "JSON_ARROW", "JSON_ARROW2", "TILDE"].includes(kind);
 }

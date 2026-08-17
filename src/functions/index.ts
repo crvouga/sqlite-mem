@@ -5,6 +5,7 @@ export {
   type AggregateFactory,
 } from "./aggregate.ts";
 export { dateTimeFunctions } from "./datetime.ts";
+export { jsonAggregateFunctions, jsonArrow, jsonScalarFunctions } from "./json.ts";
 export { castSqlValue, getScalarFunctions, invokeScalar } from "./scalar.ts";
 export {
   defaultFunctionRegistry,
@@ -27,3 +28,7 @@ export {
   windowFunctions,
   type PartitionRow,
 } from "./window.ts";
+export {
+  evaluateTableFunction,
+  listTableValuedFunctions,
+} from "./table-valued.ts";
