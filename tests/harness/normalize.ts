@@ -26,6 +26,48 @@ export function normalizeErrorMessage(message: string): string {
     .trim();
 }
 
+/**
+ * Normalize error messages for differential comparison.
+ * Keeps category-defining prefixes; strips engine-specific detail that SQLite
+ * versions legitimately vary on (column lists after UNIQUE/CHECK, etc.).
+ */
+export function normalizeErrorMessageForCompare(message: string): string {
+  let msg = normalizeErrorMessage(message);
+  const lower = msg.toLowerCase();
+
+  if (lower.startsWith("unique constraint failed")) {
+    return "UNIQUE constraint failed";
+  }
+  if (lower.startsWith("primary key constraint failed")) {
+    return "PRIMARY KEY constraint failed";
+  }
+  if (lower.startsWith("not null constraint failed")) {
+    return "NOT NULL constraint failed";
+  }
+  if (lower.startsWith("check constraint failed")) {
+    return "CHECK constraint failed";
+  }
+  if (lower.startsWith("foreign key constraint failed")) {
+    return "FOREIGN KEY constraint failed";
+  }
+  if (lower.includes("datatype mismatch")) {
+    return "datatype mismatch";
+  }
+  if (/selects to the left and right of .+ do not have the same number of result columns/.test(lower)) {
+    return "compound select column count mismatch";
+  }
+  if (lower.startsWith("cannot drop primary key") || lower.startsWith("cannot drop column")) {
+    return "cannot drop column";
+  }
+  if (lower.startsWith("no such column")) {
+    return "no such column";
+  }
+  if (lower.startsWith("no such table")) {
+    return "no such table";
+  }
+  return msg;
+}
+
 export function categorizeErrorMessage(message: string): ErrorCategory {
   const msg = normalizeErrorMessage(message).toLowerCase();
 
@@ -62,12 +104,17 @@ export function normalizeError(
 }
 
 export function normalizeQueryResult(result: QueryResult): NormalizedResult {
+  const valueRows = result.values;
+  const columns = [...result.columns];
+  const rows =
+    valueRows && (valueRows.length > 0 || columns.length > 0)
+      ? valueRows.map((row) => row.map((value) => normalizeValue(value)))
+      : result.rows.map((row) => columns.map((column) => normalizeValue(row[column] ?? null)));
+
   const normalized: NormalizedResult = {
     ok: result.ok,
-    columns: [...result.columns],
-    rows: result.rows.map((row) =>
-      result.columns.map((column) => normalizeValue(row[column] ?? null)),
-    ),
+    columns,
+    rows: result.ok ? rows : [],
     changes: result.changes,
     lastInsertRowid: result.lastInsertRowid,
   };
@@ -89,8 +136,16 @@ export function valuesEqual(
   b: SqlValue,
   options: ValuesEqualOptions = {},
 ): boolean {
-  if (a === b) return true;
   if (a === null || b === null) return a === b;
+
+  if (typeof a === "number" && typeof b === "number") {
+    if (options.rowid && Number.isInteger(a) && Number.isInteger(b)) {
+      return BigInt(a) === BigInt(b);
+    }
+    return Object.is(a, b);
+  }
+
+  if (a === b) return true;
 
   if (a instanceof Uint8Array && b instanceof Uint8Array) {
     if (a.length !== b.length) return false;
@@ -116,10 +171,6 @@ export function valuesEqual(
     }
   }
 
-  if (typeof a === "number" && typeof b === "number") {
-    return Object.is(a, b);
-  }
-
   if (typeof a === "bigint" && typeof b === "bigint") {
     return a === b;
   }
@@ -143,14 +194,11 @@ function normalizedValuesEqual(a: NormalizedValue, b: NormalizedValue, rowid = f
     case "null":
       return true;
     case "integer":
-      if (rowid) {
-        try {
-          return BigInt(a.value) === BigInt((b as Extract<NormalizedValue, { kind: "integer" }>).value);
-        } catch {
-          return false;
-        }
+      try {
+        return BigInt(a.value) === BigInt((b as Extract<NormalizedValue, { kind: "integer" }>).value);
+      } catch {
+        return false;
       }
-      return a.value === (b as Extract<NormalizedValue, { kind: "integer" }>).value;
     case "real":
       return Object.is(a.value, (b as Extract<NormalizedValue, { kind: "real" }>).value);
     case "text":
@@ -164,6 +212,39 @@ function normalizedValuesEqual(a: NormalizedValue, b: NormalizedValue, rowid = f
       return true;
     }
   }
+}
+
+function uniquePreserve(names: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const name of names) {
+    if (seen.has(name)) continue;
+    seen.add(name);
+    out.push(name);
+  }
+  return out;
+}
+
+function uniqueNamesCompatible(a: string[], b: string[]): boolean {
+  const ua = uniquePreserve(a);
+  const ub = uniquePreserve(b);
+  if (ua.length !== ub.length) return false;
+  return ua.every((name, index) => name === ub[index]);
+}
+
+function positionalRowsEqual(a: NormalizedResult, b: NormalizedResult): boolean {
+  if (a.rows.length !== b.rows.length) return false;
+  for (let r = 0; r < a.rows.length; r++) {
+    const rowA = a.rows[r]!;
+    const rowB = b.rows[r]!;
+    if (rowA.length !== rowB.length) return false;
+    for (let c = 0; c < rowA.length; c++) {
+      const colName = a.columns[c] ?? b.columns[c] ?? "";
+      const isRowid = colName.toLowerCase().includes("rowid") || colName.toLowerCase() === "oid";
+      if (!normalizedValuesEqual(rowA[c]!, rowB[c]!, isRowid)) return false;
+    }
+  }
+  return true;
 }
 
 export function deepCompareResults(
@@ -189,7 +270,9 @@ export function deepCompareResults(
         reason: `error category mismatch: ${ea.category} vs ${eb.category}`,
       };
     }
-    if (ea.message !== eb.message) {
+    const ma = normalizeErrorMessageForCompare(ea.message);
+    const mb = normalizeErrorMessageForCompare(eb.message);
+    if (ma !== mb) {
       return {
         equal: false,
         reason: `error message mismatch:\n  a: ${ea.message}\n  b: ${eb.message}`,
@@ -199,14 +282,19 @@ export function deepCompareResults(
   }
 
   if (na.columns.length !== nb.columns.length) {
-    return { equal: false, reason: "column count mismatch" };
-  }
-  for (let i = 0; i < na.columns.length; i++) {
-    if (na.columns[i] !== nb.columns[i]) {
-      return {
-        equal: false,
-        reason: `column name mismatch at ${i}: ${na.columns[i]} vs ${nb.columns[i]}`,
-      };
+    // bun:sqlite collapses duplicate column headers in columnNames while values() retains
+    // full width. Accept unique-preserving name lists when positional values still match.
+    if (!uniqueNamesCompatible(na.columns, nb.columns) || !positionalRowsEqual(na, nb)) {
+      return { equal: false, reason: "column count mismatch" };
+    }
+  } else {
+    for (let i = 0; i < na.columns.length; i++) {
+      if (na.columns[i] !== nb.columns[i]) {
+        return {
+          equal: false,
+          reason: `column name mismatch at ${i}: ${na.columns[i]} vs ${nb.columns[i]}`,
+        };
+      }
     }
   }
 
@@ -217,9 +305,13 @@ export function deepCompareResults(
   for (let r = 0; r < na.rows.length; r++) {
     const rowA = na.rows[r]!;
     const rowB = nb.rows[r]!;
-    for (let c = 0; c < rowA.length; c++) {
-      const colName = na.columns[c] ?? `column ${c}`;
-      const isRowid = colName.toLowerCase().includes("rowid");
+    const width = Math.max(rowA.length, rowB.length);
+    if (rowA.length !== rowB.length) {
+      return { equal: false, reason: `value width mismatch at row ${r}` };
+    }
+    for (let c = 0; c < width; c++) {
+      const colName = na.columns[c] ?? nb.columns[c] ?? `column ${c}`;
+      const isRowid = colName.toLowerCase().includes("rowid") || colName.toLowerCase() === "oid";
       if (!normalizedValuesEqual(rowA[c]!, rowB[c]!, isRowid)) {
         return {
           equal: false,

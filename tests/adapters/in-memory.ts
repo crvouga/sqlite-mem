@@ -56,9 +56,14 @@ class InMemoryStatement implements ContractStatement {
 
   all(...params: SqlValue[]): QueryResult {
     try {
-      const rows = this.stmt.all(...params) as Record<string, SqlValue>[];
-      const shaped = rowsFromRecords(rows);
-      return okResult(shaped.columns, shaped.rows);
+      const result = this.stmt.result(...params);
+      return okResult(
+        [...result.columns],
+        result.rows as Record<string, SqlValue>[],
+        0,
+        0,
+        result.values?.map((row) => [...row]),
+      );
     } catch (error) {
       return mapSqliteError(error);
     }
@@ -66,12 +71,17 @@ class InMemoryStatement implements ContractStatement {
 
   get(...params: SqlValue[]): QueryResult {
     try {
-      const row = this.stmt.get(...params) as Record<string, SqlValue> | undefined;
-      if (!row) {
-        return okResult([], []);
+      const result = this.stmt.result(...params);
+      if (result.rows.length === 0) {
+        return okResult([...result.columns], [], 0, 0, []);
       }
-      const columns = Object.keys(row);
-      return okResult(columns, [row]);
+      return okResult(
+        [...result.columns],
+        [result.rows[0] as Record<string, SqlValue>],
+        0,
+        0,
+        result.values ? [[...result.values[0]!]] : undefined,
+      );
     } catch (error) {
       return mapSqliteError(error);
     }
@@ -103,9 +113,15 @@ export class InMemoryAdapter implements ContractDb {
   query(sql: string, params?: SqlValue[]): QueryResult {
     if (this.closed) return this.closedError();
     try {
-      const rows = this.db.query<Record<string, SqlValue>>(sql, params);
-      const shaped = rowsFromRecords(rows);
-      return okResult(shaped.columns, shaped.rows);
+      const result = this.db.prepare(sql).result(...(params ?? []));
+      // Query comparisons focus on columns/rows; write counters stay on exec/run.
+      return okResult(
+        [...result.columns],
+        result.rows as Record<string, SqlValue>[],
+        0,
+        0,
+        result.values?.map((row) => [...row]),
+      );
     } catch (error) {
       return mapSqliteError(error);
     }

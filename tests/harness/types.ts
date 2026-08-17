@@ -20,6 +20,8 @@ export interface QueryResult {
   ok: boolean;
   columns: string[];
   rows: Record<string, SqlValue>[];
+  /** Positional row values; preferred for comparison when duplicate column names exist. */
+  values?: SqlValue[][];
   changes: number;
   lastInsertRowid: number | bigint;
   error?: { category: ErrorCategory; message: string };

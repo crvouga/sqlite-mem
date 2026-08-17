@@ -1,7 +1,7 @@
 import { describe, test } from "bun:test";
 import * as fc from "fast-check";
 import { fuzzAssertConfig, intArb, textArb } from "./config.ts";
-import { compareOrReport, compareOutcomeOrReport, withDatabases } from "./helpers.ts";
+import { compareOrReport, compareStateOrReport, compareWriteOrReport, withDatabases } from "./helpers.ts";
 
 const rowArb = fc.record({
   id: fc.integer({ min: 1, max: 20 }),
@@ -29,7 +29,7 @@ describe("DML differential fuzz", () => {
 
             for (const row of initialRows) {
               const sql = "INSERT INTO t(id, a, b) VALUES (?, ?, ?)";
-              compareOutcomeOrReport(
+              compareWriteOrReport(
                 "dml-seed",
                 sql,
                 row,
@@ -45,7 +45,7 @@ describe("DML differential fuzz", () => {
                   : operation.kind === "update"
                     ? ["UPDATE t SET a = ?, b = ? WHERE id = ?", [operation.a, operation.b, operation.id]]
                     : ["DELETE FROM t WHERE id = ?", [operation.id]];
-              compareOutcomeOrReport(
+              compareWriteOrReport(
                 `dml-${operation.kind}`,
                 sql,
                 { initialRows, operations, operation },
@@ -62,6 +62,7 @@ describe("DML differential fuzz", () => {
               memory.query(select),
               sqlite.query(select),
             );
+            compareStateOrReport("dml-state", { initialRows, operations }, memory, sqlite);
           });
         },
       ),

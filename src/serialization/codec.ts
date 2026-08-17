@@ -7,7 +7,7 @@ import { DatabaseState, type IndexInfo, type ViewInfo } from "../storage/databas
 import type { Rowid } from "../storage/row.ts";
 import { Table, type ColumnInfo } from "../storage/table.ts";
 import { normalizeForCollation } from "../types/collation.ts";
-import { isTruthySql, utf8Decode, utf8Encode, type SqlValue } from "../types/value.ts";
+import { isTruthySql, utf8Decode, utf8Encode, SqlReal, asSqlReal, type SqlValue } from "../types/value.ts";
 
 const MAGIC = utf8Encode("SQLM");
 /** Snapshot format: v1 = schema/rows only; v2 appends PRNG state + clock ms. */
@@ -49,6 +49,12 @@ class Writer {
   json(value: unknown): void { this.text(JSON.stringify(value, jsonReplacer)); }
   value(value: SqlValue): void {
     if (value === null) return this.u8(0);
+    if (value instanceof SqlReal) {
+      this.u8(2);
+      const bytes = new Uint8Array(8);
+      new DataView(bytes.buffer).setFloat64(0, value.value, true);
+      return this.raw(bytes);
+    }
     if (typeof value === "bigint" || typeof value === "number" && Number.isInteger(value)) {
       this.u8(1);
       const bytes = new Uint8Array(8);
@@ -111,7 +117,9 @@ class Reader {
     }
     if (tag === 2) {
       const bytes = this.raw(8);
-      return new DataView(bytes.buffer, bytes.byteOffset, 8).getFloat64(0, true);
+      const value = new DataView(bytes.buffer, bytes.byteOffset, 8).getFloat64(0, true);
+      // Preserve REAL storage class for integer-valued floats across snapshot restore.
+      return Number.isInteger(value) && Number.isFinite(value) ? asSqlReal(value) : value;
     }
     if (tag === 3) return this.text();
     if (tag === 4) return this.raw(this.u32());

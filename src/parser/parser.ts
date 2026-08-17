@@ -1525,7 +1525,11 @@ export class Parser {
 
     if (this.at("NUMBER")) {
       const tok = this.advance();
-      return { type: "literal", value: tok.literal as number | bigint };
+      return {
+        type: "literal",
+        value: tok.literal as number | bigint,
+        forceReal: tok.forceReal || undefined,
+      };
     }
     if (this.at("STRING")) {
       const tok = this.advance();

@@ -2,6 +2,8 @@
 
 Goal: **full SQLite3 SQL dialect behavioral parity** as a drop-in for the same statements. Compatibility is proven by the differential contract suite (`bun test`) against real SQLite via `bun:sqlite`.
 
+See [COMPATIBILITY-AUDIT.md](COMPATIBILITY-AUDIT.md) for the latest evidence-based audit report.
+
 Statuses:
 
 - **yes** — covered by differential contract/fuzz tests and matching the oracle

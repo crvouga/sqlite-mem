@@ -2,7 +2,21 @@
 
 export type StorageClass = "null" | "integer" | "real" | "text" | "blob";
 
-export type SqlValue = null | number | bigint | string | Uint8Array;
+/** Integer-valued REAL that must not collapse to the integer storage class. */
+export class SqlReal {
+  readonly value: number;
+  constructor(value: number) {
+    this.value = canonicalizeNumber(value);
+  }
+  valueOf(): number {
+    return this.value;
+  }
+  toString(): string {
+    return String(this.value);
+  }
+}
+
+export type SqlValue = null | number | bigint | string | Uint8Array | SqlReal;
 
 export type Affinity = "TEXT" | "NUMERIC" | "INTEGER" | "REAL" | "BLOB";
 
@@ -11,8 +25,23 @@ export function canonicalizeNumber(value: number): number {
   return Object.is(value, -0) ? 0 : value;
 }
 
+export function asSqlReal(value: number): SqlReal {
+  return new SqlReal(value);
+}
+
+export function isSqlReal(value: SqlValue): value is SqlReal {
+  return value instanceof SqlReal;
+}
+
+export function numberValueOf(value: number | bigint | SqlReal): number {
+  if (typeof value === "bigint") return Number(value);
+  if (value instanceof SqlReal) return value.value;
+  return value;
+}
+
 export function storageClassOf(value: SqlValue): StorageClass {
   if (value === null) return "null";
+  if (value instanceof SqlReal) return "real";
   if (typeof value === "bigint") return "integer";
   if (typeof value === "number") {
     return Number.isInteger(value) ? "integer" : "real";
@@ -48,6 +77,7 @@ export function applyAffinity(value: SqlValue, affinity: Affinity): SqlValue {
     case "TEXT":
       if (value instanceof Uint8Array) return utf8Decode(value);
       if (typeof value === "string") return value;
+      if (value instanceof SqlReal) return String(value.value);
       return String(value);
     case "INTEGER": {
       const n = coerceToNumber(value);
@@ -57,7 +87,7 @@ export function applyAffinity(value: SqlValue, affinity: Affinity): SqlValue {
     }
     case "REAL": {
       const n = coerceToNumber(value);
-      return n === null ? value : canonicalizeNumber(n);
+      return n === null ? value : asSqlReal(n);
     }
     case "NUMERIC": {
       const n = coerceToNumber(value);
@@ -73,6 +103,7 @@ export function applyAffinity(value: SqlValue, affinity: Affinity): SqlValue {
 
 export function coerceToNumber(value: SqlValue): number | null {
   if (value === null) return null;
+  if (value instanceof SqlReal) return value.value;
   if (typeof value === "number") return canonicalizeNumber(value);
   if (typeof value === "bigint") return Number(value);
   if (typeof value === "string") {
@@ -84,12 +115,16 @@ export function coerceToNumber(value: SqlValue): number | null {
     }
     return null;
   }
+  if (value instanceof Uint8Array) {
+    return coerceToNumber(utf8Decode(value));
+  }
   return null;
 }
 
 export function toInteger(value: SqlValue): number | bigint | null {
   if (value === null) return null;
   if (typeof value === "bigint") return value;
+  if (value instanceof SqlReal) return Math.trunc(value.value);
   if (typeof value === "number") return Math.trunc(value);
   if (typeof value === "string") {
     const n = coerceToNumber(value);
@@ -105,14 +140,17 @@ export function sqlValueEquals(a: SqlValue, b: SqlValue): boolean {
     for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
     return true;
   }
-  if (typeof a === "bigint" || typeof b === "bigint") {
+  const an = a instanceof SqlReal ? a.value : a;
+  const bn = b instanceof SqlReal ? b.value : b;
+  if (typeof an === "bigint" || typeof bn === "bigint") {
     try {
-      return BigInt(a as number | bigint) === BigInt(b as number | bigint);
+      return BigInt(an as number | bigint) === BigInt(bn as number | bigint);
     } catch {
       return false;
     }
   }
-  return a === b;
+  if (typeof an === "number" && typeof bn === "number") return Object.is(an, bn);
+  return an === bn;
 }
 
 /**
@@ -128,26 +166,27 @@ export function compareSql(a: SqlValue, b: SqlValue): number | null {
 
   if (ca === 1) {
     // numbers — compare floats before BigInt conversion (NaN/Inf must not reach BigInt)
-    if (typeof a === "number" && typeof b === "number") {
-      if (Number.isNaN(a) && Number.isNaN(b)) return 0;
-      if (Number.isNaN(a)) return 1;
-      if (Number.isNaN(b)) return -1;
-      if (a < b) return -1;
-      if (a > b) return 1;
-      return 0;
-    }
+    const fa = a instanceof SqlReal ? a.value : typeof a === "number" ? a : typeof a === "bigint" ? null : Number(a);
+    const fb = b instanceof SqlReal ? b.value : typeof b === "number" ? b : typeof b === "bigint" ? null : Number(b);
     if (typeof a === "bigint" && typeof b === "bigint") {
       if (a < b) return -1;
       if (a > b) return 1;
       return 0;
     }
-    const fa = typeof a === "number" ? a : Number(a);
-    const fb = typeof b === "number" ? b : Number(b);
-    if (Number.isNaN(fa) && Number.isNaN(fb)) return 0;
-    if (Number.isNaN(fa)) return 1;
-    if (Number.isNaN(fb)) return -1;
-    if (fa < fb) return -1;
-    if (fa > fb) return 1;
+    if (typeof a === "bigint" || typeof b === "bigint") {
+      const left = typeof a === "bigint" ? Number(a) : (fa as number);
+      const right = typeof b === "bigint" ? Number(b) : (fb as number);
+      if (left < right) return -1;
+      if (left > right) return 1;
+      return 0;
+    }
+    const left = fa as number;
+    const right = fb as number;
+    if (Number.isNaN(left) && Number.isNaN(right)) return 0;
+    if (Number.isNaN(left)) return 1;
+    if (Number.isNaN(right)) return -1;
+    if (left < right) return -1;
+    if (left > right) return 1;
     return 0;
   }
 
@@ -175,7 +214,7 @@ export function compareSql(a: SqlValue, b: SqlValue): number | null {
 /** SQLite sort order: NULL < numbers < text < blob */
 function comparisonClass(v: SqlValue): number {
   if (v === null) return 0;
-  if (typeof v === "number" || typeof v === "bigint") return 1;
+  if (v instanceof SqlReal || typeof v === "number" || typeof v === "bigint") return 1;
   if (typeof v === "string") return 2;
   return 3;
 }
@@ -190,13 +229,22 @@ export function utf8Decode(b: Uint8Array): string {
 
 export function cloneSqlValue(v: SqlValue): SqlValue {
   if (v instanceof Uint8Array) return new Uint8Array(v);
+  if (v instanceof SqlReal) return new SqlReal(v.value);
   return v;
 }
 
+/**
+ * SQLite boolean truthiness (WHERE / HAVING / CASE / AND / OR / NOT).
+ * Non-NULL values are cast to numeric; non-numeric text/blob become 0 (false).
+ */
 export function isTruthySql(v: SqlValue): boolean | null {
   if (v === null) return null;
-  if (typeof v === "number") return v !== 0;
+  if (v instanceof SqlReal) return v.value !== 0;
+  if (typeof v === "number") return v !== 0 && !Number.isNaN(v);
   if (typeof v === "bigint") return v !== 0n;
-  if (typeof v === "string") return v.length > 0;
-  return v.length > 0;
+  if (typeof v === "string" || v instanceof Uint8Array) {
+    const n = coerceToNumber(v);
+    return n !== null && n !== 0 && !Number.isNaN(n);
+  }
+  return false;
 }

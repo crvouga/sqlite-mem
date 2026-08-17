@@ -1,6 +1,7 @@
 import { InMemoryAdapter } from "../adapters/in-memory.ts";
 import { RealSqliteAdapter } from "../adapters/real-sqlite.ts";
 import { deepCompareResults } from "../harness/normalize.ts";
+import { dumpLogicalState } from "../harness/state-dump.ts";
 import type { ContractDb, QueryResult, SqlValue } from "../harness/types.ts";
 import { fuzzSeed } from "./config.ts";
 
@@ -39,6 +40,10 @@ export function compareOrReport(
   );
 }
 
+/**
+ * Outcome-only compare for cases where SQLite does not specify which constraint
+ * error is reported first (multi-constraint races). Prefer compareOrReport otherwise.
+ */
 export function compareOutcomeOrReport(
   label: string,
   sql: string,
@@ -62,6 +67,25 @@ export function compareOutcomeOrReport(
       `sqlite: ${JSON.stringify(sqlite)}`,
     ].join("\n"),
   );
+}
+
+/** Full compare on success; category-only on failure (constraint races). */
+export function compareWriteOrReport(
+  label: string,
+  sql: string,
+  setup: unknown,
+  memory: QueryResult,
+  sqlite: QueryResult,
+): void {
+  if (memory.ok && sqlite.ok) {
+    compareOrReport(label, sql, setup, memory, sqlite);
+    return;
+  }
+  compareOutcomeOrReport(label, sql, setup, memory, sqlite);
+}
+
+export function compareStateOrReport(label: string, setup: unknown, memory: ContractDb, sqlite: ContractDb): void {
+  compareOrReport(label, "<logical-state-dump>", setup, dumpLogicalState(memory), dumpLogicalState(sqlite));
 }
 
 export function withDatabases(run: (memory: ContractDb, sqlite: ContractDb) => void): void {

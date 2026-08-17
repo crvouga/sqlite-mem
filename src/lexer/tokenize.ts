@@ -184,6 +184,8 @@ export interface Token {
   value: string;
   /** For NUMBER/BLOB/STRING, the parsed value */
   literal?: string | number | bigint | Uint8Array | null;
+  /** True when a NUMBER token used float/scientific syntax. */
+  forceReal?: boolean;
   index?: number; // for PARAM_POS
   line: number;
   column: number;
@@ -529,7 +531,7 @@ export function tokenize(input: string): Token[] {
       } else {
         literal = Number(raw);
       }
-      push("NUMBER", start, startLine, startCol, raw, { literal });
+      push("NUMBER", start, startLine, startCol, raw, { literal, forceReal: isFloat || undefined });
       continue;
     }
 

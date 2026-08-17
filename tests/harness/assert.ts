@@ -56,6 +56,7 @@ export function okResult(
   rows: Record<string, SqlValue>[],
   changes = 0,
   lastInsertRowid: number | bigint = 0,
+  values?: SqlValue[][],
 ): QueryResult {
   return {
     ok: true,
@@ -63,5 +64,6 @@ export function okResult(
     rows,
     changes,
     lastInsertRowid,
+    ...(values ? { values } : {}),
   };
 }

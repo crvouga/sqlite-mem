@@ -360,7 +360,8 @@ function serializePkComponent(value: SqlValue): string {
   if (typeof value === "bigint") return `\0b:${value.toString()}`;
   if (typeof value === "number") return `\0i:${value}`;
   if (typeof value === "string") return `\0s:${value}`;
-  return `\0x:${Array.from(value).join(",")}`;
+  if (value instanceof Uint8Array) return `\0x:${Array.from(value).join(",")}`;
+  return `\0r:${value.value}`;
 }
 
 function primaryKeyConflict(tableName: string, columns: ColumnInfo[]): never {

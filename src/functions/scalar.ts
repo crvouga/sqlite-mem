@@ -2,6 +2,7 @@ import { SqliteError } from "../errors/index.ts";
 import {
   affinityFromTypeName,
   applyAffinity,
+  asSqlReal,
   coerceToNumber,
   compareSql,
   storageClassOf,
@@ -29,7 +30,7 @@ export function castSqlValue(value: SqlValue, typeName: string): SqlValue {
   }
   if (affinity === "TEXT") return text(value);
   if (affinity === "INTEGER") return Math.trunc(coerceToNumber(value) ?? 0);
-  if (affinity === "REAL") return coerceToNumber(value) ?? 0;
+  if (affinity === "REAL") return asSqlReal(coerceToNumber(value) ?? 0);
   return applyAffinity(value, "NUMERIC");
 }
 

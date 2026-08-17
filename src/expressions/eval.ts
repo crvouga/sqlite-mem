@@ -4,6 +4,7 @@ import { castSqlValue } from "../functions/scalar.ts";
 import { defaultFunctionRegistry } from "../functions/registry.ts";
 import { compareWithCollation } from "../types/collation.ts";
 import {
+  asSqlReal,
   canonicalizeNumber,
   coerceToNumber,
   compareSql,
@@ -225,7 +226,12 @@ function evalIn(left: SqlValue, values: SqlValue[], not: boolean): SqlValue {
 
 export function evalExpr(expr: Expr, ctx: EvalContext): SqlValue {
   switch (expr.type) {
-    case "literal": return expr.value;
+    case "literal": {
+      if (expr.forceReal && typeof expr.value === "number") {
+        return asSqlReal(expr.value);
+      }
+      return expr.value;
+    }
     case "null": return null;
     case "column": return resolveColumn(ctx, expr.table, expr.name);
     case "parameter": return ctx.getParameter(expr.name);

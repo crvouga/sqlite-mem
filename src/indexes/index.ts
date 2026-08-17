@@ -1,5 +1,5 @@
 import { SqliteError } from "../errors/index.ts";
-import type { SqlValue } from "../types/value.ts";
+import { isSqlReal, type SqlValue } from "../types/value.ts";
 import type { Rowid } from "../storage/row.ts";
 
 export class IndexStore {
@@ -59,6 +59,13 @@ export function serializeIndexKey(values: readonly SqlValue[]): string | null {
 }
 
 function serializeValue(value: Exclude<SqlValue, null>): string {
+  if (isSqlReal(value)) {
+    const n = value.value;
+    if (Number.isNaN(n)) return "f:nan";
+    if (n === Infinity) return "f:+inf";
+    if (n === -Infinity) return "f:-inf";
+    return `f:${Object.is(n, -0) ? "0" : n.toString()}`;
+  }
   if (typeof value === "bigint") return `n:${value.toString()}`;
   if (typeof value === "number") {
     if (Number.isInteger(value)) return `n:${BigInt(value).toString()}`;

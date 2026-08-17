@@ -14,11 +14,14 @@ export { likeMatch, globMatch } from "./expressions/like.ts";
 export {
   affinityFromTypeName,
   applyAffinity,
+  asSqlReal,
   canonicalizeNumber,
   cloneSqlValue,
   coerceToNumber,
   compareSql,
+  isSqlReal,
   isTruthySql,
+  SqlReal,
   sqlValueEquals,
   storageClassOf,
   toInteger,
@@ -28,7 +31,8 @@ export {
   type Affinity,
   type SqlValue,
   type StorageClass,
-} from "./types/value.ts";export {
+} from "./types/value.ts";
+export {
   DEFAULT_DATABASE_SEED,
   DEFAULT_NOW,
   Prng,

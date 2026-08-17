@@ -56,6 +56,8 @@ export type Expr =
 export interface LiteralExpr {
   type: "literal";
   value: SqlValue;
+  /** True when the literal was written with float syntax (e.g. 1.0) or must be REAL. */
+  forceReal?: boolean;
 }
 
 export interface NullExpr {

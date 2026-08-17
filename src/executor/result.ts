@@ -1,4 +1,4 @@
-import type { SqlValue } from "../types/value.ts";
+import { isSqlReal, type SqlValue } from "../types/value.ts";
 
 export interface ResultSet {
   columns: string[];
@@ -13,6 +13,11 @@ export function emptyResult(changes = 0, lastInsertRowid: number | bigint = 0): 
   return { columns: [], rows: [], changes, lastInsertRowid };
 }
 
+/** Export engine values to the public JS surface (SqlReal → number). */
+export function exportSqlValue(value: SqlValue): SqlValue {
+  return isSqlReal(value) ? value.value : value;
+}
+
 export function valuesToResult(
   columns: string[],
   values: SqlValue[][],
@@ -21,10 +26,10 @@ export function valuesToResult(
 ): ResultSet {
   return {
     columns,
-    values: values.map((row) => [...row]),
+    values: values.map((row) => row.map(exportSqlValue)),
     rows: values.map((row) => {
       const object: Record<string, SqlValue> = {};
-      columns.forEach((name, index) => { object[name] = row[index] ?? null; });
+      columns.forEach((name, index) => { object[name] = exportSqlValue(row[index] ?? null); });
       return object;
     }),
     changes,

@@ -663,7 +663,11 @@ function expressionName(expr: Expr): string {
     return typeof expr.value === "string" ? `'${expr.value.replaceAll("'", "''")}'` : String(expr.value);
   }
   if (expr.type === "null") return "NULL";
-  if (expr.type === "function" || expr.type === "aggregate") return `${expr.name.toLowerCase()}(${expr.args === "*" ? "*" : ""})`;
+  if (expr.type === "function" || expr.type === "aggregate") {
+    if (expr.args === "*") return `${expr.name.toLowerCase()}(*)`;
+    const args = expr.args.map((arg) => expressionName(arg)).join(",");
+    return `${expr.name.toLowerCase()}(${args})`;
+  }
   return expr.type;
 }
 

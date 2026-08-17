@@ -29,6 +29,11 @@ export class Statement {
     return this.execute(params.length > 0 ? params : this.bound).rows as T[];
   }
 
+  /** Full result including column names (needed for empty result-set metadata). */
+  result(...params: unknown[]): ResultSet {
+    return this.execute(params.length > 0 ? params : this.bound);
+  }
+
   get<T>(...params: unknown[]): T | undefined {
     return this.all<T>(...(params.length > 0 ? params : this.bound))[0];
   }

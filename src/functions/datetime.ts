@@ -1,4 +1,4 @@
-import { coerceToNumber, type SqlValue } from "../types/value.ts";
+import { coerceToNumber, isSqlReal, type SqlValue } from "../types/value.ts";
 import type { FunctionContext, ScalarFunction } from "./registry.ts";
 
 const JULIAN_UNIX_EPOCH = 2440587.5;
@@ -8,9 +8,10 @@ function parseDate(value: SqlValue | undefined, context: FunctionContext): Date 
     return context.now?.() ?? new Date("2000-01-01T00:00:00.000Z");
   }
   if (value === null || value instanceof Uint8Array) return null;
-  if (typeof value === "number" || typeof value === "bigint") {
-    return new Date((Number(value) - JULIAN_UNIX_EPOCH) * 86400000);
+  if (typeof value === "number" || typeof value === "bigint" || isSqlReal(value)) {
+    return new Date((Number(isSqlReal(value) ? value.value : value) - JULIAN_UNIX_EPOCH) * 86400000);
   }
+  if (typeof value !== "string") return null;
   const source = /^\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(value)
     ? `2000-01-01T${value}Z`
     : /^\d{4}-\d\d-\d\d$/.test(value)

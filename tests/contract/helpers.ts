@@ -1,6 +1,7 @@
 import { expect } from "bun:test";
 import { expectParity } from "../harness/assert.ts";
 import { matrixBoth } from "../harness/matrix.ts";
+import { expectStateParity } from "../harness/state-dump.ts";
 import type { ContractDb, ErrorCategory, SqlValue } from "../harness/types.ts";
 
 export function setupBoth(memory: ContractDb, sqlite: ContractDb, statements: string[]): void {
@@ -31,26 +32,37 @@ export function execParity(name: string, setup: string[], sql: string, params?: 
   });
 }
 
+/** Statements where write counters are not meaningfully comparable across drivers. */
+const COUNTER_NEUTRAL_SQL =
+  /^\s*(CREATE|DROP|ALTER|BEGIN|COMMIT|END|ROLLBACK|SAVEPOINT|RELEASE|PRAGMA|ANALYZE|REINDEX|VACUUM|ATTACH|DETACH)\b/i;
+
+function shouldNeutralizeCounters(sql: string): boolean {
+  return COUNTER_NEUTRAL_SQL.test(sql);
+}
+
 export function sequenceParity(
   name: string,
   setup: string[],
   steps: Array<{ sql: string; query?: boolean; params?: SqlValue[] }>,
+  options?: { compareFinalState?: boolean },
 ): void {
   matrixBoth(name, (memory, sqlite) => {
     setupBoth(memory, sqlite, setup);
     for (const step of steps) {
       const a = step.query ? memory.query(step.sql, step.params) : memory.exec(step.sql, step.params);
       const b = step.query ? sqlite.query(step.sql, step.params) : sqlite.exec(step.sql, step.params);
-      if (step.query || !a.ok || !b.ok) {
+      if (step.query || !a.ok || !b.ok || !shouldNeutralizeCounters(step.sql)) {
         expectParity(a, b);
       } else {
-        // Sequence tests assert resulting SQL behavior; write counters are adapter state,
-        // and DDL/transaction statements do not reset them consistently across drivers.
+        // DDL / transaction / pragma counters are not consistently defined across drivers.
         expectParity(
           { ...a, changes: 0, lastInsertRowid: 0 },
           { ...b, changes: 0, lastInsertRowid: 0 },
         );
       }
+    }
+    if (options?.compareFinalState) {
+      expectStateParity(memory, sqlite);
     }
   });
 }
@@ -67,7 +79,7 @@ export function errorParity(
     const b = sqlite.exec(sql);
     expect(a.ok).toBe(false);
     expect(b.ok).toBe(false);
-    expect(a.error?.category).toBe(b.error?.category);
+    expectParity(a, b);
     if (category) {
       expect(a.error?.category).toBe(category);
       expect(b.error?.category).toBe(category);
@@ -87,7 +99,7 @@ export function queryErrorParity(
     const b = sqlite.query(sql);
     expect(a.ok).toBe(false);
     expect(b.ok).toBe(false);
-    expect(a.error?.category).toBe(b.error?.category);
+    expectParity(a, b);
     if (category) expect(a.error?.category).toBe(category);
   });
 }
