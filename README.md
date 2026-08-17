@@ -104,6 +104,59 @@ bun run test:browser         # Playwright smoke (Chrome/Firefox/Safari)
 
 Contract tests compare the pure TypeScript engine against real SQLite (`bun:sqlite`). See [COMPATIBILITY.md](./COMPATIBILITY.md).
 
+## Releasing
+
+Publishing is fully automated. You never bump `version` or run `npm publish` by hand.
+
+### How a release happens
+
+1. Push or merge to `main` with [Conventional Commits](https://www.conventionalcommits.org/).
+2. CI runs commitlint, format/lint/typecheck, build, package verification, tests, browser smoke, and benchmarks.
+3. If every gate is green, [semantic-release](https://semantic-release.gitbook.io/) analyzes commits since the last git tag, bumps semver, publishes to npm, and creates a GitHub Release.
+
+| Commit | Version bump |
+| --- | --- |
+| `fix: …` | patch (`0.1.0` → `0.1.1`) |
+| `feat: …` | minor (`0.1.0` → `0.2.0`) |
+| `feat!: …` or `BREAKING CHANGE:` footer | major (`0.2.0` → `1.0.0`) |
+| `docs:`, `chore:`, `refactor:`, `test:`, … | no release |
+
+Examples:
+
+```text
+feat: add window function support
+fix: handle NULL in UNIQUE constraints
+feat!: rename snapshot() return type
+
+chore: tweak CI timeouts
+docs: clarify determinism table
+```
+
+PR titles must also follow Conventional Commits (enforced in CI). Prefer squash merges with a conventional title.
+
+Local checks:
+
+```bash
+bunx commitlint --last --verbose
+bun run build && bun run verify-package
+# dry-run needs GITHUB_TOKEN + NPM_TOKEN (or CI); does not publish
+bun run release:dry-run
+```
+
+`package.json` version is `0.0.0-development` on purpose — **git tags** (`v0.1.0`, …) are the source of truth.
+
+### One-time setup (maintainers)
+
+Do this once so CI can publish:
+
+1. **npm credentials** (pick one):
+   - **Trusted Publishing (recommended):** on [npmjs.com](https://www.npmjs.com/) → package `sqlite-mem` → Settings → Trusted Publisher → GitHub Actions (`crvouga/sqlite-mem`, workflow `ci.yml`).
+   - **Token:** create a granular Automation token with read/write on `sqlite-mem`, then add repo secret `NPM_TOKEN` (Settings → Secrets and variables → Actions).
+2. Confirm GitHub Actions is enabled and can create releases (default `GITHUB_TOKEN` is enough with this workflow’s permissions).
+3. Ensure the baseline tag exists and is pushed: `v0.1.0` (semver continues from there; the next `feat` publishes `0.2.0`).
+
+After that, every green push to `main` with releasable commits updates npm automatically.
+
 ## License
 
 MIT

@@ -164,4 +164,23 @@ Fidelity: `snapshot/fidelity/200` plus `tests/contract/snapshots` and determinis
 - Stateful write benches use **`isolateIterations`** (fresh engine + setup per sample) so rows do not accumulate across iterations.
 - Workload-c reports per-query timings (`userMs`, `projectMs`, `joinMs`) plus separate email-lookup and join-only cases.
 
+## JS engine comparison (AlaSQL)
+
+Fair core micros against other pure-JS SQL engines (not a SQLite compatibility claim):
+
+```bash
+bun run benchmark:compare
+# → benchmarks/results/compare-js.json (+ .html)
+```
+
+Suite (`compare/*`): id lookup, N inserts, equality join, prepared id executes — sizes 100 and 1000 — engines **sqlite-mem** and **AlaSQL**.
+
+Caveats:
+
+- AlaSQL is **not** SQLite; the suite uses a conservative dialect (`INT`/`STRING`, no INTEGER PRIMARY KEY maps, no snapshots/FTS).
+- Because the shared schema omits SQLite `INTEGER PRIMARY KEY`, sqlite-mem does **not** use its rowid PK fast path here — these numbers are for cross-engine fairness, not peak sqlite-mem point-lookup claims (see `micro/pk-lookup` / `index/pk-lookup` for that).
+- “Prepared” for AlaSQL means `alasql.compile` after `alasql.use(database)` — not SQLite VDBE statements.
+- In-memory AlaSQL transactions are best-effort (`BEGIN`/`COMMIT TRANSACTION`); do not treat TX insert wins as durability batching.
+- `alasql` is a **devDependency** only; the published package stays zero-runtime-deps.
+
 Stop condition: mobile interactive and 1 MB snapshot targets met without a bytecode VM or format break.

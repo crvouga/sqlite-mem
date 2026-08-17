@@ -1,6 +1,6 @@
 {
   "name": "sqlite-mem",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "description": "Pure TypeScript in-memory SQLite implementation with zero WASM/native dependencies",
   "type": "module",
   "license": "MIT",
@@ -22,7 +22,20 @@
     "LICENSE",
     "compat"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/sqlite-mem.git"
+  },
+  "homepage": "https://github.com/crvouga/sqlite-mem#readme",
+  "bugs": {
+    "url": "https://github.com/crvouga/sqlite-mem/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
+    "prepare": "husky",
     "build": "bun run scripts/build.ts",
     "test": "bun test tests/contract tests/fuzz tests/harness",
     "test:contract": "bun test tests/contract",
@@ -30,6 +43,7 @@
     "test:browser": "bun run tests/browser/run.ts",
     "benchmark": "bun run benchmarks/run.ts --tier default --engine mem",
     "benchmark:bun": "bun run benchmarks/run.ts --tier full --engine both",
+    "benchmark:compare": "bun run benchmarks/run.ts --tier default --engine compare --grep compare/ --out benchmarks/results/compare-js.json",
     "benchmark:browser": "bun run benchmarks/browser/run.ts --tier ci --mobile-tier ci",
     "benchmark:ci": "bun run benchmarks/run.ts --tier ci --engine mem --out benchmarks/results/ci-latest.json && bun run benchmarks/compare-ci.ts",
     "benchmark:bundle": "bun run build && bun run benchmarks/bundle.ts",
@@ -44,18 +58,35 @@
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
     "clean": "rm -rf dist",
-    "check": "bun run format:check && bun run lint && bun run typecheck && bun run test:sqlite-compat"
+    "check": "bun run format:check && bun run lint && bun run typecheck && bun run test:sqlite-compat",
+    "commitlint": "commitlint --edit",
+    "verify-package": "bun run scripts/verify-package.ts",
+    "release:preflight": "bun run scripts/release-preflight.ts",
+    "release": "semantic-release",
+    "release:dry-run": "semantic-release --dry-run"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.8",
+    "@commitlint/cli": "^21.2.2",
+    "@commitlint/config-conventional": "^21.2.2",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/github": "^12.0.9",
+    "@semantic-release/npm": "^13.1.5",
+    "@semantic-release/release-notes-generator": "^14.1.1",
     "@types/bun": "latest",
+    "alasql": "^4.17.3",
+    "conventional-changelog-conventionalcommits": "^10.3.0",
     "esbuild": "^0.28.2",
     "fast-check": "^4.1.1",
+    "husky": "^9.1.7",
     "playwright": "^1.52.0",
+    "publint": "^0.3.23",
+    "semantic-release": "^25.0.9",
     "typescript": "^5.8.3"
   },
   "engines": {
-    "bun": ">=1.1.0"
+    "bun": ">=1.1.0",
+    "node": ">=20"
   },
   "keywords": [
     "sqlite",

@@ -5,37 +5,217 @@ on:
     branches: [main]
   pull_request:
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - run: bun run typecheck
-      - run: bun run build
-      - run: bun test
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
-  benchmark:
+permissions:
+  contents: read
+
+env:
+  HUSKY: "0"
+
+jobs:
+  commitlint:
+    name: Commitlint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install --frozen-lockfile
-      - run: bun run benchmark:ci
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Validate current commit (push)
+        if: github.event_name == 'push'
+        run: |
+          set +e
+          bunx commitlint --last --verbose
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "::error::Commit message failed Conventional Commits lint."
+            echo ""
+            echo "Expected format:"
+            echo "  <type>(optional-scope): <description>"
+            echo ""
+            echo "Examples that trigger a release:"
+            echo "  feat: add JOIN support"
+            echo "  fix: correct NULL handling in WHERE"
+            echo "  feat!: rename Database.snapshot API"
+            echo ""
+            echo "Examples that do NOT release:"
+            echo "  docs: update README"
+            echo "  chore: tweak CI"
+            echo "  refactor: clean up parser"
+            echo ""
+            echo "See README.md → Releasing"
+            exit "$status"
+          fi
+
+      - name: Validate PR commits
+        if: github.event_name == 'pull_request'
+        run: |
+          set +e
+          bunx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "::error::One or more PR commits failed Conventional Commits lint."
+            echo ""
+            echo "Expected format:"
+            echo "  <type>(optional-scope): <description>"
+            echo ""
+            echo "Releasable types: feat, fix (and BREAKING CHANGE / type!)"
+            echo "Fix by amending commits or squashing with a conventional PR title."
+            echo "See README.md → Releasing"
+            exit "$status"
+          fi
+
+      - name: Validate PR title
+        if: github.event_name == 'pull_request'
+        uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          subjectPattern: .+
+          subjectPatternError: |
+            The PR title "{title}" looks empty after the type/scope prefix.
+            Use a Conventional Commits title, e.g. "feat: add window functions".
+
+  quality:
+    name: Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Format check
+        run: bun run format:check
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Build
+        run: bun run build
+
+      - name: Verify package
+        run: bun run verify-package
+
+  test:
+    name: Test
+    needs: [quality]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run tests
+        run: bun run test
 
   browser:
+    name: Browser
+    needs: [quality]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install --frozen-lockfile
-      - run: bun run build
-      - run: bunx playwright install --with-deps chromium firefox webkit
-      - run: bun run test:browser
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
+
+      - name: Install Playwright browsers
+        run: bunx playwright install --with-deps chromium firefox webkit
+
+      - name: Browser smoke tests
+        run: bun run test:browser
+
+  benchmark:
+    name: Benchmark
+    needs: [quality]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: CI benchmarks
+        run: bun run benchmark:ci
+
+  release:
+    name: Release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [commitlint, test, browser, benchmark]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
+
+      - name: Verify package
+        run: bun run verify-package
+
+      - name: Release preflight
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: bun run release:preflight
+
+      - name: Semantic Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: bunx semantic-release

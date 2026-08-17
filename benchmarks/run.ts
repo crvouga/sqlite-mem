@@ -1,11 +1,11 @@
-import { mkdir } from "node:fs/promises";
-import path from "node:path";
 import { memFactory } from "./compare/mem.ts";
 import { renderHtmlReport } from "./harness/html-report.ts";
 import { toJson } from "./harness/report.ts";
 import { printReport, runSuite } from "./harness/run-suite.ts";
 import type { NamedFactory, SuiteTier } from "./harness/types.ts";
 import { allSpecs } from "./workloads/index.ts";
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
 
 function arg(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -28,14 +28,35 @@ const grep = arg("--grep");
 const out = arg("--out");
 
 const factories: NamedFactory[] = [];
-if (engineArg === "mem" || engineArg === "both") factories.push(memFactory);
+
+if (engineArg === "mem" || engineArg === "both" || engineArg === "compare") {
+  factories.push(memFactory);
+}
 if (engineArg === "sqlite" || engineArg === "both") {
   const { sqliteFactory } = await import("./compare/sqlite.ts");
   factories.push(sqliteFactory);
 }
+if (engineArg === "alasql" || engineArg === "compare") {
+  const { tryLoadAlasqlFactory } = await import("./compare/alasql.ts");
+  const alasqlFactory = await tryLoadAlasqlFactory();
+  if (!alasqlFactory) {
+    console.error("alasql is not installed. Run: bun add -d alasql");
+    process.exit(1);
+  }
+  factories.push(alasqlFactory);
+}
+
+if (factories.length === 0) {
+  console.error("unknown --engine; expected mem | sqlite | alasql | compare | both");
+  process.exit(1);
+}
 
 let specs = allSpecs();
 if (grep) specs = specs.filter((spec) => spec.name.includes(grep));
+// Compare-suite specs need AlaSQL in the factory set; skip them for mem-only / bun-sqlite runs.
+if (!factories.some((factory) => factory.name === "alasql")) {
+  specs = specs.filter((spec) => spec.engines !== "compare");
+}
 
 console.log(
   `Running ${specs.filter((s) => s.tiers.includes(tier)).length} specs  tier=${tier}  engines=${factories.map((f) => f.name).join(",")}`,

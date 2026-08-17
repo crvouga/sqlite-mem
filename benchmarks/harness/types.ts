@@ -30,7 +30,7 @@ export interface NamedFactory {
   create: EngineFactory;
 }
 
-export type EngineKind = "mem" | "sqlite" | "both";
+export type EngineKind = "mem" | "sqlite" | "alasql" | "compare" | "both";
 
 export interface BenchSpec {
   name: string;

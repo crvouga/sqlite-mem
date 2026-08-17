@@ -17,9 +17,11 @@ export type { NamedFactory };
 
 function engineAllowed(spec: BenchSpec, engineName: string): boolean {
   const kind = spec.engines ?? "both";
-  if (kind === "both") return true;
+  if (kind === "both") return engineName === "sqlite-mem" || engineName === "bun-sqlite";
   if (kind === "mem") return engineName === "sqlite-mem";
   if (kind === "sqlite") return engineName === "bun-sqlite";
+  if (kind === "alasql") return engineName === "alasql";
+  if (kind === "compare") return engineName === "sqlite-mem" || engineName === "alasql";
   return true;
 }
 
