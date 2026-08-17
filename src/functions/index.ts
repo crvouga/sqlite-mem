@@ -6,6 +6,7 @@ export {
 } from "./aggregate.ts";
 export { dateTimeFunctions } from "./datetime.ts";
 export { jsonAggregateFunctions, jsonArrow, jsonScalarFunctions } from "./json.ts";
+export { mathFunctions } from "./math.ts";
 export { castSqlValue, getScalarFunctions, invokeScalar } from "./scalar.ts";
 export {
   defaultFunctionRegistry,

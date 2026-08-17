@@ -72,7 +72,7 @@ const IDENT_KEYWORDS: ReadonlySet<TokenKind> = new Set<TokenKind>([
 ]);
 
 const AGGREGATE_FUNCTIONS = new Set([
-  "AVG", "COUNT", "GROUP_CONCAT", "MAX", "MIN", "SUM", "TOTAL",
+  "AVG", "COUNT", "GROUP_CONCAT", "STRING_AGG", "MAX", "MIN", "SUM", "TOTAL",
   "JSON_GROUP_ARRAY", "JSON_GROUP_OBJECT", "JSONB_GROUP_ARRAY", "JSONB_GROUP_OBJECT",
 ]);
 
@@ -237,7 +237,45 @@ export class Parser {
     if (this.at("ATTACH")) return this.parseAttachStmt();
     if (this.at("DETACH")) return this.parseDetachStmt();
 
+    if (this.at("ANALYZE")) return this.parseAnalyzeStmt();
+    if (this.at("REINDEX")) return this.parseReindexStmt();
+    if (this.at("VACUUM")) return this.parseVacuumStmt();
+
     this.syntaxError(`unexpected token ${this.current().kind}`);
+  }
+
+  private parseAnalyzeStmt(): import("../ast/nodes.ts").AnalyzeStmt {
+    this.expect("ANALYZE");
+    if (this.at("SEMI") || this.at("EOF")) return { type: "analyze", schema: null, name: null };
+    const first = this.parseIdent();
+    if (this.match("DOT")) {
+      return { type: "analyze", schema: first, name: this.parseIdent() };
+    }
+    return { type: "analyze", schema: null, name: first };
+  }
+
+  private parseReindexStmt(): import("../ast/nodes.ts").ReindexStmt {
+    this.expect("REINDEX");
+    if (this.at("SEMI") || this.at("EOF")) return { type: "reindex", schema: null, name: null };
+    const first = this.parseIdent();
+    if (this.match("DOT")) {
+      return { type: "reindex", schema: first, name: this.parseIdent() };
+    }
+    return { type: "reindex", schema: null, name: first };
+  }
+
+  private parseVacuumStmt(): import("../ast/nodes.ts").VacuumStmt {
+    this.expect("VACUUM");
+    let schema: string | null = null;
+    if (this.at("IDENT") || this.at("STRING")) {
+      // VACUUM schema_name — but INTO starts with keyword
+      if (!this.at("INTO")) schema = this.parseIdent();
+    }
+    let into: string | null = null;
+    if (this.match("INTO")) {
+      into = this.at("STRING") ? String(this.advance().value) : this.parseIdent();
+    }
+    return { type: "vacuum", schema, into };
   }
 
   private parseWithClause(): WithClause {

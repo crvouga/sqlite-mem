@@ -71,6 +71,7 @@ export const aggregateFunctions: Readonly<Record<string, AggregateFactory>> = {
   min: () => new MinMaxAccumulator("min"),
   max: () => new MinMaxAccumulator("max"),
   group_concat: () => new GroupConcatAccumulator(),
+  string_agg: () => new GroupConcatAccumulator(),
 };
 
 export function createAggregate(name: string): AggregateAccumulator | undefined {

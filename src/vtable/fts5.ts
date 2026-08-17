@@ -16,14 +16,21 @@ export function tokenizeFtsText(text: string): string[] {
 }
 
 export class Fts5VirtualTable {
+  readonly kind: "fts5" | "fts3" | "fts4";
   readonly name: string;
   readonly columns: string[];
   readonly originalSql: string | null;
   readonly rows = new Map<Rowid, Fts5Row>();
   nextRowid: Rowid = 1;
 
-  constructor(name: string, columns: string[], originalSql: string | null = null) {
-    if (columns.length === 0) throw new SqliteError("fts5 requires at least one column", "other");
+  constructor(
+    name: string,
+    columns: string[],
+    originalSql: string | null = null,
+    kind: "fts5" | "fts3" | "fts4" = "fts5",
+  ) {
+    if (columns.length === 0) throw new SqliteError("fts requires at least one column", "other");
+    this.kind = kind;
     this.name = name;
     this.columns = columns.map((column) => column);
     this.originalSql = originalSql;
@@ -77,7 +84,7 @@ export class Fts5VirtualTable {
   }
 
   clone(): Fts5VirtualTable {
-    const copy = new Fts5VirtualTable(this.name, this.columns, this.originalSql);
+    const copy = new Fts5VirtualTable(this.name, this.columns, this.originalSql, this.kind);
     copy.nextRowid = this.nextRowid;
     for (const [rowid, row] of this.rows) {
       copy.rows.set(rowid, {

@@ -111,6 +111,15 @@ function evalBinary(op: BinaryOp, leftExpr: Expr, rightExpr: Expr, ctx: EvalCont
     }
     return booleanValue(ctx.matchFts(leftExpr.table, leftExpr.name, query));
   }
+
+  if (
+    leftExpr.type === "row" &&
+    rightExpr.type === "row" &&
+    ["=", "==", "!=", "<>", "<", "<=", ">", ">=", "IS", "IS NOT", "IS DISTINCT FROM", "IS NOT DISTINCT FROM"].includes(op)
+  ) {
+    return compareRowValues(op, leftExpr.values, rightExpr.values, ctx);
+  }
+
   const left = evalExpr(leftExpr, ctx);
   if (op === "AND") return sqlAnd(left, () => evalExpr(rightExpr, ctx));
   if (op === "OR") return sqlOr(left, () => evalExpr(rightExpr, ctx));
@@ -176,6 +185,83 @@ function safeIntegerResult(value: bigint): number | bigint {
   return value <= BigInt(Number.MAX_SAFE_INTEGER) && value >= BigInt(Number.MIN_SAFE_INTEGER)
     ? Number(value)
     : value;
+}
+
+function compareRowValues(op: BinaryOp, leftExprs: Expr[], rightExprs: Expr[], ctx: EvalContext): SqlValue {
+  if (leftExprs.length !== rightExprs.length) {
+    throw new SqliteError("row value misused", "misuse");
+  }
+  const isIsFamily = op === "IS" || op === "IS NOT" || op === "IS DISTINCT FROM" || op === "IS NOT DISTINCT FROM";
+  let sawNull = false;
+  for (let i = 0; i < leftExprs.length; i++) {
+    const left = evalExpr(leftExprs[i]!, ctx);
+    const right = evalExpr(rightExprs[i]!, ctx);
+    if (isIsFamily) {
+      const equal = left === null || right === null ? left === right : compareSql(left, right) === 0;
+      if (!equal) {
+        if (op === "IS" || op === "IS NOT DISTINCT FROM") return booleanValue(false);
+        return booleanValue(true);
+      }
+      continue;
+    }
+    if (left === null || right === null) {
+      sawNull = true;
+      continue;
+    }
+    const cmp = compareSql(left, right);
+    if (cmp === null) {
+      sawNull = true;
+      continue;
+    }
+    if (cmp !== 0) {
+      switch (op) {
+        case "=":
+        case "==": return booleanValue(false);
+        case "!=":
+        case "<>": return booleanValue(true);
+        case "<": return booleanValue(cmp < 0);
+        case "<=": return booleanValue(cmp < 0);
+        case ">": return booleanValue(cmp > 0);
+        case ">=": return booleanValue(cmp > 0);
+      }
+    }
+  }
+  if (isIsFamily) {
+    if (op === "IS" || op === "IS NOT DISTINCT FROM") return booleanValue(true);
+    return booleanValue(false);
+  }
+  if (sawNull) return null;
+  switch (op) {
+    case "=":
+    case "==":
+    case "<=":
+    case ">=": return booleanValue(true);
+    case "!=":
+    case "<>":
+    case "<":
+    case ">": return booleanValue(false);
+    default: return null;
+  }
+}
+
+function rowValuesEqual(left: SqlValue[], right: SqlValue[]): boolean | null {
+  if (left.length !== right.length) return false;
+  let sawNull = false;
+  for (let i = 0; i < left.length; i++) {
+    const a = left[i]!;
+    const b = right[i]!;
+    if (a === null || b === null) {
+      sawNull = true;
+      continue;
+    }
+    const cmp = compareSql(a, b);
+    if (cmp === null) {
+      sawNull = true;
+      continue;
+    }
+    if (cmp !== 0) return false;
+  }
+  return sawNull ? null : true;
 }
 
 function explicitCollation(expr: Expr): string | null {
@@ -269,6 +355,26 @@ export function evalExpr(expr: Expr, ctx: EvalContext): SqlValue {
       return expr.not ? booleanValue(result === 0) : result;
     }
     case "in": {
+      if (expr.expr.type === "row" && Array.isArray(expr.values)) {
+        const left = expr.expr.values.map((value) => evalExpr(value, ctx));
+        let sawNull = false;
+        let found = false;
+        for (const candidate of expr.values) {
+          if (candidate.type !== "row") {
+            throw new SqliteError("row value misused", "misuse");
+          }
+          const right = candidate.values.map((value) => evalExpr(value, ctx));
+          const eq = rowValuesEqual(left, right);
+          if (eq === true) {
+            found = true;
+            break;
+          }
+          if (eq === null) sawNull = true;
+        }
+        if (found) return booleanValue(!expr.not);
+        if (sawNull) return null;
+        return booleanValue(expr.not);
+      }
       const left = evalExpr(expr.expr, ctx);
       const values = Array.isArray(expr.values)
         ? expr.values.map((value) => evalExpr(value, ctx))

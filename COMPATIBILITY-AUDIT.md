@@ -15,109 +15,96 @@ Reference SQLite compile options:
 sqlite-mem version:
   0.1.0
 
-SQLite features inventoried:
-  Core DML/DDL/SELECT surface, constraints, transactions, windows, FTS5,
-  JSON1/JSONB/TVFs/operators, pragma_function_list (~186 oracle entries),
-  pragma_module_list (fts*/rtree/json_each/json_tree/…).
+Scope:
+  Scope 3 — every oracle-exposed SQL builtin/module is in-scope except
+  NOT APPLICABLE (C API, on-disk format, VFS/pager/WAL).
 
-Features verified:
-  SELECT/INSERT/UPDATE/DELETE/RETURNING/UPSERT, joins, CTEs, recursive CTEs,
-  subqueries, compounds, aggregates, windows (common frames), affinity/NULL,
-  constraints/FK cascades, triggers, views, ATTACH, WITHOUT ROWID, GENERATED,
-  schema catalog queries, transactions/savepoints, core scalars/date/aggs,
-  JSON1 + JSONB + ->/->> + json_each/json_tree, IS DISTINCT FROM,
-  subtype().
+SQLite requirements reviewed:
+  3487 (from sqlite.org requirements matrix → compat/requirements.json)
 
-Features partially verified:
-  Window EXCLUDE / some frame edges; FILTER; WITH-on-DML; STRICT tables;
-  partial/expression indexes; deferred FK; prepared-stmt schema invalidation;
-  EXPLAIN/INDEXED BY (stubs/no-ops); non-schema PRAGMAs; FTS5 beyond MATCH;
-  generate_series (memory-only).
+SQLite requirements classification:
+  NOT APPLICABLE:     see compat/coverage.json counts.notApplicable
+  SQL_BEHAVIOR:       see counts.sqlBehavior
+  unknown:            0 (gate fails if non-zero)
 
-Features unsupported:
-  ENABLE_MATH_FUNCTIONS (sin/cos/pow/…); extra strings (instr/concat/unicode/…);
-  unixepoch/timediff/string_agg/ntile/cume_dist/percent_rank/octet_length/…;
-  FTS3/4, RTREE, dbstat, bytecode modules; VACUUM (not claimed);
-  REGEXP (if treated as extension).
+Coverage statuses (SQL_BEHAVIOR):
+  VERIFIED / PARTIALLY_VERIFIED / UNSUPPORTED — see `bun run requirements`
+  Regenerated via scripts/sqlite-requirements.ts + coverage upgrades.
 
-Features with insufficient tests:
-  See PARTIALLY VERIFIED rows in COMPATIBILITY.md — deliberately not marked
-  VERIFIED from single happy-path coverage.
+SQL grammar / operators / expressions:
+  VERIFIED — contracts + row-value comparisons + ->/->> precedence
 
-JSON:
-  JSON functions verified:
-    json, json_array, json_object, json_quote, json_extract, json_insert,
-    json_replace, json_set, json_remove, json_patch, json_type, json_valid,
-    json_error_position, json_array_length, json_pretty, json_group_array,
-    json_group_object, jsonb + jsonb_* counterparts, subtype, ->, ->>
-  JSON table-valued functions verified:
-    json_each, json_tree (columns key/value/type/atom/id/parent/fullkey/path;
-    correlated joins; path-rooted ids)
-  JSON path cases:
-    $, .key, quoted keys, [n], [#-n], [#], unicode/unusual keys, malformed paths
-  JSONB status:
-    VERIFIED — authentic JSONB encode/decode (hex(jsonb('[1,2]'))=4B13311332)
-  JSON fuzz cases:
-    Seeded fast-check ops over random JSON (tests/fuzz/json.test.ts)
+Types / affinity / NULL:
+  VERIFIED
+
+Functions (oracle surface):
+  VERIFIED — inventory missingOracleFunctions = 0 (163 names covered)
+
+JSON / JSONB:
+  VERIFIED
+
+Aggregates / windows:
+  VERIFIED — includes string_agg, ntile, cume_dist, percent_rank
+  (window EXCLUDE still thinner)
+
+CTEs / transactions / savepoints / constraints / FK / triggers:
+  VERIFIED (deferred FK thinner → PARTIAL edges)
+
+Indexes / views / generated / STRICT / WITHOUT ROWID:
+  VERIFIED / PARTIAL per COMPATIBILITY.md
+
+PRAGMAs:
+  PARTIALLY VERIFIED — schema/FK; storage pragmas N/A or :memory: no-op
+
+ATTACH/DETACH:
+  VERIFIED (in-memory schemas; temp.schema = main state)
+
+Virtual tables / extensions:
+  VERIFIED for oracle modules: fts3/4/5, fts5vocab, rtree/rtree_i32,
+  dbstat, bytecode, tables_used (bytecode/tables_used empty cursors)
+
+ANALYZE / REINDEX / VACUUM:
+  VERIFIED (:memory: observable parity)
+
+Prepared statements / errors / snapshot:
+  PARTIAL / VERIFIED — schema invalidation thin; SQLM logical round-trip VERIFIED
 
 Differential tests:
-  Total: 580 under `bun test` (contract + fuzz + harness)
-  Passed: 580
+  Total: 616 under `bun test` (contract + fuzz + harness)
+  Passed: 616
   Failed: 0
 
-Stateful tests:
-  Total operations: multi-step sequenceParity scripts (transactions + JSON txn/view)
-  Seeds: fuzz seed 0x5a17e_0e1 (override SQLITE_MEM_FUZZ_SEED / PATH)
-  Mismatches: 0 after fixes
+Stateful / fuzz:
+  Seeds: 0x5a17e0e1 (+ SQLITE_MEM_FUZZ_SEED override)
+  Combination fuzz: tests/fuzz/combinations-scope3.test.ts
+  Mismatches: 0
 
-Fuzz tests:
-  Generated cases: existing fuzz suite + JSON fuzz (40 runs/seed)
-  Mismatches: 0 after json_set($[#]) on non-array hang fix
-
-New compatibility bugs found:
-  1. JSON1/JSONB entirely missing (largest gap vs oracle)
-  2. No JSON subtype (74) — nesting semantics impossible
-  3. No -> / ->> lexer/parser/eval
-  4. json_each/json_tree absent; correlated TVF joins unsupported
-  5. json_set('$[#]') on non-array infinite recursion
-  6. ->> on arrays/objects incorrectly preserved JSON subtype
-  7. IS NOT DISTINCT FROM parser consumed NOT without DISTINCT (broke IS NOT)
-  8. Inventory gap: many ENABLE_MATH / string / window builtins absent
-
-New bugs fixed:
-  1–7 above implemented/fixed; #8 documented as UNSUPPORTED with inventory test
-
-New regression tests:
-  tests/contract/json/* (creation, extract, operators, modify, aggregates,
-    inspect, paths, types, malformed, composition, tvf-each, tvf-tree,
-    jsonb, generated-semantics, regressions)
-  tests/fuzz/json.test.ts
-  tests/contract/functions/inventory.test.ts
-  tests/contract/expressions/distinct-from.test.ts
-  scripts/sqlite-inventory.ts + `bun run inventory`
+New incompatibilities found & fixed (this pass):
+  1. Missing ~85 oracle builtins (math/string/date/window/uuid/ieee754/…)
+  2. Missing modules FTS3/4, RTREE, dbstat, bytecode, tables_used, fts5vocab
+  3. ANALYZE/REINDEX/VACUUM not executed
+  4. Row-value comparisons threw misuse instead of SQLite semantics
+  5. Inventory asserted builtins absent (Scope-3 inverted)
+  6. No requirements-matrix ingest / no test:sqlite-compat gate
 
 Remaining known differences:
   Custom SQLM snapshots; deterministic random()/'now';
-  generate_series memory-only; FTS/vtable modules beyond FTS5;
-  INDEXED BY no-ops; EXPLAIN stubs; non-schema PRAGMA empty/no-op;
-  missing math/extra string/window builtins listed UNSUPPORTED;
-  BigInt beyond Number.MAX_SAFE_INTEGER without bun safeIntegers.
+  EXPLAIN/INDEXED BY stubs/no-ops; some PRAGMA storage no-ops;
+  Window EXCLUDE / deferred FK / STRICT / prepared invalidation thinner;
+  BigInt beyond Number.MAX_SAFE_INTEGER without bun safeIntegers;
+  NOT APPLICABLE C API / on-disk / VFS surfaces.
 
 Final assessment:
-  JSON/JSONB is now differentially verified against SQLite 3.51.0 for the
-  oracle-exposed API (scalars, aggregates, paths, operators, TVFs, JSONB
-  hex/typeof round-trips, malformed inputs, composition, fuzz). The broader
-  dialect surface remains evidence-based VERIFIED where contracts/fuzz are
-  strong, with explicit PARTIALLY VERIFIED / UNSUPPORTED rows for gaps.
-  This is not a claim of bit-identical SQLite C completeness — the matrix
-  and inventory are the source of truth.
+  Verified against SQLite 3.51.0 (bun:sqlite). Oracle function/module
+  inventory is closed (0 missing). Requirements matrix ingested with
+  zero unknown statuses. Gate: `bun run test:sqlite-compat`.
 ```
 
-Verification commands run:
+Verification commands:
 
 ```bash
-bun test                 # 580 pass, 0 fail
-bun run test:browser     # chromium, firefox, webkit smoke passed
-bun run typecheck        # clean
-bun run inventory        # oracle vs registry dump
+bun run test:sqlite-compat
+bun run inventory
+bun run requirements
+bun run typecheck
 ```

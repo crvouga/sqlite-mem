@@ -5,8 +5,10 @@ Pure TypeScript, completely in-memory SQLite implementation aiming for **full SQ
 - Runs in modern browsers and Node.js / Bun
 - **Zero** WASM, native bindings, workers, or filesystem dependencies
 - Entire database stored in memory
-- Behavioral compatibility validated via differential contract tests against real SQLite (`bun:sqlite`)
+- **Verified against SQLite 3.51.0** (`bun:sqlite`) via differential contracts + fail-closed gate
 - Intentional differences: deterministic `random()` / `'now'` by default, and a custom snapshot format (not `.sqlite` files)
+
+See [COMPATIBILITY.md](COMPATIBILITY.md) for the matrix and [COMPATIBILITY-AUDIT.md](COMPATIBILITY-AUDIT.md) for the audit report.
 
 ## Install
 
@@ -90,9 +92,10 @@ Requires [Bun](https://bun.sh).
 
 ```bash
 bun install
-bun test              # contract + fuzz matrix vs bun:sqlite
+bun run test:sqlite-compat   # requirements + inventory gate + differential suite
+bun test                     # contract + fuzz + harness
 bun run build
-bun run test:browser  # Playwright smoke (Chrome/Firefox/Safari)
+bun run test:browser         # Playwright smoke (Chrome/Firefox/Safari)
 ```
 
 Contract tests compare the pure TypeScript engine against real SQLite (`bun:sqlite`). See [COMPATIBILITY.md](./COMPATIBILITY.md).

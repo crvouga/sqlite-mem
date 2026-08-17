@@ -12,10 +12,13 @@ import { SqliteError, unsupported } from "../errors/index.ts";
 import type { EvalContext } from "../expressions/context.ts";
 import { evalExpr } from "../expressions/eval.ts";
 import { buildSqliteMaster, buildSqliteSchema } from "../schema/catalog.ts";
+import type { DatabaseState } from "../storage/database-state.ts";
 import type { Table } from "../storage/table.ts";
 import { compareWithCollation } from "../types/collation.ts";
 import { applyAffinity, compareSql, isTruthySql, sqlValueEquals, toInteger, type SqlValue, type Affinity } from "../types/value.ts";
 import { evaluateTableFunction } from "../functions/table-valued.ts";
+import type { FtsVocabVirtualTable } from "../vtable/modules.ts";
+import { tokenizeFtsText } from "../vtable/fts5.ts";
 import type { ExecutionEnv, ScopeRow } from "./env.ts";
 import { resultValues, valuesToResult, type ResultSet } from "./result.ts";
 
@@ -287,16 +290,38 @@ export function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext
   }
   const virtual = db.virtualTables.get(item.name.toLowerCase());
   if (virtual) {
-    return virtual.scan().map((row) => ({
-      rowid: row.rowid,
-      rowidName: "rowid",
-      sourceTable: virtual.name,
-      cells: virtual.columns.map((column) => ({
-        table: alias,
-        name: column,
-        value: row.values.get(column.toLowerCase()) ?? null,
-      })),
-    }));
+    if (virtual.kind === "fts5" || virtual.kind === "fts3" || virtual.kind === "fts4") {
+      return virtual.scan().map((row) => ({
+        rowid: row.rowid,
+        rowidName: "rowid",
+        sourceTable: virtual.name,
+        cells: virtual.columns.map((column) => ({
+          table: alias,
+          name: column,
+          value: row.values.get(column.toLowerCase()) ?? null,
+        })),
+      }));
+    }
+    if (virtual.kind === "rtree") {
+      return virtual.scan().map((row) => ({
+        rowid: row.rowid,
+        rowidName: "rowid",
+        sourceTable: virtual.name,
+        cells: virtual.columns.map((column) => ({
+          table: alias,
+          name: column,
+          value: row.values.get(column.toLowerCase()) ?? null,
+        })),
+      }));
+    }
+    if (virtual.kind === "dbstat") {
+      return scanDbStat(db, alias, virtual.schemaArg);
+    }
+    if (virtual.kind === "fts5vocab") {
+      return scanFtsVocab(db, alias, virtual);
+    }
+    // bytecode / tables_used: empty by default
+    return [];
   }
   let table: Table;
   if (item.name.toLowerCase() === "sqlite_schema") table = buildSqliteSchema(db);
@@ -519,6 +544,35 @@ function windowValue(
   if (name === "nth_value") {
     const target = start + Number(toInteger(evaluated[1] ?? null) ?? 0) - 1;
     return target >= start && target <= end ? values[target]?.[0] ?? null : null;
+  }
+  if (name === "ntile") {
+    const buckets = Math.max(1, Number(toInteger(evaluated[0] ?? 1) ?? 1));
+    const n = partition.length;
+    const small = Math.floor(n / buckets);
+    const large = small + 1;
+    const largeCount = n % buckets;
+    // First `largeCount` buckets have `large` rows
+    let remaining = index;
+    for (let b = 1; b <= buckets; b++) {
+      const size = b <= largeCount ? large : small;
+      if (remaining < size) return b;
+      remaining -= size;
+    }
+    return buckets;
+  }
+  if (name === "cume_dist") {
+    if (partition.length === 0) return null;
+    let lastPeer = index;
+    while (lastPeer + 1 < partition.length && rowsEqual(orderKeys[lastPeer + 1]!, orderKeys[index]!)) {
+      lastPeer++;
+    }
+    return (lastPeer + 1) / partition.length;
+  }
+  if (name === "percent_rank") {
+    if (partition.length <= 1) return 0;
+    let first = index;
+    while (first > 0 && rowsEqual(orderKeys[first]!, orderKeys[first - 1]!)) first--;
+    return first / (partition.length - 1);
   }
   throw new SqliteError(`no such window function: ${expr.func.name}`, "other");
 }
@@ -753,3 +807,69 @@ function rowsEqual(left: SqlValue[], right: SqlValue[]): boolean {
 function uniqueRows(rows: SqlValue[][]): SqlValue[][] {
   return rows.filter((row, index) => rows.findIndex((other) => rowsEqual(row, other)) === index);
 }
+
+function scanDbStat(db: DatabaseState, alias: string, _schemaArg: string | null): ScopeRow[] {
+  const rows: ScopeRow[] = [];
+  let pageno = 1;
+  const push = (name: string, pagetype: string, ncell: number) => {
+    rows.push({
+      cells: [
+        { table: alias, name: "name", value: name },
+        { table: alias, name: "path", value: "/" },
+        { table: alias, name: "pageno", value: pageno++ },
+        { table: alias, name: "pagetype", value: pagetype },
+        { table: alias, name: "ncell", value: ncell },
+        { table: alias, name: "payload", value: ncell * 8 },
+        { table: alias, name: "unused", value: 0 },
+        { table: alias, name: "mx_payload", value: 0 },
+        { table: alias, name: "pgoffset", value: (pageno - 1) * 4096 },
+        { table: alias, name: "pgsize", value: 4096 },
+      ],
+    });
+  };
+  push("sqlite_schema", "leaf", db.tables.size + db.views.size + db.virtualTables.size);
+  for (const table of db.tables.values()) {
+    push(table.name, "leaf", [...table.scan()].length);
+  }
+  for (const table of db.virtualTables.values()) {
+    if (table.kind === "fts5" || table.kind === "fts3" || table.kind === "fts4" || table.kind === "rtree") {
+      push(table.name, "leaf", table.kind === "rtree" ? table.rows.size : table.rows.size);
+    } else {
+      push(table.name, "leaf", 0);
+    }
+  }
+  return rows;
+}
+
+function scanFtsVocab(db: DatabaseState, alias: string, vocab: FtsVocabVirtualTable): ScopeRow[] {
+  const fts = db.virtualTables.get(vocab.ftsTable.toLowerCase());
+  if (!fts || (fts.kind !== "fts5" && fts.kind !== "fts3" && fts.kind !== "fts4")) return [];
+  const counts = new Map<string, { doc: number; cnt: number }>();
+  for (const row of fts.scan()) {
+    const seen = new Set<string>();
+    for (const tokens of row.tokensByColumn.values()) {
+      for (const token of tokens) {
+        const entry = counts.get(token) ?? { doc: 0, cnt: 0 };
+        entry.cnt++;
+        if (!seen.has(token)) {
+          entry.doc++;
+          seen.add(token);
+        }
+        counts.set(token, entry);
+      }
+    }
+  }
+  return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([term, stats]) => ({
+    cells: vocab.columns.map((column) => {
+      if (column === "term") return { table: alias, name: column, value: term };
+      if (column === "doc") return { table: alias, name: column, value: stats.doc };
+      if (column === "cnt") return { table: alias, name: column, value: stats.cnt };
+      if (column === "col") return { table: alias, name: column, value: "*" };
+      if (column === "offset") return { table: alias, name: column, value: 0 };
+      return { table: alias, name: column, value: null };
+    }),
+  }));
+}
+
+void tokenizeFtsText;
+

@@ -601,7 +601,29 @@ function ftsScopeFor(table: Fts5VirtualTable, row: Fts5Row, alias: string): Scop
 }
 
 function executeVirtualInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
-  const table = env.state.getVirtualTable(stmt.table);
+  const any = env.state.getAnyVirtualTable(stmt.table);
+  if (any.kind === "rtree") {
+    const columnNames = stmt.columns ?? any.columns;
+    const sourceRows = stmt.values
+      ? stmt.values.map((items) => items.map((expr) => evalExpr(expr, env.createEvalContext())))
+      : stmt.select ? resultValues(executeSelect({ ...stmt.select, with: stmt.with ?? stmt.select.with }, env)) : [[]];
+    let changes = 0;
+    let last = env.state.lastInsertRowid;
+    for (const source of sourceRows) {
+      const values = new Map<string, SqlValue>();
+      for (let i = 0; i < columnNames.length; i++) {
+        values.set(columnNames[i]!.toLowerCase(), source[i] ?? null);
+      }
+      last = any.insert(values);
+      changes++;
+    }
+    env.state.recordChange(changes, last);
+    return valuesToResult([], [], changes, last);
+  }
+  if (any.kind !== "fts5" && any.kind !== "fts3" && any.kind !== "fts4") {
+    throw new SqliteError(`table ${stmt.table} may not be modified`, "misuse");
+  }
+  const table = any;
   const columnNames = stmt.columns ?? table.columns;
   for (const name of columnNames) {
     if (!table.columns.some((column) => column.toLowerCase() === name.toLowerCase())) {
@@ -618,7 +640,48 @@ function executeVirtualInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
 
 function executeVirtualUpdate(stmt: UpdateStmt, env: ExecutionEnv): ResultSet {
   if (stmt.from) throw new SqliteError("UPDATE FROM is not supported", "unsupported");
-  const table = env.state.getVirtualTable(stmt.table);
+  const any = env.state.getAnyVirtualTable(stmt.table);
+  if (any.kind === "rtree") {
+    const alias = stmt.alias ?? stmt.table;
+    const candidates = any.scan().filter((row) => {
+      if (!stmt.where) return true;
+      const scope: ScopeRow = {
+        rowid: row.rowid,
+        rowidName: "rowid",
+        sourceTable: any.name,
+        cells: any.columns.map((column) => ({
+          table: alias,
+          name: column,
+          value: row.values.get(column.toLowerCase()) ?? null,
+        })),
+      };
+      return isTruthySql(evalExpr(stmt.where, env.createEvalContext(scope))) === true;
+    });
+    let changes = 0;
+    for (const row of candidates) {
+      const updates = new Map<string, SqlValue>();
+      const scope: ScopeRow = {
+        rowid: row.rowid,
+        cells: any.columns.map((column) => ({
+          table: alias,
+          name: column,
+          value: row.values.get(column.toLowerCase()) ?? null,
+        })),
+      };
+      for (const item of stmt.set) {
+        if (item.columns.length !== 1) throw new SqliteError("multi-column SET is not supported on virtual tables", "unsupported");
+        updates.set(item.columns[0]!.toLowerCase(), evalExpr(item.expr, env.createEvalContext(scope)));
+      }
+      any.update(row.rowid, updates);
+      changes++;
+    }
+    env.state.recordChange(changes);
+    return valuesToResult([], [], changes, env.state.lastInsertRowid);
+  }
+  if (any.kind !== "fts5" && any.kind !== "fts3" && any.kind !== "fts4") {
+    throw new SqliteError(`table ${stmt.table} may not be modified`, "misuse");
+  }
+  const table = any;
   const alias = stmt.alias ?? stmt.table;
   const candidates: Rowid[] = [];
   for (const row of table.scan()) {
@@ -639,7 +702,33 @@ function executeVirtualUpdate(stmt: UpdateStmt, env: ExecutionEnv): ResultSet {
 }
 
 function executeVirtualDelete(stmt: DeleteStmt, env: ExecutionEnv): ResultSet {
-  const table = env.state.getVirtualTable(stmt.table);
+  const any = env.state.getAnyVirtualTable(stmt.table);
+  if (any.kind === "rtree") {
+    const alias = stmt.alias ?? stmt.table;
+    const selected = any.scan().filter((row) => {
+      if (!stmt.where) return true;
+      const scope: ScopeRow = {
+        rowid: row.rowid,
+        cells: any.columns.map((column) => ({
+          table: alias,
+          name: column,
+          value: row.values.get(column.toLowerCase()) ?? null,
+        })),
+      };
+      return isTruthySql(evalExpr(stmt.where, env.createEvalContext(scope))) === true;
+    });
+    let changes = 0;
+    for (const row of selected) {
+      any.delete(row.rowid);
+      changes++;
+    }
+    env.state.recordChange(changes);
+    return valuesToResult([], [], changes, env.state.lastInsertRowid);
+  }
+  if (any.kind !== "fts5" && any.kind !== "fts3" && any.kind !== "fts4") {
+    throw new SqliteError(`table ${stmt.table} may not be modified`, "misuse");
+  }
+  const table = any;
   const alias = stmt.alias ?? stmt.table;
   const selected = table.scan().filter((row) => {
     if (!stmt.where) return true;

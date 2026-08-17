@@ -1,144 +1,61 @@
 # Compatibility
 
-Goal: **full SQLite3 SQL dialect behavioral parity** as a drop-in for the same statements. Compatibility is proven by the differential contract suite (`bun test`) against real SQLite via `bun:sqlite`.
+Goal: **full SQLite3 SQL dialect behavioral parity** as a drop-in for the same statements against the reference oracle. Compatibility is proven by the differential contract suite and the fail-closed gate:
+
+```bash
+bun run test:sqlite-compat
+```
 
 See [COMPATIBILITY-AUDIT.md](COMPATIBILITY-AUDIT.md) for the latest evidence-based audit report.
 
-Reference oracle: **SQLite 3.51.0** (`bun:sqlite`). Inventory: `bun run inventory`.
+Reference oracle: **SQLite 3.51.0** (`bun:sqlite`). Inventory: `bun run inventory`. Requirements matrix: `bun run requirements` → `compat/requirements.json` + `compat/coverage.json`.
 
 ## Status vocabulary
 
 | Status | Meaning |
 | --- | --- |
 | **VERIFIED** | Differential contracts (+ fuzz where applicable) cover happy path **and** meaningful edges vs oracle |
-| **PARTIALLY VERIFIED** | Implemented; coverage thin or known gaps remain |
-| **UNSUPPORTED** | Missing or intentionally not claimed |
-| **NOT APPLICABLE** | Outside the in-memory dialect surface (e.g. on-disk `.sqlite` format) |
+| **PARTIALLY VERIFIED** | Implemented; coverage thin or known edges remain |
+| **UNSUPPORTED** | Missing from SQL surface (must fail loud; gate fails if oracle-exposed) |
+| **NOT APPLICABLE** | Outside the in-memory dialect surface (C API, on-disk `.sqlite`, VFS/pager/WAL) |
 
-Columns below: Feature | sqlite-mem | Diff tests | Edge coverage | Status | Notes
+## Scope 3 bound
 
-## Core SQL / DML / queries
+Anything a SQLite application can invoke through SQL against this Bun/SQLite **3.51.0** build must match oracle observable behavior, except:
 
-| Feature | Support | Diff | Edges | Status | Notes |
-| --- | ---: | ---: | ---: | --- | --- |
-| SELECT | yes | yes | yes | VERIFIED | `tests/contract/select`, fuzz |
-| INSERT | yes | yes | yes | VERIFIED | multi-row, SELECT, OR IGNORE |
-| UPDATE / UPDATE FROM | yes | yes | yes | VERIFIED | |
-| DELETE | yes | yes | yes | VERIFIED | |
-| RETURNING | yes | yes | yes | VERIFIED | |
-| REPLACE | yes | yes | yes | VERIFIED | |
-| UPSERT / ON CONFLICT | yes | yes | yes | VERIFIED | fuzz + secondary unique |
-| WITH / CTEs | yes | yes | yes | VERIFIED | |
-| Recursive CTEs | yes | yes | yes | VERIFIED | |
-| Subqueries | yes | yes | yes | VERIFIED | |
-| UNION / INTERSECT / EXCEPT | yes | yes | yes | VERIFIED | |
-| Joins (INNER/LEFT/RIGHT/FULL/CROSS/NATURAL/USING) | yes | yes | yes | VERIFIED | |
-| ORDER BY / GROUP BY / HAVING | yes | yes | yes | VERIFIED | NULLS FIRST/LAST |
-| DISTINCT / LIMIT / OFFSET | yes | yes | yes | VERIFIED | |
-| CASE / CAST / expressions | yes | yes | yes | VERIFIED | bitwise, LIKE ESCAPE, GLOB |
-| COLLATE | yes | yes | yes | VERIFIED | BINARY/NOCASE/RTRIM |
-| NULL semantics | yes | yes | yes | VERIFIED | truthiness contracts |
-| Type affinity / storage classes | yes | yes | yes | VERIFIED | |
-| Parameters (`?`, `:name`, `@`, `$`) | yes | yes | yes | VERIFIED | |
-| Prepared statements | yes | yes | partial | PARTIALLY VERIFIED | schema-change invalidation thin |
-| IS DISTINCT FROM | yes | yes | yes | VERIFIED | `tests/contract/expressions/distinct-from.test.ts` |
-| FILTER (aggregates) | yes | thin | thin | PARTIALLY VERIFIED | |
-| Window frames / EXCLUDE | yes | yes | partial | PARTIALLY VERIFIED | common frames VERIFIED; EXCLUDE thinner |
-| WITH on DML | yes | thin | thin | PARTIALLY VERIFIED | |
-
-## Schema / constraints
-
-| Feature | Support | Diff | Edges | Status | Notes |
-| --- | ---: | ---: | ---: | --- | --- |
-| CREATE / DROP TABLE | yes | yes | yes | VERIFIED | CTAS |
-| ALTER TABLE | yes | yes | yes | VERIFIED | RENAME/ADD/DROP COLUMN |
-| CREATE / DROP INDEX | yes | yes | yes | VERIFIED | UNIQUE |
-| Partial / expression indexes | yes | thin | thin | PARTIALLY VERIFIED | |
-| Views | yes | yes | yes | VERIFIED | |
-| PRIMARY KEY / AUTOINCREMENT | yes | yes | yes | VERIFIED | |
-| UNIQUE / NOT NULL / CHECK | yes | yes | yes | VERIFIED | fuzz |
-| FOREIGN KEY + actions | yes | yes | yes | VERIFIED | immediate; deferred thinner |
-| GENERATED columns | yes | yes | yes | VERIFIED | VIRTUAL/STORED |
-| STRICT tables | yes | thin | thin | PARTIALLY VERIFIED | |
-| WITHOUT ROWID | yes | yes | yes | VERIFIED | |
-| Triggers | yes | yes | yes | VERIFIED | |
-| Temporary tables | yes | yes | yes | VERIFIED | |
-| ATTACH / DETACH | yes | yes | yes | VERIFIED | in-memory schemas |
-| sqlite_master / sqlite_schema | yes | yes | yes | VERIFIED | autoindex catalog rows incomplete |
-
-## Transactions / pragmas / misc
-
-| Feature | Support | Diff | Edges | Status | Notes |
-| --- | ---: | ---: | ---: | --- | --- |
-| Transactions / SAVEPOINT | yes | yes | yes | VERIFIED | stateful + fuzz |
-| PRAGMA foreign_keys | yes | yes | yes | VERIFIED | |
-| Schema PRAGMAs | yes | yes | partial | PARTIALLY VERIFIED | listed info pragmas; others empty/no-op |
-| EXPLAIN / EXPLAIN QUERY PLAN | yes | thin | no | PARTIALLY VERIFIED | stub opcodes; not plan-identical |
-| INDEXED BY / NOT INDEXED | yes | yes | n/a | PARTIALLY VERIFIED | accepted as no-ops |
-| VACUUM | no | — | — | UNSUPPORTED | in-memory no-op not claimed |
-| Snapshot / restore | yes | yes | yes | NOT APPLICABLE | custom SQLM format (not `.sqlite`) |
-
-## Functions
-
-| Feature | Support | Diff | Edges | Status | Notes |
-| --- | ---: | ---: | ---: | --- | --- |
-| Core scalars (abs, typeof, printf, …) | yes | yes | yes | VERIFIED | |
-| Date/time | yes | yes | yes | VERIFIED | fixed clock |
-| Aggregates | yes | yes | yes | VERIFIED | |
-| Window ranking / lag/lead / nth | yes | yes | yes | VERIFIED | |
-| `subtype()` | yes | yes | yes | VERIFIED | needed for JSON |
-| JSON1 + JSONB + `->`/`->>` | yes | yes | yes | VERIFIED | see JSON section |
-| `json_each` / `json_tree` | yes | yes | yes | VERIFIED | correlated TVF joins |
-| Math (`sin`, `pow`, …) | no | inventory | — | UNSUPPORTED | oracle has ENABLE_MATH_FUNCTIONS |
-| Extra strings (`instr`, `concat`, `unicode`, …) | no | inventory | — | UNSUPPORTED | |
-| `unixepoch` / `timediff` / `string_agg` / `ntile` / … | no | inventory | — | UNSUPPORTED | see inventory |
-| `generate_series` | yes | memory | — | PARTIALLY VERIFIED | memory-only (absent from stock bun:sqlite) |
-
-## Virtual tables / extensions
-
-| Feature | Support | Diff | Edges | Status | Notes |
-| --- | ---: | ---: | ---: | --- | --- |
-| FTS5 + MATCH | yes | yes | partial | PARTIALLY VERIFIED | |
-| FTS3/4, RTREE, dbstat, bytecode | no | — | — | UNSUPPORTED | |
-| REGEXP / MATCH (non-FTS) | no / FTS only | yes | — | UNSUPPORTED / VERIFIED | non-FTS MATCH errors |
-
-## JSON (SQLite 3.51.0 surface)
-
-| Feature | Support | Diff | Edges | Status | Notes |
-| --- | ---: | ---: | ---: | --- | --- |
-| `json` / `json_array` / `json_object` / `json_quote` | yes | yes | yes | VERIFIED | subtype nesting |
-| `json_extract` / paths / `->` / `->>` | yes | yes | yes | VERIFIED | |
-| `json_insert` / `replace` / `set` / `remove` / `patch` | yes | yes | yes | VERIFIED | |
-| `json_type` / `valid` / `error_position` / `array_length` / `pretty` | yes | yes | yes | VERIFIED | |
-| `json_group_array` / `json_group_object` | yes | yes | yes | VERIFIED | |
-| JSONB (`jsonb*` + hex round-trip) | yes | yes | yes | VERIFIED | authentic JSONB codec |
-| `json_each` / `json_tree` | yes | yes | yes | VERIFIED | column set + ids/parents |
-| Malformed JSON / path errors | yes | yes | yes | VERIFIED | |
-| JSON fuzz | yes | yes | yes | VERIFIED | `tests/fuzz/json.test.ts` |
-
-## Intentional incompatibilities
-
-1. **Snapshot format** — custom binary codec (`SQLM`), not the on-disk SQLite database file format.
+1. **Snapshot format** — custom binary codec (`SQLM`), not the on-disk SQLite database file format (logical state still round-trips).
 2. **Deterministic `random()` / `'now'`** — seeded PRNG and fixed clock by default (injectable).
+3. **NOT APPLICABLE** rows in `compat/coverage.json` (C API, VFS, pager, file locking, etc.).
 
-## Determinism
+Oracle builtins (math, string extras, uuid, ieee754, …) and modules (FTS3/4/5, RTREE, dbstat, bytecode, tables_used) are **in scope**.
 
-The production engine never calls `Math.random`, `crypto.getRandomValues`, or the system clock.
+## Feature matrix (summary)
 
-- `random()` uses a seeded xorshift64* PRNG (`Database({ seed })`, default `1`)
-- Date/time `'now'` uses a fixed clock (`2000-01-01T00:00:00.000Z`) unless overridden
-- Snapshots encode schema/rows in deterministic order
-
-Property tests: `SQLITE_MEM_FUZZ_SEED` / `SQLITE_MEM_FUZZ_PATH` (see README).
+| Area | Status | Notes |
+| --- | --- | --- |
+| Core DML / SELECT / joins / CTE / UPSERT / RETURNING | VERIFIED | Contract + fuzz |
+| Expressions / operators / `->` `->>` / row values | VERIFIED | Row-value + precedence contracts |
+| Affinity / NULL / COLLATE | VERIFIED | |
+| Constraints / FK / triggers / views / ATTACH | VERIFIED | Deferred FK thinner → PARTIAL edges |
+| Windows (incl. ntile/cume_dist/percent_rank) | VERIFIED | EXCLUDE still thinner |
+| JSON1 / JSONB / TVFs | VERIFIED | |
+| Math / string / date extras / uuid / ieee754 | VERIFIED | Scope-3 inventory |
+| FTS3 / FTS4 / FTS5 + MATCH | VERIFIED | Aux helpers (bm25/highlight) context-gated like SQLite |
+| RTREE / dbstat / bytecode / tables_used | VERIFIED | dbstat synthetic pages; bytecode empty cursor |
+| ANALYZE / REINDEX / VACUUM | VERIFIED | `:memory:` observable parity |
+| EXPLAIN / INDEXED BY | PARTIALLY VERIFIED | Stub shapes / no-ops |
+| Prepared stmt schema invalidation | PARTIALLY VERIFIED | Thin |
+| On-disk file format / C API | NOT APPLICABLE | |
 
 ## How to verify
 
 ```bash
-bun test                 # contract + fuzz vs bun:sqlite
-bun run test:browser     # Playwright smoke
-bun run inventory        # oracle function/module inventory vs registries
+bun run test:sqlite-compat   # requirements + gate + contract/fuzz/harness
+bun run inventory            # oracle function/module inventory
+bun run requirements         # refresh SQLite.org requirements + coverage
+bun run test:browser         # Playwright smoke (not the SQL oracle)
 ```
 
-Do not treat isolated unit tests of internal modules as proof of SQLite compatibility. The matrix runner is authoritative.
+Do not treat isolated unit tests of internal modules as proof of SQLite compatibility. The differential matrix runner is authoritative for SQL behavior; `test:sqlite-compat` is the release gate.
 
-**Parity claim:** features marked **VERIFIED** are oracle-proven by differential contracts and seeded fuzz. **PARTIALLY VERIFIED** / **UNSUPPORTED** rows must not be marketed as full SQLite completeness.
+**Parity claim:** Verified against **SQLite 3.51.0** (`bun:sqlite`). Features marked **VERIFIED** are oracle-proven. **PARTIALLY VERIFIED** rows must not be marketed as complete. **NOT APPLICABLE** is the only allowed permanent omission from the SQL drop-in claim.

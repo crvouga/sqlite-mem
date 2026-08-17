@@ -229,7 +229,28 @@ export type Statement =
   | AttachStmt
   | DetachStmt
   | CreateVirtualTableStmt
-  | ExplainStmt;
+  | ExplainStmt
+  | AnalyzeStmt
+  | ReindexStmt
+  | VacuumStmt;
+
+export interface AnalyzeStmt {
+  type: "analyze";
+  schema: string | null;
+  name: string | null;
+}
+
+export interface ReindexStmt {
+  type: "reindex";
+  schema: string | null;
+  name: string | null;
+}
+
+export interface VacuumStmt {
+  type: "vacuum";
+  schema: string | null;
+  into: string | null;
+}
 
 export interface SelectStmt {
   type: "select";

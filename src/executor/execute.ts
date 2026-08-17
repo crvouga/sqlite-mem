@@ -59,5 +59,71 @@ export function executeStatement(stmt: Statement, env: ExecutionEnv): ResultSet 
         0,
         env.state.lastInsertRowid,
       );
+    case "analyze":
+      return executeAnalyze(stmt, env);
+    case "reindex":
+      env.state.recordChange(0);
+      return emptyResult(0, env.state.lastInsertRowid);
+    case "vacuum":
+      // :memory: VACUUM is a successful no-op (matches bun:sqlite).
+      env.state.recordChange(0);
+      return emptyResult(0, env.state.lastInsertRowid);
   }
+}
+
+function executeAnalyze(stmt: import("../ast/nodes.ts").AnalyzeStmt, env: ExecutionEnv): ResultSet {
+  // Populate sqlite_stat1 with simple row counts for oracle-visible ANALYZE behavior.
+  let stat = env.state.tables.get("sqlite_stat1");
+  if (!stat) {
+    env.state.createTable(
+      {
+        type: "create_table",
+        ifNotExists: true,
+        temp: false,
+        name: "sqlite_stat1",
+        columns: [
+          { name: "tbl", typeName: "TEXT", constraints: [] },
+          { name: "idx", typeName: "TEXT", constraints: [] },
+          { name: "stat", typeName: "TEXT", constraints: [] },
+        ],
+        constraints: [],
+        asSelect: null,
+        withoutRowid: false,
+      },
+      "CREATE TABLE sqlite_stat1(tbl,idx,stat)",
+    );
+    stat = env.state.tables.get("sqlite_stat1");
+  }
+  if (stat) {
+    for (const row of [...stat.scan()]) {
+      stat.delete(row.rowid);
+    }
+    const tables = [...env.state.tables.values()].filter((t) => t.name.toLowerCase() !== "sqlite_stat1");
+    const targets = stmt.name
+      ? tables.filter((t) => t.name.toLowerCase() === stmt.name!.toLowerCase())
+      : tables;
+    for (const table of targets) {
+      const rowCount = [...table.scan()].length;
+      const indexes = [...env.state.indexes.values()].filter(
+        (i) => i.tableName.toLowerCase() === table.name.toLowerCase(),
+      );
+      if (indexes.length === 0) {
+        stat.insert(new Map<string, import("../types/value.ts").SqlValue>([
+          ["tbl", table.name],
+          ["idx", null],
+          ["stat", String(rowCount)],
+        ]));
+      } else {
+        for (const index of indexes) {
+          stat.insert(new Map<string, import("../types/value.ts").SqlValue>([
+            ["tbl", table.name],
+            ["idx", index.name],
+            ["stat", `${rowCount} ${Math.max(1, Math.floor(rowCount / 2))}`],
+          ]));
+        }
+      }
+    }
+  }
+  env.state.recordChange(0);
+  return emptyResult(0, env.state.lastInsertRowid);
 }

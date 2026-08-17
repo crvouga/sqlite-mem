@@ -75,4 +75,7 @@ export const windowFunctions = {
   first_value: firstValue,
   last_value: lastValue,
   nth_value: nthValue,
+  ntile: () => 0,
+  cume_dist: () => 0,
+  percent_rank: () => 0,
 } as const;

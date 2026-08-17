@@ -78,6 +78,7 @@ export class ExecutionEnv {
       functions: this.functions,
       functionContext: {
         changes: () => this.state.changes,
+        totalChanges: () => this.state.totalChanges,
         lastInsertRowid: () => this.state.lastInsertRowid,
         now: this.hooks.now,
         random: this.hooks.random,
@@ -152,7 +153,7 @@ export class ExecutionEnv {
         if (row?.rowid === undefined || !row.sourceTable) {
           throw new SqliteError("unable to use function MATCH in the requested context", "unsupported");
         }
-        if (!this.state.isVirtualTable(row.sourceTable)) {
+        if (!this.state.isFtsTable(row.sourceTable)) {
           throw new SqliteError("unable to use function MATCH in the requested context", "unsupported");
         }
         const fts = this.state.getVirtualTable(row.sourceTable);

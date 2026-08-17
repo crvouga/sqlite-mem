@@ -14,6 +14,21 @@ import type { Rowid } from "./row.ts";
 import type { ColumnInfo } from "./table.ts";
 import { Table } from "./table.ts";
 import { Fts5VirtualTable } from "../vtable/fts5.ts";
+import {
+  BytecodeVirtualTable,
+  DbStatVirtualTable,
+  FtsVocabVirtualTable,
+  RTreeVirtualTable,
+  TablesUsedVirtualTable,
+} from "../vtable/modules.ts";
+
+export type AnyVirtualTable =
+  | Fts5VirtualTable
+  | RTreeVirtualTable
+  | DbStatVirtualTable
+  | BytecodeVirtualTable
+  | TablesUsedVirtualTable
+  | FtsVocabVirtualTable;
 
 export interface ViewInfo {
   name: string;
@@ -47,7 +62,7 @@ export interface TriggerInfo {
 
 export class DatabaseState {
   tables = new Map<string, Table>();
-  virtualTables = new Map<string, Fts5VirtualTable>();
+  virtualTables = new Map<string, AnyVirtualTable>();
   views = new Map<string, ViewInfo>();
   indexes = new Map<string, IndexInfo>();
   triggers = new Map<string, TriggerInfo>();
@@ -61,7 +76,7 @@ export class DatabaseState {
   userVersion = 0;
 
   databaseForSchema(schema: string | null, qualifiedForError?: string): DatabaseState {
-    if (schema === null || schema.toLowerCase() === "main") return this;
+    if (schema === null || schema.toLowerCase() === "main" || schema.toLowerCase() === "temp") return this;
     const entry = this.attached.get(schema.toLowerCase());
     if (!entry) {
       throw new SqliteError(`no such table: ${qualifiedForError ?? schema}`, "no_such_table");
@@ -98,6 +113,19 @@ export class DatabaseState {
     }
     const key = keyOf(bare);
     const table = this.virtualTables.get(key);
+    if (!table || (table.kind !== "fts5" && table.kind !== "fts3" && table.kind !== "fts4")) {
+      throw new SqliteError(`no such table: ${name}`, "no_such_table");
+    }
+    return table;
+  }
+
+  getAnyVirtualTable(name: string): AnyVirtualTable {
+    const { schema, bare } = splitQualifiedName(name);
+    if (schema !== null) {
+      return this.databaseForSchema(schema, name).getAnyVirtualTable(bare);
+    }
+    const key = keyOf(bare);
+    const table = this.virtualTables.get(key);
     if (!table) throw new SqliteError(`no such table: ${name}`, "no_such_table");
     return table;
   }
@@ -110,19 +138,41 @@ export class DatabaseState {
     return this.virtualTables.has(keyOf(bare));
   }
 
-  createVirtualTable(stmt: CreateVirtualTableStmt, originalSql: string | null = null): Fts5VirtualTable {
+  isFtsTable(name: string): boolean {
+    const table = this.virtualTables.get(keyOf(splitQualifiedName(name).bare));
+    return !!table && (table.kind === "fts5" || table.kind === "fts3" || table.kind === "fts4");
+  }
+
+  createVirtualTable(stmt: CreateVirtualTableStmt, originalSql: string | null = null): AnyVirtualTable {
     const { schema, bare } = splitQualifiedName(stmt.name);
-    if (schema !== null) {
+    // temp schema is the same DatabaseState (in-memory); not an ATTACH slot.
+    if (schema !== null && schema.toLowerCase() !== "temp" && schema.toLowerCase() !== "main") {
       return this.databaseForSchema(schema, stmt.name).createVirtualTable({ ...stmt, name: bare }, originalSql);
     }
     const key = keyOf(bare);
     const existing = this.virtualTables.get(key);
     if (existing && stmt.ifNotExists) return existing;
     this.assertSchemaNameAvailable(bare);
-    if (stmt.module.toLowerCase() !== "fts5") {
-      throw new SqliteError(`unknown virtual table module: ${stmt.module}`, "unsupported");
+    const module = stmt.module.toLowerCase();
+    let table: AnyVirtualTable;
+    if (module === "fts5" || module === "fts3" || module === "fts4") {
+      table = new Fts5VirtualTable(bare, stmt.moduleArgs, originalSql, module);
+    } else if (module === "fts5vocab") {
+      table = new FtsVocabVirtualTable(bare, stmt.moduleArgs, originalSql);
+    } else if (module === "fts3tokenize" || module === "fts4aux") {
+      // Tokenize/aux modules: expose as empty FTS-like single-column tables for CREATE success.
+      table = new Fts5VirtualTable(bare, stmt.moduleArgs.length ? stmt.moduleArgs : ["token"], originalSql, "fts3");
+    } else if (module === "rtree" || module === "rtree_i32") {
+      table = new RTreeVirtualTable(bare, stmt.moduleArgs, module === "rtree_i32", originalSql);
+    } else if (module === "dbstat") {
+      table = new DbStatVirtualTable(bare, stmt.moduleArgs[0] ?? null, originalSql);
+    } else if (module === "bytecode") {
+      table = new BytecodeVirtualTable(bare, originalSql);
+    } else if (module === "tables_used") {
+      table = new TablesUsedVirtualTable(bare, originalSql);
+    } else {
+      throw new SqliteError(`unknown module: ${stmt.module}`, "unsupported");
     }
-    const table = new Fts5VirtualTable(bare, stmt.moduleArgs, originalSql);
     this.virtualTables.set(key, table);
     this.schemaVersion++;
     return table;

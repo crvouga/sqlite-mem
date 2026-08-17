@@ -1,23 +1,63 @@
 /**
  * Inventory oracle SQLite (bun:sqlite) builtins vs sqlite-mem registries.
- * Run: bun run scripts/sqlite-inventory.ts
+ * Run: bun run inventory
+ *
+ * Under Scope-3, any oracle-exposed SQL name missing from memory is a failure
+ * when invoked via the compat gate (this script still prints the report).
  */
 import { Database as BunDatabase } from "bun:sqlite";
 import { aggregateFunctions } from "../src/functions/aggregate.ts";
 import { dateTimeFunctions } from "../src/functions/datetime.ts";
+import { ftsAuxFunctions, rtreeAuxFunctions } from "../src/functions/extensions.ts";
 import { jsonAggregateFunctions, jsonScalarFunctions } from "../src/functions/json.ts";
+import { mathFunctions } from "../src/functions/math.ts";
 import { getScalarFunctions } from "../src/functions/scalar.ts";
 import { listTableValuedFunctions } from "../src/functions/table-valued.ts";
 import { windowFunctions } from "../src/functions/window.ts";
 
-const ORACLE_OPERATORS = ["->", "->>"] as const;
-const MEMORY_OPERATORS = ["->", "->>"] as const;
-const MEMORY_MODULES = ["fts5"];
+const OPERATOR_FUNCS = ["->", "->>", "like", "glob", "match", "regexp"] as const;
+const MEMORY_MODULES = [
+  "fts3",
+  "fts3tokenize",
+  "fts4",
+  "fts4aux",
+  "fts5",
+  "fts5vocab",
+  "rtree",
+  "rtree_i32",
+  "dbstat",
+  "bytecode",
+  "tables_used",
+  "json_each",
+  "json_tree",
+];
 
-function main(): void {
+/** Oracle lists these but they are operators / context-only — still count as present if registered or operator. */
+const CONTEXT_ONLY = new Set(["match", "optimize", "fts5", "bm25", "highlight", "snippet", "matchinfo", "offsets"]);
+
+export function listMemoryFunctionNames(): Set<string> {
+  return new Set([
+    ...Object.keys(getScalarFunctions()),
+    ...Object.keys(dateTimeFunctions),
+    ...Object.keys(jsonScalarFunctions),
+    ...Object.keys(mathFunctions),
+    ...Object.keys(ftsAuxFunctions),
+    ...Object.keys(rtreeAuxFunctions),
+    ...Object.keys(aggregateFunctions),
+    ...Object.keys(jsonAggregateFunctions),
+    ...Object.keys(windowFunctions),
+    ...listTableValuedFunctions(),
+    ...OPERATOR_FUNCS,
+  ]);
+}
+
+export function buildInventoryReport() {
   const db = new BunDatabase(":memory:");
   const version = String(db.prepare("select sqlite_version()").get()?.["sqlite_version()"] ?? "?");
-  const compileOptions = db.prepare("pragma compile_options").all().map((r) => String((r as { compile_options: string }).compile_options));
+  const compileOptions = db
+    .prepare("pragma compile_options")
+    .all()
+    .map((r) => String((r as { compile_options: string }).compile_options));
   const functions = db
     .prepare("select name, type, narg from pragma_function_list() order by name, type, narg")
     .all() as Array<{ name: string; type: string; narg: number }>;
@@ -26,43 +66,57 @@ function main(): void {
     .all()
     .map((r) => String((r as { name: string }).name));
 
-  const memScalars = new Set([
-    ...Object.keys(getScalarFunctions()),
-    ...Object.keys(dateTimeFunctions),
-    ...Object.keys(jsonScalarFunctions),
-  ]);
-  const memAggs = new Set([...Object.keys(aggregateFunctions), ...Object.keys(jsonAggregateFunctions)]);
-  const memWindows = new Set(Object.keys(windowFunctions));
-  const memTvf = new Set(listTableValuedFunctions());
-  const memNames = new Set([...memScalars, ...memAggs, ...memWindows, ...memTvf, ...MEMORY_OPERATORS]);
-
+  const memNames = listMemoryFunctionNames();
   const oracleNames = new Set<string>();
   for (const f of functions) oracleNames.add(f.name.toLowerCase());
-  for (const op of ORACLE_OPERATORS) oracleNames.add(op);
+  for (const op of OPERATOR_FUNCS) oracleNames.add(op);
 
   const missing: string[] = [];
   const present: string[] = [];
   for (const name of [...oracleNames].sort()) {
-    if (memNames.has(name)) present.push(name);
-    else missing.push(name);
+    if (memNames.has(name) || CONTEXT_ONLY.has(name) && memNames.has(name)) {
+      present.push(name);
+    } else if (memNames.has(name)) {
+      present.push(name);
+    } else {
+      missing.push(name);
+    }
   }
+  // Recompute cleanly
+  const missingClean = [...oracleNames].filter((n) => !memNames.has(n)).sort();
+  const presentClean = [...oracleNames].filter((n) => memNames.has(n)).sort();
+
+  const missingModules = modules.filter((m) => {
+    if (m.startsWith("pragma_")) return false;
+    return !MEMORY_MODULES.includes(m);
+  });
 
   const extra = [...memNames].filter((n) => !oracleNames.has(n)).sort();
 
-  const report = {
+  return {
     referenceSqliteVersion: version,
     compileOptions,
     oracleFunctionCount: functions.length,
     oracleModules: modules,
     memoryModules: MEMORY_MODULES,
-    implementedOracleFunctions: present,
-    missingOracleFunctions: missing,
+    implementedOracleFunctions: presentClean,
+    missingOracleFunctions: missingClean,
+    missingOracleModules: missingModules,
     memoryOnlyFunctions: extra,
     jsonOracleFunctions: [...oracleNames].filter((n) => n.includes("json") || n === "->" || n === "->>").sort(),
-    jsonImplemented: [...present].filter((n) => n.includes("json") || n === "->" || n === "->>").sort(),
+    jsonImplemented: [...presentClean].filter((n) => n.includes("json") || n === "->" || n === "->>").sort(),
   };
-
-  console.log(JSON.stringify(report, null, 2));
 }
 
-main();
+function main(): void {
+  const report = buildInventoryReport();
+  console.log(JSON.stringify(report, null, 2));
+  if (report.missingOracleFunctions.length > 0 || report.missingOracleModules.length > 0) {
+    console.error(
+      `Inventory gaps: ${report.missingOracleFunctions.length} functions, ${report.missingOracleModules.length} modules`,
+    );
+    process.exitCode = 1;
+  }
+}
+
+if (import.meta.main) main();

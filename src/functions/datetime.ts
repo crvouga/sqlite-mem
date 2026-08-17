@@ -137,4 +137,32 @@ export const dateTimeFunctions: Readonly<Record<string, ScalarFunction>> = {
   current_timestamp(args, context) {
     return dateTimeFunctions.datetime!(args.length === 0 ? ["now"] : args, context);
   },
+  unixepoch(args, context) {
+    const value = resolveDate(args.length === 0 ? ["now"] : args, context);
+    return value ? Math.floor(value.getTime() / 1000) : null;
+  },
+  timediff(args) {
+    if (args.length !== 2) return null;
+    const a = parseDate(args[0], {});
+    const b = parseDate(args[1], {});
+    if (!a || !b) return null;
+    let ms = a.getTime() - b.getTime();
+    const sign = ms < 0 ? "-" : "+";
+    ms = Math.abs(ms);
+    const years = Math.floor(ms / (365.2425 * 86400000));
+    ms -= years * 365.2425 * 86400000;
+    // Approximate month/day breakdown matching SQLite's YYYY-MM-DD HH:MM:SS.mmm style
+    const months = Math.floor(ms / (30.436875 * 86400000));
+    ms -= months * 30.436875 * 86400000;
+    const days = Math.floor(ms / 86400000);
+    ms -= days * 86400000;
+    const hours = Math.floor(ms / 3600000);
+    ms -= hours * 3600000;
+    const minutes = Math.floor(ms / 60000);
+    ms -= minutes * 60000;
+    const seconds = Math.floor(ms / 1000);
+    const millis = Math.floor(ms % 1000);
+    const p = (n: number, w: number) => String(n).padStart(w, "0");
+    return `${sign}${p(years, 4)}-${p(months, 2)}-${p(days, 2)} ${p(hours, 2)}:${p(minutes, 2)}:${p(seconds, 2)}.${p(millis, 3)}`;
+  },
 };

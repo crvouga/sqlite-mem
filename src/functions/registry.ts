@@ -2,10 +2,13 @@ import type { SqlValue } from "../types/value.ts";
 import { aggregateFunctions, type AggregateAccumulator, type AggregateFactory } from "./aggregate.ts";
 import { dateTimeFunctions } from "./datetime.ts";
 import { jsonAggregateFunctions, jsonScalarFunctions } from "./json.ts";
+import { mathFunctions } from "./math.ts";
 import { getScalarFunctions } from "./scalar.ts";
+import { ftsAuxFunctions, rtreeAuxFunctions } from "./extensions.ts";
 
 export interface FunctionContext {
   changes?: () => number;
+  totalChanges?: () => number;
   lastInsertRowid?: () => number | bigint;
   /** Injectable clock — defaults to a fixed instant on Database. */
   now?: () => Date;
@@ -25,6 +28,9 @@ export class FunctionRegistry {
     for (const [name, fn] of Object.entries(getScalarFunctions())) this.scalars.set(name, fn);
     for (const [name, fn] of Object.entries(dateTimeFunctions)) this.scalars.set(name, fn);
     for (const [name, fn] of Object.entries(jsonScalarFunctions)) this.scalars.set(name, fn);
+    for (const [name, fn] of Object.entries(mathFunctions)) this.scalars.set(name, fn);
+    for (const [name, fn] of Object.entries(ftsAuxFunctions)) this.scalars.set(name, fn);
+    for (const [name, fn] of Object.entries(rtreeAuxFunctions)) this.scalars.set(name, fn);
     for (const [name, factory] of Object.entries(aggregateFunctions)) this.aggregates.set(name, factory);
     for (const [name, factory] of Object.entries(jsonAggregateFunctions)) this.aggregates.set(name, factory);
   }
