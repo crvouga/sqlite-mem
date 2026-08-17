@@ -32,7 +32,8 @@
     "inventory": "bun run scripts/sqlite-inventory.ts",
     "requirements": "bun run scripts/sqlite-requirements.ts",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "check": "bun run typecheck && bun run test:sqlite-compat"
   },
   "devDependencies": {
     "@types/bun": "latest",
