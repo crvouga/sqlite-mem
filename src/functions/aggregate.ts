@@ -1,4 +1,4 @@
-import { coerceToNumber, compareSql, utf8Decode, type SqlValue } from "../types/value.ts";
+import { coerceToNumber, compareSql, type SqlValue, utf8Decode } from "../types/value.ts";
 
 export interface AggregateAccumulator {
   step(args: SqlValue[]): void;
@@ -12,7 +12,9 @@ class CountAccumulator implements AggregateAccumulator {
   step(args: SqlValue[]): void {
     if (args.length === 0 || args[0] !== null) this.count++;
   }
-  finalize(): SqlValue { return this.count; }
+  finalize(): SqlValue {
+    return this.count;
+  }
 }
 
 class NumericAccumulator implements AggregateAccumulator {
@@ -47,7 +49,9 @@ class MinMaxAccumulator implements AggregateAccumulator {
       this.value = candidate;
     }
   }
-  finalize(): SqlValue { return this.value; }
+  finalize(): SqlValue {
+    return this.value;
+  }
 }
 
 class GroupConcatAccumulator implements AggregateAccumulator {

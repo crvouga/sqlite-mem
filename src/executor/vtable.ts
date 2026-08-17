@@ -27,7 +27,7 @@ export function executeFtsInsert(
     const values = new Map<string, SqlValue>();
     for (const column of table.columns) {
       const suppliedIndex = columnNames.findIndex((name) => name.toLowerCase() === column.toLowerCase());
-      values.set(normalizeColumnName(column), suppliedIndex >= 0 ? source[suppliedIndex] ?? null : null);
+      values.set(normalizeColumnName(column), suppliedIndex >= 0 ? (source[suppliedIndex] ?? null) : null);
     }
     const rowid = table.insert(values);
     changes++;

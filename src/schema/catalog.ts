@@ -1,6 +1,6 @@
-import type { SqlValue } from "../types/value.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
 import { makeColumnInfo, Table } from "../storage/table.ts";
+import type { SqlValue } from "../types/value.ts";
 
 export type SchemaObjectType = "table" | "index" | "view" | "trigger";
 

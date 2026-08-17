@@ -11,14 +11,20 @@ export function expectParity(a: QueryResult, b: QueryResult): void {
 
 function errorFromUnknown(error: unknown): QueryResult {
   if (error && typeof error === "object" && "category" in error && "message" in error) {
-    const err = error as { category?: QueryResult["error"] extends infer E ? E extends { category: infer C } ? C : never : never; message: string };
+    const err = error as {
+      category?: QueryResult["error"] extends infer E ? (E extends { category: infer C } ? C : never) : never;
+      message: string;
+    };
     return {
       ok: false,
       columns: [],
       rows: [],
       changes: 0,
       lastInsertRowid: 0,
-      error: normalizeError(err.message, err.category as QueryResult["error"] extends { category: infer C } ? C : never),
+      error: normalizeError(
+        err.message,
+        err.category as QueryResult["error"] extends { category: infer C } ? C : never,
+      ),
     };
   }
 

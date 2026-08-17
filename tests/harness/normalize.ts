@@ -1,10 +1,4 @@
-import type {
-  ErrorCategory,
-  NormalizedResult,
-  NormalizedValue,
-  QueryResult,
-  SqlValue,
-} from "./types.ts";
+import type { ErrorCategory, NormalizedResult, NormalizedValue, QueryResult, SqlValue } from "./types.ts";
 
 export function normalizeValue(value: SqlValue): NormalizedValue {
   if (value === null) return { kind: "null" };
@@ -12,9 +6,7 @@ export function normalizeValue(value: SqlValue): NormalizedValue {
   if (typeof value === "string") return { kind: "text", value };
   if (typeof value === "bigint") return { kind: "integer", value };
   if (typeof value === "number") {
-    return Number.isInteger(value)
-      ? { kind: "integer", value }
-      : { kind: "real", value };
+    return Number.isInteger(value) ? { kind: "integer", value } : { kind: "real", value };
   }
   // SqlReal / SqlJsonText and similar wrappers
   if (typeof value === "object" && value !== null && "value" in value) {
@@ -40,7 +32,7 @@ export function normalizeErrorMessage(message: string): string {
  * versions legitimately vary on (column lists after UNIQUE/CHECK, etc.).
  */
 export function normalizeErrorMessageForCompare(message: string): string {
-  let msg = normalizeErrorMessage(message);
+  const msg = normalizeErrorMessage(message);
   const lower = msg.toLowerCase();
 
   if (lower.startsWith("unique constraint failed")) {
@@ -139,11 +131,7 @@ export interface ValuesEqualOptions {
   rowid?: boolean;
 }
 
-export function valuesEqual(
-  a: SqlValue,
-  b: SqlValue,
-  options: ValuesEqualOptions = {},
-): boolean {
+export function valuesEqual(a: SqlValue, b: SqlValue, options: ValuesEqualOptions = {}): boolean {
   if (a === null || b === null) return a === b;
 
   if (typeof a === "number" && typeof b === "number") {
@@ -255,10 +243,7 @@ function positionalRowsEqual(a: NormalizedResult, b: NormalizedResult): boolean 
   return true;
 }
 
-export function deepCompareResults(
-  a: QueryResult,
-  b: QueryResult,
-): { equal: boolean; reason?: string } {
+export function deepCompareResults(a: QueryResult, b: QueryResult): { equal: boolean; reason?: string } {
   const na = normalizeQueryResult(a);
   const nb = normalizeQueryResult(b);
 

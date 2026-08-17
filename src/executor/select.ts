@@ -8,19 +8,27 @@ import type {
   WindowExpr,
   WindowSpec,
 } from "../ast/nodes.ts";
-import { SqliteError, unsupported } from "../errors/index.ts";
+import { SqliteError } from "../errors/index.ts";
 import type { EvalContext } from "../expressions/context.ts";
 import { evalExpr } from "../expressions/eval.ts";
+import { evaluateTableFunction } from "../functions/table-valued.ts";
 import { buildSqliteMaster, buildSqliteSchema } from "../schema/catalog.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
 import type { Table } from "../storage/table.ts";
 import { compareWithCollation } from "../types/collation.ts";
-import { applyAffinity, compareSql, isTruthySql, sqlValueEquals, toInteger, type SqlValue, type Affinity } from "../types/value.ts";
-import { evaluateTableFunction } from "../functions/table-valued.ts";
-import type { FtsVocabVirtualTable } from "../vtable/modules.ts";
+import {
+  type Affinity,
+  applyAffinity,
+  compareSql,
+  isTruthySql,
+  type SqlValue,
+  sqlValueEquals,
+  toInteger,
+} from "../types/value.ts";
 import { tokenizeFtsText } from "../vtable/fts5.ts";
+import type { FtsVocabVirtualTable } from "../vtable/modules.ts";
 import type { ExecutionEnv, ScopeRow } from "./env.ts";
-import { resultValues, valuesToResult, type ResultSet } from "./result.ts";
+import { type ResultSet, resultValues, valuesToResult } from "./result.ts";
 
 function applyAffinityLocal(value: SqlValue, affinity: Affinity): SqlValue {
   return applyAffinity(value, affinity);
@@ -36,26 +44,41 @@ export function executeSelect(stmt: SelectStmt, env: ExecutionEnv, parent?: Eval
   const savedCtes = new Map(env.ctes);
   try {
     if (stmt.with) executeWith(stmt, env, parent);
-    const base = executeSelectCore({
-      ...stmt,
-      with: null,
-      compound: null,
-      orderBy: stmt.compound ? [] : stmt.orderBy,
-      limit: stmt.compound ? null : stmt.limit,
-    }, env, parent);
+    const base = executeSelectCore(
+      {
+        ...stmt,
+        with: null,
+        compound: null,
+        orderBy: stmt.compound ? [] : stmt.orderBy,
+        limit: stmt.compound ? null : stmt.limit,
+      },
+      env,
+      parent,
+    );
     if (!stmt.compound) return base;
     const right = executeSelect(stmt.compound.select, env, parent);
     if (base.columns.length !== right.columns.length) {
-      throw new SqliteError("SELECTs to the left and right of compound operator do not have the same number of result columns", "other");
+      throw new SqliteError(
+        "SELECTs to the left and right of compound operator do not have the same number of result columns",
+        "other",
+      );
     }
     const leftRows = resultValues(base);
     const rightRows = resultValues(right);
     let rows: SqlValue[][];
     switch (stmt.compound.op) {
-      case "UNION ALL": rows = [...leftRows, ...rightRows]; break;
-      case "UNION": rows = uniqueRows([...leftRows, ...rightRows]); break;
-      case "INTERSECT": rows = uniqueRows(leftRows).filter((row) => rightRows.some((other) => rowsEqual(row, other))); break;
-      case "EXCEPT": rows = uniqueRows(leftRows).filter((row) => !rightRows.some((other) => rowsEqual(row, other))); break;
+      case "UNION ALL":
+        rows = [...leftRows, ...rightRows];
+        break;
+      case "UNION":
+        rows = uniqueRows([...leftRows, ...rightRows]);
+        break;
+      case "INTERSECT":
+        rows = uniqueRows(leftRows).filter((row) => rightRows.some((other) => rowsEqual(row, other)));
+        break;
+      case "EXCEPT":
+        rows = uniqueRows(leftRows).filter((row) => !rightRows.some((other) => rowsEqual(row, other)));
+        break;
     }
     if (stmt.orderBy.length > 0) rows.sort((a, b) => compareCompoundRows(a, b, stmt.orderBy, base.columns));
     if (stmt.limit) {
@@ -86,9 +109,10 @@ function executeWith(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalContext):
         env.ctes.set(key, valuesToResult(columns, delta));
         const nextResult = executeSelect(cte.select.compound.select, env, parent);
         const candidates = resultValues(nextResult);
-        const additions = cte.select.compound.op === "UNION ALL"
-          ? candidates
-          : candidates.filter((row) => !accumulated.some((existing) => rowsEqual(existing, row)));
+        const additions =
+          cte.select.compound.op === "UNION ALL"
+            ? candidates
+            : candidates.filter((row) => !accumulated.some((existing) => rowsEqual(existing, row)));
         if (additions.length === 0) break;
         accumulated = [...accumulated, ...additions];
         delta = additions;
@@ -105,16 +129,19 @@ function executeWith(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalContext):
 function executeSelectCore(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalContext): ResultSet {
   let scopes = stmt.from ? scanFrom(stmt.from, env, parent) : [{ cells: [] }];
   if (stmt.where) {
-    scopes = scopes.filter((scope) => isTruthySql(evalExpr(stmt.where!, env.createEvalContext(scope, parent))) === true);
+    scopes = scopes.filter(
+      (scope) => isTruthySql(evalExpr(stmt.where!, env.createEvalContext(scope, parent))) === true,
+    );
   }
 
-  const aggregate = stmt.groupBy.length > 0 ||
+  const aggregate =
+    stmt.groupBy.length > 0 ||
     stmt.columns.some((column) => column.type === "expr" && containsAggregate(column.expr)) ||
     (stmt.having !== null && containsAggregate(stmt.having));
   const groupBy = stmt.groupBy.map((expr) => {
     if (expr.type !== "literal" || typeof expr.value !== "number" || !Number.isInteger(expr.value)) return expr;
     const column = stmt.columns[expr.value - 1];
-    if (!column || column.type !== "expr") throw new SqliteError(`${expr.value}th GROUP BY term out of range`, "other");
+    if (column?.type !== "expr") throw new SqliteError(`${expr.value}th GROUP BY term out of range`, "other");
     return column.expr;
   });
   const groups = aggregate ? groupRows(scopes, groupBy, env, parent) : scopes.map((scope) => [scope]);
@@ -134,7 +161,8 @@ function executeSelectCore(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalCon
           if (
             (column.table !== null || !cell.hiddenByUsing) &&
             (column.table === null || cell.table?.toLowerCase() === column.table.toLowerCase())
-          ) values.push(cell.value);
+          )
+            values.push(cell.value);
         }
       } else {
         values.push(evalGrouped(column.expr, ctx, group, env, parent, stmt.windows, windowScopes));
@@ -152,13 +180,16 @@ function executeSelectCore(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalCon
           return ctx.resolveColumn(table, name);
         },
       };
-      if (isTruthySql(evalGrouped(stmt.having, havingCtx, group, env, parent, stmt.windows, windowScopes)) !== true) continue;
+      if (isTruthySql(evalGrouped(stmt.having, havingCtx, group, env, parent, stmt.windows, windowScopes)) !== true)
+        continue;
     }
     output.push({ values, scope });
   }
 
   if (stmt.distinct) {
-    output = output.filter((row, index, all) => all.findIndex((other) => rowsEqual(row.values, other.values)) === index);
+    output = output.filter(
+      (row, index, all) => all.findIndex((other) => rowsEqual(row.values, other.values)) === index,
+    );
   }
   if (stmt.orderBy.length > 0) {
     output.sort((left, right) => compareOutput(left, right, stmt.orderBy, columns, env, parent));
@@ -172,7 +203,12 @@ function executeSelectCore(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalCon
     const limit = Number(limitValue);
     output = output.slice(offset, limit < 0 ? undefined : offset + limit);
   }
-  return valuesToResult(columns, output.map((row) => row.values), 0, env.state.lastInsertRowid);
+  return valuesToResult(
+    columns,
+    output.map((row) => row.values),
+    0,
+    env.state.lastInsertRowid,
+  );
 }
 
 export function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext): ScopeRow[] {
@@ -205,11 +241,9 @@ export function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext
 
     const right = scanFrom(item.right, env, parent);
     const using = resolveUsingColumns(item, left, right, env);
-    const leftShape = (left[0]?.cells ?? shapeOf(item.left, env));
+    const leftShape = left[0]?.cells ?? shapeOf(item.left, env);
     const rightShape = (right[0]?.cells ?? shapeOf(item.right, env)).map((cell) =>
-      using?.some((name) => name.toLowerCase() === cell.name.toLowerCase())
-        ? { ...cell, hiddenByUsing: true }
-        : cell
+      using?.some((name) => name.toLowerCase() === cell.name.toLowerCase()) ? { ...cell, hiddenByUsing: true } : cell,
     );
     const nullLeft = leftShape.map((cell) => ({ ...cell, value: null as SqlValue }));
     const nullRight = rightShape.map((cell) => ({ ...cell, value: null as SqlValue }));
@@ -232,9 +266,11 @@ export function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext
       let matched = false;
       right.forEach((rhs, rightIndex) => {
         const rightCells = using
-          ? rhs.cells.map((cell) => using.some((name) => name.toLowerCase() === cell.name.toLowerCase())
-            ? { ...cell, hiddenByUsing: true }
-            : cell)
+          ? rhs.cells.map((cell) =>
+              using.some((name) => name.toLowerCase() === cell.name.toLowerCase())
+                ? { ...cell, hiddenByUsing: true }
+                : cell,
+            )
           : rhs.cells;
         const joined = { cells: [...lhs.cells, ...rightCells] };
         if (!joinOk(lhs, rhs, joined)) return;
@@ -251,9 +287,11 @@ export function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext
       right.forEach((rhs, rightIndex) => {
         if (matchedRight.has(rightIndex)) return;
         const rightCells = using
-          ? rhs.cells.map((cell) => using.some((name) => name.toLowerCase() === cell.name.toLowerCase())
-            ? { ...cell, hiddenByUsing: true }
-            : cell)
+          ? rhs.cells.map((cell) =>
+              using.some((name) => name.toLowerCase() === cell.name.toLowerCase())
+                ? { ...cell, hiddenByUsing: true }
+                : cell,
+            )
           : rhs.cells;
         result.push({ cells: [...nullLeft, ...rightCells] });
       });
@@ -329,17 +367,17 @@ export function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext
   else table = db.getTable(item.name);
   const integerPkAlias = table.withoutRowid
     ? undefined
-    : table.columns.find((column) =>
-      column.primaryKey && column.typeName?.trim().toUpperCase() === "INTEGER"
-    )?.name;
+    : table.columns.find((column) => column.primaryKey && column.typeName?.trim().toUpperCase() === "INTEGER")?.name;
   return [...table.scan()].map((row) => {
-    const baseCells = table.columns.filter((c) => !c.generated || c.generated.stored).map((column) => ({
-      table: alias,
-      name: column.name,
-      value: row.values.get(column.name.toLowerCase()) ?? null,
-      affinity: column.affinity,
-      collate: column.collate,
-    }));
+    const baseCells = table.columns
+      .filter((c) => !c.generated || c.generated.stored)
+      .map((column) => ({
+        table: alias,
+        name: column.name,
+        value: row.values.get(column.name.toLowerCase()) ?? null,
+        affinity: column.affinity,
+        collate: column.collate,
+      }));
     const cells = table.columns.map((column) => {
       if (column.generated && !column.generated.stored) {
         const ctx = env.createEvalContext({ cells: baseCells, sourceTable: table.name }, parent);
@@ -375,12 +413,13 @@ function shapeOf(item: FromItem, env: ExecutionEnv): ScopeRow["cells"] {
     const using = resolveUsingFromShapes(item.using, left, right);
     return [
       ...left,
-      ...right.map((cell) => using?.some((name) => name.toLowerCase() === cell.name.toLowerCase())
-        ? { ...cell, hiddenByUsing: true }
-        : cell),
+      ...right.map((cell) =>
+        using?.some((name) => name.toLowerCase() === cell.name.toLowerCase()) ? { ...cell, hiddenByUsing: true } : cell,
+      ),
     ];
   }
-  if (item.type === "subquery") return resultColumnNames(item.select.columns).map((name) => ({ table: item.alias, name, value: null }));
+  if (item.type === "subquery")
+    return resultColumnNames(item.select.columns).map((name) => ({ table: item.alias, name, value: null }));
   if (item.type === "table_func") {
     const columns =
       item.name.toLowerCase() === "generate_series"
@@ -400,14 +439,20 @@ function shapeOf(item: FromItem, env: ExecutionEnv): ScopeRow["cells"] {
   const cte = env.ctes.get(item.name.toLowerCase());
   if (cte) return cte.columns.map((name) => ({ table: alias, name, value: null }));
   const view = db.views.get(item.name.toLowerCase());
-  if (view) return (view.columns ?? resultColumnNames(view.select.columns)).map((name) => ({ table: alias, name, value: null }));
+  if (view)
+    return (view.columns ?? resultColumnNames(view.select.columns)).map((name) => ({
+      table: alias,
+      name,
+      value: null,
+    }));
   const virtual = db.virtualTables.get(item.name.toLowerCase());
   if (virtual) return virtual.columns.map((name) => ({ table: alias, name, value: null }));
-  const table = item.name.toLowerCase() === "sqlite_schema"
-    ? buildSqliteSchema(db)
-    : item.name.toLowerCase() === "sqlite_master"
-      ? buildSqliteMaster(db)
-      : db.getTable(item.name);
+  const table =
+    item.name.toLowerCase() === "sqlite_schema"
+      ? buildSqliteSchema(db)
+      : item.name.toLowerCase() === "sqlite_master"
+        ? buildSqliteMaster(db)
+        : db.getTable(item.name);
   return table.columns.map((column) => ({ table: alias, name: column.name, value: null, affinity: column.affinity }));
 }
 
@@ -467,10 +512,13 @@ function evalGrouped(
   namedWindows: SelectStmt["windows"],
   windowRows: ScopeRow[],
 ): SqlValue {
-  return evalExpr(replaceSpecial(expr, (special) => {
-    if (special.type === "aggregate") return aggregateValue(special, group, env, parent);
-    return windowValue(special, group[0] ?? { cells: [] }, windowRows, env, parent, namedWindows);
-  }), ctx);
+  return evalExpr(
+    replaceSpecial(expr, (special) => {
+      if (special.type === "aggregate") return aggregateValue(special, group, env, parent);
+      return windowValue(special, group[0] ?? { cells: [] }, windowRows, env, parent, namedWindows);
+    }),
+    ctx,
+  );
 }
 
 function aggregateValue(expr: AggregateExpr, rows: ScopeRow[], env: ExecutionEnv, parent?: EvalContext): SqlValue {
@@ -499,13 +547,17 @@ function windowValue(
   const spec = resolveWindow(expr.window, namedWindows);
   const currentCtx = env.createEvalContext(current, parent);
   const partitionKey = spec.partitionBy.map((item) => evalExpr(item, currentCtx));
-  const partition = rows.filter((row) => rowsEqual(
-    partitionKey,
-    spec.partitionBy.map((item) => evalExpr(item, env.createEvalContext(row, parent))),
-  ));
+  const partition = rows.filter((row) =>
+    rowsEqual(
+      partitionKey,
+      spec.partitionBy.map((item) => evalExpr(item, env.createEvalContext(row, parent))),
+    ),
+  );
   partition.sort((a, b) => compareScopes(a, b, spec.orderBy, env, parent));
   const index = Math.max(0, partition.indexOf(current));
-  const orderKeys = partition.map((row) => spec.orderBy.map((item) => evalExpr(item.expr, env.createEvalContext(row, parent))));
+  const orderKeys = partition.map((row) =>
+    spec.orderBy.map((item) => evalExpr(item.expr, env.createEvalContext(row, parent))),
+  );
   let defaultFrameEnd = index;
   if (spec.orderBy.length > 0) {
     while (defaultFrameEnd + 1 < partition.length) {
@@ -543,7 +595,7 @@ function windowValue(
   if (name === "last_value") return values[end]?.[0] ?? null;
   if (name === "nth_value") {
     const target = start + Number(toInteger(evaluated[1] ?? null) ?? 0) - 1;
-    return target >= start && target <= end ? values[target]?.[0] ?? null : null;
+    return target >= start && target <= end ? (values[target]?.[0] ?? null) : null;
   }
   if (name === "ntile") {
     const buckets = Math.max(1, Number(toInteger(evaluated[0] ?? 1) ?? 1));
@@ -601,19 +653,33 @@ function frameBounds(
   defaultFrameEnd: number,
 ): [number, number] {
   if (!spec.frame) return [0, spec.orderBy.length > 0 ? defaultFrameEnd : Math.max(0, length - 1)];
-  const bound = (item: WindowSpec["frame"] extends infer _ ? NonNullable<WindowSpec["frame"]>["start"] : never, start: boolean): number => {
+  const bound = (
+    item: WindowSpec["frame"] extends infer _ ? NonNullable<WindowSpec["frame"]>["start"] : never,
+    _start: boolean,
+  ): number => {
     switch (item.kind) {
-      case "unbounded_preceding": return 0;
-      case "unbounded_following": return Math.max(0, length - 1);
-      case "current_row": return index;
-      case "preceding": return Math.max(0, index - Number(toInteger(evalExpr(item.expr, ctx)) ?? 0));
-      case "following": return Math.min(Math.max(0, length - 1), index + Number(toInteger(evalExpr(item.expr, ctx)) ?? 0));
+      case "unbounded_preceding":
+        return 0;
+      case "unbounded_following":
+        return Math.max(0, length - 1);
+      case "current_row":
+        return index;
+      case "preceding":
+        return Math.max(0, index - Number(toInteger(evalExpr(item.expr, ctx)) ?? 0));
+      case "following":
+        return Math.min(Math.max(0, length - 1), index + Number(toInteger(evalExpr(item.expr, ctx)) ?? 0));
     }
   };
   return [bound(spec.frame.start, true), bound(spec.frame.end, false)];
 }
 
-function compareScopes(a: ScopeRow, b: ScopeRow, order: OrderByItem[], env: ExecutionEnv, parent?: EvalContext): number {
+function compareScopes(
+  a: ScopeRow,
+  b: ScopeRow,
+  order: OrderByItem[],
+  env: ExecutionEnv,
+  parent?: EvalContext,
+): number {
   for (const item of order) {
     const left = evalExpr(item.expr, env.createEvalContext(a, parent));
     const right = evalExpr(item.expr, env.createEvalContext(b, parent));
@@ -623,7 +689,14 @@ function compareScopes(a: ScopeRow, b: ScopeRow, order: OrderByItem[], env: Exec
   return 0;
 }
 
-function compareOutput(a: OutputRow, b: OutputRow, order: OrderByItem[], columns: string[], env: ExecutionEnv, parent?: EvalContext): number {
+function compareOutput(
+  a: OutputRow,
+  b: OutputRow,
+  order: OrderByItem[],
+  columns: string[],
+  env: ExecutionEnv,
+  parent?: EvalContext,
+): number {
   for (const item of order) {
     const value = (row: OutputRow): SqlValue => {
       if (item.expr.type === "literal" && typeof item.expr.value === "number" && Number.isInteger(item.expr.value)) {
@@ -652,15 +725,15 @@ function compareNullable(left: SqlValue, right: SqlValue, item: OrderByItem, sco
   if (item.expr.type === "collate") collation = item.expr.collation;
   else if (scope && item.expr.type === "column") {
     const key = item.expr.name.toLowerCase();
-    const match = scope.cells.find((cell) =>
-      cell.name.toLowerCase() === key &&
-      (item.expr.type === "column" && (item.expr.table === null || cell.table?.toLowerCase() === item.expr.table.toLowerCase())),
+    const match = scope.cells.find(
+      (cell) =>
+        cell.name.toLowerCase() === key &&
+        item.expr.type === "column" &&
+        (item.expr.table === null || cell.table?.toLowerCase() === item.expr.table.toLowerCase()),
     );
     collation = match?.collate ?? null;
   }
-  const comparison = collation
-    ? compareWithCollation(left, right, collation)
-    : compareSql(left, right);
+  const comparison = collation ? compareWithCollation(left, right, collation) : compareSql(left, right);
   return (comparison ?? 0) * (item.dir === "DESC" ? -1 : 1);
 }
 
@@ -672,7 +745,8 @@ function resultColumnNames(columns: ResultColumn[], sample?: ScopeRow): string[]
         if (
           (column.table !== null || !cell.hiddenByUsing) &&
           (column.table === null || cell.table?.toLowerCase() === column.table.toLowerCase())
-        ) names.push(cell.name);
+        )
+          names.push(cell.name);
       }
     } else if (
       !column.alias &&
@@ -711,14 +785,27 @@ function validateProjectedColumns(stmt: SelectStmt, sample: ScopeRow, env: Execu
     }
     const recurse = (item: Expr) => visit(item);
     switch (expr.type) {
-      case "unary": recurse(expr.expr); break;
-      case "binary": recurse(expr.left); recurse(expr.right); break;
-      case "between": recurse(expr.expr); recurse(expr.lower); recurse(expr.upper); break;
+      case "unary":
+        recurse(expr.expr);
+        break;
+      case "binary":
+        recurse(expr.left);
+        recurse(expr.right);
+        break;
+      case "between":
+        recurse(expr.expr);
+        recurse(expr.lower);
+        recurse(expr.upper);
+        break;
       case "in":
         recurse(expr.expr);
         if (Array.isArray(expr.values)) expr.values.forEach(recurse);
         break;
-      case "like": recurse(expr.expr); recurse(expr.pattern); if (expr.escape) recurse(expr.escape); break;
+      case "like":
+        recurse(expr.expr);
+        recurse(expr.pattern);
+        if (expr.escape) recurse(expr.escape);
+        break;
       case "function":
       case "aggregate":
         if (expr.args !== "*") expr.args.forEach(recurse);
@@ -729,12 +816,19 @@ function validateProjectedColumns(stmt: SelectStmt, sample: ScopeRow, env: Execu
         break;
       case "case":
         if (expr.base) recurse(expr.base);
-        expr.whens.forEach((branch) => { recurse(branch.when); recurse(branch.then); });
+        expr.whens.forEach((branch) => {
+          recurse(branch.when);
+          recurse(branch.then);
+        });
         if (expr.else) recurse(expr.else);
         break;
       case "cast":
-      case "collate": recurse(expr.expr); break;
-      case "row": expr.values.forEach(recurse); break;
+      case "collate":
+        recurse(expr.expr);
+        break;
+      case "row":
+        expr.values.forEach(recurse);
+        break;
     }
   };
   for (const column of stmt.columns) if (column.type === "expr") visit(column.expr);
@@ -744,7 +838,11 @@ function expressionName(expr: Expr): string {
   if (expr.type === "column") return expr.name;
   if (expr.type === "literal") {
     if (expr.value === null) return "NULL";
-    if (expr.value instanceof Uint8Array) return `X'${Array.from(expr.value).map((byte) => byte.toString(16).padStart(2, "0")).join("").toUpperCase()}'`;
+    if (expr.value instanceof Uint8Array)
+      return `X'${Array.from(expr.value)
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("")
+        .toUpperCase()}'`;
     return typeof expr.value === "string" ? `'${expr.value.replaceAll("'", "''")}'` : String(expr.value);
   }
   if (expr.type === "null") return "NULL";
@@ -763,17 +861,49 @@ function replaceSpecial(expr: Expr, evaluate: (expr: AggregateExpr | WindowExpr)
   if (expr.type === "aggregate" || expr.type === "window") return { type: "literal", value: evaluate(expr) };
   const recurse = (item: Expr) => replaceSpecial(item, evaluate);
   switch (expr.type) {
-    case "unary": return { ...expr, expr: recurse(expr.expr) };
-    case "binary": return { ...expr, left: recurse(expr.left), right: recurse(expr.right) };
-    case "between": return { ...expr, expr: recurse(expr.expr), lower: recurse(expr.lower), upper: recurse(expr.upper) };
-    case "in": return { ...expr, expr: recurse(expr.expr), values: Array.isArray(expr.values) ? expr.values.map(recurse) : expr.values };
-    case "like": return { ...expr, expr: recurse(expr.expr), pattern: recurse(expr.pattern), escape: expr.escape && recurse(expr.escape) };
-    case "function": return { ...expr, args: expr.args === "*" ? "*" : expr.args.map(recurse), filter: expr.filter && recurse(expr.filter) };
-    case "case": return { ...expr, base: expr.base && recurse(expr.base), whens: expr.whens.map((item) => ({ when: recurse(item.when), then: recurse(item.then) })), else: expr.else && recurse(expr.else) };
-    case "cast": return { ...expr, expr: recurse(expr.expr) };
-    case "row": return { ...expr, values: expr.values.map(recurse) };
-    case "collate": return { ...expr, expr: recurse(expr.expr) };
-    default: return expr;
+    case "unary":
+      return { ...expr, expr: recurse(expr.expr) };
+    case "binary":
+      return { ...expr, left: recurse(expr.left), right: recurse(expr.right) };
+    case "between":
+      return { ...expr, expr: recurse(expr.expr), lower: recurse(expr.lower), upper: recurse(expr.upper) };
+    case "in":
+      return {
+        ...expr,
+        expr: recurse(expr.expr),
+        values: Array.isArray(expr.values) ? expr.values.map(recurse) : expr.values,
+      };
+    case "like":
+      return {
+        ...expr,
+        expr: recurse(expr.expr),
+        pattern: recurse(expr.pattern),
+        escape: expr.escape && recurse(expr.escape),
+      };
+    case "function":
+      return {
+        ...expr,
+        args: expr.args === "*" ? "*" : expr.args.map(recurse),
+        filter: expr.filter && recurse(expr.filter),
+      };
+    case "case":
+      return {
+        ...expr,
+        base: expr.base && recurse(expr.base),
+        whens: expr.whens.map(({ when, then: thenExpr }) => {
+          // biome-ignore lint/suspicious/noThenProperty: CASE WHEN/THEN AST field, not a thenable
+          return { when: recurse(when), then: recurse(thenExpr) };
+        }),
+        else: expr.else && recurse(expr.else),
+      };
+    case "cast":
+      return { ...expr, expr: recurse(expr.expr) };
+    case "row":
+      return { ...expr, values: expr.values.map(recurse) };
+    case "collate":
+      return { ...expr, expr: recurse(expr.expr) };
+    default:
+      return expr;
   }
 }
 
@@ -798,10 +928,13 @@ function referencesTable(select: SelectStmt, name: string): boolean {
 }
 
 function rowsEqual(left: SqlValue[], right: SqlValue[]): boolean {
-  return left.length === right.length && left.every((value, index) => {
-    const other = right[index] ?? null;
-    return value === null && other === null || value !== null && other !== null && sqlValueEquals(value, other);
-  });
+  return (
+    left.length === right.length &&
+    left.every((value, index) => {
+      const other = right[index] ?? null;
+      return (value === null && other === null) || (value !== null && other !== null && sqlValueEquals(value, other));
+    })
+  );
 }
 
 function uniqueRows(rows: SqlValue[][]): SqlValue[][] {
@@ -859,17 +992,18 @@ function scanFtsVocab(db: DatabaseState, alias: string, vocab: FtsVocabVirtualTa
       }
     }
   }
-  return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([term, stats]) => ({
-    cells: vocab.columns.map((column) => {
-      if (column === "term") return { table: alias, name: column, value: term };
-      if (column === "doc") return { table: alias, name: column, value: stats.doc };
-      if (column === "cnt") return { table: alias, name: column, value: stats.cnt };
-      if (column === "col") return { table: alias, name: column, value: "*" };
-      if (column === "offset") return { table: alias, name: column, value: 0 };
-      return { table: alias, name: column, value: null };
-    }),
-  }));
+  return [...counts.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([term, stats]) => ({
+      cells: vocab.columns.map((column) => {
+        if (column === "term") return { table: alias, name: column, value: term };
+        if (column === "doc") return { table: alias, name: column, value: stats.doc };
+        if (column === "cnt") return { table: alias, name: column, value: stats.cnt };
+        if (column === "col") return { table: alias, name: column, value: "*" };
+        if (column === "offset") return { table: alias, name: column, value: 0 };
+        return { table: alias, name: column, value: null };
+      }),
+    }));
 }
 
 void tokenizeFtsText;
-

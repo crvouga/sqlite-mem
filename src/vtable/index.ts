@@ -1,4 +1,4 @@
-export { Fts5VirtualTable, tokenizeFtsText, type Fts5Row } from "./fts5.ts";
+export { type Fts5Row, Fts5VirtualTable, tokenizeFtsText } from "./fts5.ts";
 export {
   BytecodeVirtualTable,
   DbStatVirtualTable,

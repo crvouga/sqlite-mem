@@ -20,11 +20,7 @@ describe("window differential fuzz", () => {
             for (const db of [memory, sqlite]) {
               db.exec("CREATE TABLE scores(team TEXT, name TEXT, score INTEGER)");
               for (const row of rows) {
-                db.exec("INSERT INTO scores(team, name, score) VALUES (?, ?, ?)", [
-                  row.team,
-                  row.name,
-                  row.score,
-                ]);
+                db.exec("INSERT INTO scores(team, name, score) VALUES (?, ?, ?)", [row.team, row.name, row.score]);
               }
             }
 
@@ -36,13 +32,7 @@ describe("window differential fuzz", () => {
               "ORDER BY team, score, name",
             ].join(" ");
 
-            compareOrReport(
-              "windows",
-              sql,
-              { rows, partitionCol },
-              memory.query(sql),
-              sqlite.query(sql),
-            );
+            compareOrReport("windows", sql, { rows, partitionCol }, memory.query(sql), sqlite.query(sql));
           });
         },
       ),

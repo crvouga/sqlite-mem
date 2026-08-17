@@ -13,12 +13,7 @@ export function setupBoth(memory: ContractDb, sqlite: ContractDb, statements: st
   }
 }
 
-export function parity(
-  name: string,
-  setup: string[],
-  sql: string,
-  params?: SqlValue[],
-): void {
+export function parity(name: string, setup: string[], sql: string, params?: SqlValue[]): void {
   matrixBoth(name, (memory, sqlite) => {
     setupBoth(memory, sqlite, setup);
     expectParity(memory.query(sql, params), sqlite.query(sql, params));
@@ -55,10 +50,7 @@ export function sequenceParity(
         expectParity(a, b);
       } else {
         // DDL / transaction / pragma counters are not consistently defined across drivers.
-        expectParity(
-          { ...a, changes: 0, lastInsertRowid: 0 },
-          { ...b, changes: 0, lastInsertRowid: 0 },
-        );
+        expectParity({ ...a, changes: 0, lastInsertRowid: 0 }, { ...b, changes: 0, lastInsertRowid: 0 });
       }
     }
     if (options?.compareFinalState) {
@@ -67,12 +59,7 @@ export function sequenceParity(
   });
 }
 
-export function errorParity(
-  name: string,
-  setup: string[],
-  sql: string,
-  category?: ErrorCategory,
-): void {
+export function errorParity(name: string, setup: string[], sql: string, category?: ErrorCategory): void {
   matrixBoth(name, (memory, sqlite) => {
     setupBoth(memory, sqlite, setup);
     const a = memory.exec(sql);
@@ -87,12 +74,7 @@ export function errorParity(
   });
 }
 
-export function queryErrorParity(
-  name: string,
-  setup: string[],
-  sql: string,
-  category?: ErrorCategory,
-): void {
+export function queryErrorParity(name: string, setup: string[], sql: string, category?: ErrorCategory): void {
   matrixBoth(name, (memory, sqlite) => {
     setupBoth(memory, sqlite, setup);
     const a = memory.query(sql);

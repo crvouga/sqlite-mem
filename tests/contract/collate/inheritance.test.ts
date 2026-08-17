@@ -13,9 +13,6 @@ parity(
 
 parity(
   "declared column COLLATE NOCASE applies to ORDER BY",
-  [
-    "CREATE TABLE words(value TEXT COLLATE NOCASE)",
-    "INSERT INTO words VALUES ('banana'),('Apple'),('cherry')",
-  ],
+  ["CREATE TABLE words(value TEXT COLLATE NOCASE)", "INSERT INTO words VALUES ('banana'),('Apple'),('cherry')"],
   "SELECT value FROM words ORDER BY value",
 );

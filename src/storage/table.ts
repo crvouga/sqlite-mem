@@ -88,7 +88,11 @@ export class Table {
     rowid = canonicalRowid(rowid ?? this.allocateRowid());
 
     if (this.rows.has(rowid)) {
-      throw new SqliteError(`UNIQUE constraint failed: ${this.name}.rowid`, "constraint_primary", "SQLITE_CONSTRAINT_PRIMARYKEY");
+      throw new SqliteError(
+        `UNIQUE constraint failed: ${this.name}.rowid`,
+        "constraint_primary",
+        "SQLITE_CONSTRAINT_PRIMARYKEY",
+      );
     }
     if (alias) values.set(normalizeColumnName(alias.name), rowid);
 
@@ -128,7 +132,11 @@ export class Table {
     const alias = this.integerPrimaryKeyAlias();
     const targetKey = alias ? asRowid(values.get(normalizeColumnName(alias.name)) ?? null, alias.name) : key;
     if (targetKey !== key && this.rows.has(targetKey)) {
-      throw new SqliteError(`UNIQUE constraint failed: ${this.name}.${alias?.name ?? "rowid"}`, "constraint_unique", "SQLITE_CONSTRAINT_UNIQUE");
+      throw new SqliteError(
+        `UNIQUE constraint failed: ${this.name}.${alias?.name ?? "rowid"}`,
+        "constraint_unique",
+        "SQLITE_CONSTRAINT_UNIQUE",
+      );
     }
     if (alias) values.set(normalizeColumnName(alias.name), targetKey);
     const candidate: Row = { rowid: targetKey, values };
@@ -204,7 +212,11 @@ export class Table {
       if ((column.notNull || column.primaryKey) && value === null) {
         const category = column.primaryKey ? "constraint_primary" : "constraint_notnull";
         const code = column.primaryKey ? "SQLITE_CONSTRAINT_PRIMARYKEY" : "SQLITE_CONSTRAINT_NOTNULL";
-        throw new SqliteError(`${column.primaryKey ? "PRIMARY KEY" : "NOT NULL"} constraint failed: ${this.name}.${column.name}`, category, code);
+        throw new SqliteError(
+          `${column.primaryKey ? "PRIMARY KEY" : "NOT NULL"} constraint failed: ${this.name}.${column.name}`,
+          category,
+          code,
+        );
       }
     }
 
@@ -214,23 +226,27 @@ export class Table {
       if (values.some((value) => value === null)) continue;
       for (const other of this.rows.values()) {
         if (excludedRowid !== undefined && other.rowid === excludedRowid) continue;
-        if (values.every((value, index) => {
-          const column = this.column(names[index]!);
-          const otherValue = other.values.get(normalizeColumnName(names[index]!)) ?? null;
-          const collation = column.collate ?? "BINARY";
-          return compareWithCollation(value, otherValue, collation) === 0;
-        })) {
+        if (
+          values.every((value, index) => {
+            const column = this.column(names[index]!);
+            const otherValue = other.values.get(normalizeColumnName(names[index]!)) ?? null;
+            const collation = column.collate ?? "BINARY";
+            return compareWithCollation(value, otherValue, collation) === 0;
+          })
+        ) {
           const qualified = names.map((name) => `${this.name}.${name}`).join(", ");
-          throw new SqliteError(`UNIQUE constraint failed: ${qualified}`, "constraint_unique", "SQLITE_CONSTRAINT_UNIQUE");
+          throw new SqliteError(
+            `UNIQUE constraint failed: ${qualified}`,
+            "constraint_unique",
+            "SQLITE_CONSTRAINT_UNIQUE",
+          );
         }
       }
     }
   }
 
   private uniqueColumnSets(): string[][] {
-    const sets = this.columns
-      .filter((column) => column.unique)
-      .map((column) => [column.name]);
+    const sets = this.columns.filter((column) => column.unique).map((column) => [column.name]);
     if (!this.constraints.some((constraint) => constraint.type === "primary_key")) {
       const primary = this.columns.filter((column) => column.primaryKey).map((column) => column.name);
       if (primary.length > 0) sets.push(primary);
@@ -314,9 +330,8 @@ function cloneColumn(column: ColumnInfo): ColumnInfo {
   return {
     ...column,
     defaultExpr: column.defaultExpr === null ? null : cloneAst(column.defaultExpr),
-    generated: column.generated === null
-      ? null
-      : { expr: cloneAst(column.generated.expr), stored: column.generated.stored },
+    generated:
+      column.generated === null ? null : { expr: cloneAst(column.generated.expr), stored: column.generated.stored },
   };
 }
 
@@ -331,12 +346,17 @@ function isInsertRow(input: InsertRow | RowValues): input is InsertRow {
 function asRowid(value: SqlValue, column: string): Rowid {
   if (typeof value === "bigint") return canonicalRowid(value);
   if (typeof value === "number" && Number.isSafeInteger(value)) return value;
-  throw new SqliteError(`datatype mismatch for INTEGER PRIMARY KEY column: ${column}`, "datatype_mismatch", "SQLITE_MISMATCH");
+  throw new SqliteError(
+    `datatype mismatch for INTEGER PRIMARY KEY column: ${column}`,
+    "datatype_mismatch",
+    "SQLITE_MISMATCH",
+  );
 }
 
 function canonicalRowid(value: Rowid): Rowid {
   if (typeof value === "number") {
-    if (!Number.isSafeInteger(value)) throw new SqliteError("rowid must be a safe integer or bigint", "datatype_mismatch", "SQLITE_MISMATCH");
+    if (!Number.isSafeInteger(value))
+      throw new SqliteError("rowid must be a safe integer or bigint", "datatype_mismatch", "SQLITE_MISMATCH");
     return value;
   }
   if (value <= BigInt(Number.MAX_SAFE_INTEGER) && value >= BigInt(Number.MIN_SAFE_INTEGER)) return Number(value);

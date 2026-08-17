@@ -5,15 +5,7 @@ import { RealSqliteAdapter } from "../adapters/real-sqlite.ts";
 import { expectParity } from "../harness/assert.ts";
 import { deepCompareResults } from "../harness/normalize.ts";
 import type { ContractDb, QueryResult, SqlValue } from "../harness/types.ts";
-import {
-  fuzzAssertConfig,
-  fuzzSeed,
-  intArb,
-  nullArb,
-  realArb,
-  textArb,
-  valueArb,
-} from "./config.ts";
+import { fuzzAssertConfig, fuzzSeed, intArb, nullArb, realArb, textArb, valueArb } from "./config.ts";
 
 function quoteIdent(name: string): string {
   return `"${name.replaceAll('"', '""')}"`;
@@ -33,22 +25,12 @@ function sqlLiteral(value: SqlValue): string {
 function setupPeople(db: ContractDb, rows: Array<{ id: number; name: string; score: number | null }>): void {
   expect(db.exec("CREATE TABLE people(id INTEGER PRIMARY KEY, name TEXT, score REAL)").ok).toBe(true);
   for (const row of rows) {
-    const result = db.exec(`INSERT INTO people(id, name, score) VALUES (?, ?, ?)`, [
-      row.id,
-      row.name,
-      row.score,
-    ]);
+    const result = db.exec(`INSERT INTO people(id, name, score) VALUES (?, ?, ?)`, [row.id, row.name, row.score]);
     expect(result.ok, result.error?.message).toBe(true);
   }
 }
 
-function compareOrReport(
-  label: string,
-  sql: string,
-  setup: string,
-  memory: QueryResult,
-  sqlite: QueryResult,
-): void {
+function compareOrReport(label: string, sql: string, setup: string, memory: QueryResult, sqlite: QueryResult): void {
   const comparison = deepCompareResults(memory, sqlite);
   if (!comparison.equal) {
     throw new Error(
@@ -88,21 +70,24 @@ describe("differential fuzz", () => {
   test("random WHERE filters over mixed values", () => {
     fc.assert(
       fc.property(
-        fc.array(
-          fc.record({
-            id: fc.integer({ min: 1, max: 50 }),
-            name: textArb.filter((s) => s.length > 0),
-            score: fc.oneof(nullArb, realArb),
-          }),
-          { minLength: 1, maxLength: 8 },
-        ).map((rows) => {
-          const seen = new Set<number>();
-          return rows.filter((row) => {
-            if (seen.has(row.id)) return false;
-            seen.add(row.id);
-            return true;
-          });
-        }).filter((rows) => rows.length > 0),
+        fc
+          .array(
+            fc.record({
+              id: fc.integer({ min: 1, max: 50 }),
+              name: textArb.filter((s) => s.length > 0),
+              score: fc.oneof(nullArb, realArb),
+            }),
+            { minLength: 1, maxLength: 8 },
+          )
+          .map((rows) => {
+            const seen = new Set<number>();
+            return rows.filter((row) => {
+              if (seen.has(row.id)) return false;
+              seen.add(row.id);
+              return true;
+            });
+          })
+          .filter((rows) => rows.length > 0),
         fc.oneof(nullArb, intArb, realArb),
         (rows, threshold) => {
           const memory = new InMemoryAdapter();
@@ -114,13 +99,7 @@ describe("differential fuzz", () => {
               threshold === null
                 ? `SELECT id, name, score FROM people WHERE score IS NULL ORDER BY id`
                 : `SELECT id, name, score FROM people WHERE score > ${sqlLiteral(threshold)} ORDER BY id`;
-            compareOrReport(
-              "where",
-              sql,
-              JSON.stringify(rows),
-              memory.query(sql),
-              sqlite.query(sql),
-            );
+            compareOrReport("where", sql, JSON.stringify(rows), memory.query(sql), sqlite.query(sql));
           } finally {
             memory.close();
             sqlite.close();
@@ -149,13 +128,7 @@ describe("differential fuzz", () => {
             setupPeople(memory, rows);
             setupPeople(sqlite, rows);
             const sql = `SELECT id, name, score FROM people ORDER BY ${quoteIdent(orderCol)} ${dir}, id ASC`;
-            compareOrReport(
-              "order",
-              sql,
-              JSON.stringify(rows),
-              memory.query(sql),
-              sqlite.query(sql),
-            );
+            compareOrReport("order", sql, JSON.stringify(rows), memory.query(sql), sqlite.query(sql));
           } finally {
             memory.close();
             sqlite.close();
@@ -190,13 +163,7 @@ describe("differential fuzz", () => {
   });
 
   test("invalid SQL fails on both backends", () => {
-    const bad = [
-      "SELEC",
-      "SELECT FROM",
-      "INSERT INTO",
-      "CREATE TABLE (",
-      "UPDATE SET",
-    ];
+    const bad = ["SELEC", "SELECT FROM", "INSERT INTO", "CREATE TABLE (", "UPDATE SET"];
     for (const sql of bad) {
       const memory = new InMemoryAdapter();
       const sqlite = new RealSqliteAdapter();

@@ -4,7 +4,7 @@
  *
  * Run: bun run scripts/sqlite-requirements.ts
  */
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
@@ -12,11 +12,7 @@ const COMPAT = join(ROOT, "compat");
 const REQUIREMENTS_URL = "https://www.sqlite.org/requirements.html";
 
 export type RequirementClass = "NOT_APPLICABLE" | "SQL_BEHAVIOR";
-export type CoverageStatus =
-  | "VERIFIED"
-  | "PARTIALLY_VERIFIED"
-  | "UNSUPPORTED"
-  | "NOT_APPLICABLE";
+export type CoverageStatus = "VERIFIED" | "PARTIALLY_VERIFIED" | "UNSUPPORTED" | "NOT_APPLICABLE";
 
 export interface Requirement {
   id: string;
@@ -668,14 +664,16 @@ function parseRequirementsHtml(html: string): Requirement[] {
   const seen = new Set<string>();
 
   // Pattern from markdown conversion: - R-...\n- text (source: foo.html, ...)
-  const mdRe =
-    /R-(\d{5}(?:-\d{5}){7})\s*\n+\s*[-*]?\s*(.+?)\s*\(source:\s*([^,\s)]+)/gis;
+  const mdRe = /R-(\d{5}(?:-\d{5}){7})\s*\n+\s*[-*]?\s*(.+?)\s*\(source:\s*([^,\s)]+)/gis;
   let m: RegExpExecArray | null;
   while ((m = mdRe.exec(text)) !== null) {
     const id = `R-${m[1]}`;
     if (seen.has(id)) continue;
     seen.add(id);
-    const body = m[2]!.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+    const body = m[2]!
+      .replace(/<[^>]+>/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
     const source = m[3]!.trim();
     requirements.push({
       id,
@@ -687,8 +685,7 @@ function parseRequirementsHtml(html: string): Requirement[] {
 
   // HTML pattern fallback: R-... followed by text and source:
   if (requirements.length < 100) {
-    const htmlRe =
-      /R-(\d{5}(?:-\d{5}){7})[\s\S]*?(?:source:\s*|href="[^"]*")\s*([a-z0-9_./-]+\.html)/gi;
+    const _htmlRe = /R-(\d{5}(?:-\d{5}){7})[\s\S]*?(?:source:\s*|href="[^"]*")\s*([a-z0-9_./-]+\.html)/gi;
     // Broader: id then nearby source
     const blockRe =
       /(R-\d{5}(?:-\d{5}){7})[\s\S]{0,800}?source:\s*([a-z0-9_./-]+\.html)[^)]*\)?\s*([\s\S]*?)(?=R-\d{5}|$)/gi;
@@ -697,7 +694,10 @@ function parseRequirementsHtml(html: string): Requirement[] {
       if (seen.has(id)) continue;
       seen.add(id);
       const source = m[2]!.trim();
-      let body = m[3]!.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      let body = m[3]!
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
       // Often body precedes source in list format — try alternate extraction
       if (body.length < 10) body = `(see ${source})`;
       requirements.push({
@@ -725,10 +725,7 @@ function seedCoverage(requirements: Requirement[]): Record<string, CoverageEntry
     }
 
     const base = req.source.split("#")[0]!.toLowerCase();
-    const seed =
-      SOURCE_SEED[req.source] ??
-      SOURCE_SEED[base] ??
-      SOURCE_SEED[`${base}`];
+    const seed = SOURCE_SEED[req.source] ?? SOURCE_SEED[base] ?? SOURCE_SEED[`${base}`];
 
     if (seed) {
       coverage[req.id] = {
@@ -738,15 +735,17 @@ function seedCoverage(requirements: Requirement[]): Record<string, CoverageEntry
       };
     } else {
       // Default SQL_BEHAVIOR without a seed → PARTIALLY_VERIFIED if lang_*, else UNSUPPORTED until mapped
-      const status: CoverageStatus = /^(lang_|datatype|json|fts|rtree|pragma|foreign|window|nulls|rowvalue|autoinc|without|strict|gen|partial|expridx|eqp)/.test(
-        base,
-      )
-        ? "PARTIALLY_VERIFIED"
-        : "UNSUPPORTED";
+      const status: CoverageStatus =
+        /^(lang_|datatype|json|fts|rtree|pragma|foreign|window|nulls|rowvalue|autoinc|without|strict|gen|partial|expridx|eqp)/.test(
+          base,
+        )
+          ? "PARTIALLY_VERIFIED"
+          : "UNSUPPORTED";
       coverage[req.id] = {
         status,
         evidence: [],
-        notes: status === "UNSUPPORTED" ? `Unmapped SQL source: ${req.source}` : `Seeded from source bucket: ${req.source}`,
+        notes:
+          status === "UNSUPPORTED" ? `Unmapped SQL source: ${req.source}` : `Seeded from source bucket: ${req.source}`,
       };
     }
   }

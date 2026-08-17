@@ -10,9 +10,6 @@ import type {
 import { SqliteError } from "../errors/index.ts";
 import { IndexStore } from "../indexes/index.ts";
 import { affinityFromTypeName } from "../types/value.ts";
-import type { Rowid } from "./row.ts";
-import type { ColumnInfo } from "./table.ts";
-import { Table } from "./table.ts";
 import { Fts5VirtualTable } from "../vtable/fts5.ts";
 import {
   BytecodeVirtualTable,
@@ -21,6 +18,9 @@ import {
   RTreeVirtualTable,
   TablesUsedVirtualTable,
 } from "../vtable/modules.ts";
+import type { Rowid } from "./row.ts";
+import type { ColumnInfo } from "./table.ts";
+import { Table } from "./table.ts";
 
 export type AnyVirtualTable =
   | Fts5VirtualTable
@@ -228,9 +228,10 @@ export class DatabaseState {
         defaultExpr: definition.constraints.find((constraint) => constraint.type === "default")?.expr ?? null,
         unique: definition.constraints.some((constraint) => constraint.type === "unique"),
         collate: collateConstraint?.type === "collate" ? collateConstraint.name : null,
-        generated: generatedConstraint?.type === "generated"
-          ? { expr: generatedConstraint.expr, stored: generatedConstraint.stored }
-          : null,
+        generated:
+          generatedConstraint?.type === "generated"
+            ? { expr: generatedConstraint.expr, stored: generatedConstraint.stored }
+            : null,
       };
     });
 
@@ -519,7 +520,13 @@ export class DatabaseState {
 
   private assertSchemaNameAvailable(name: string): void {
     const key = keyOf(name);
-    if (this.tables.has(key) || this.views.has(key) || this.indexes.has(key) || this.virtualTables.has(key) || this.triggers.has(key)) {
+    if (
+      this.tables.has(key) ||
+      this.views.has(key) ||
+      this.indexes.has(key) ||
+      this.virtualTables.has(key) ||
+      this.triggers.has(key)
+    ) {
       throw new SqliteError(`object already exists: ${name}`, "other");
     }
   }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { InMemoryAdapter } from "../../adapters/in-memory.ts";
-import { parity, sequenceParity } from "../helpers.ts";
+import { parity } from "../helpers.ts";
 
 describe("unsupported features", () => {
   test("MATCH on non-FTS table is unsupported", () => {

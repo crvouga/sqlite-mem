@@ -29,7 +29,9 @@ function main(): void {
   const requirementsPath = join(COMPAT, "requirements.json");
   const coveragePath = join(COMPAT, "coverage.json");
   if (!existsSync(requirementsPath) || !existsSync(coveragePath)) {
-    failures.push("compat/requirements.json or compat/coverage.json missing — run bun run scripts/sqlite-requirements.ts");
+    failures.push(
+      "compat/requirements.json or compat/coverage.json missing — run bun run scripts/sqlite-requirements.ts",
+    );
   } else {
     const coverage = JSON.parse(readFileSync(coveragePath, "utf8")) as CoverageFile;
     if (coverage.counts.unknown > 0) {

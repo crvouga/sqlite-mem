@@ -32,9 +32,6 @@ const MEMORY_MODULES = [
   "json_tree",
 ];
 
-/** Oracle lists these but they are operators / context-only — still count as present if registered or operator. */
-const CONTEXT_ONLY = new Set(["match", "optimize", "fts5", "bm25", "highlight", "snippet", "matchinfo", "offsets"]);
-
 export function listMemoryFunctionNames(): Set<string> {
   return new Set([
     ...Object.keys(getScalarFunctions()),
@@ -74,13 +71,8 @@ export function buildInventoryReport() {
   const missing: string[] = [];
   const present: string[] = [];
   for (const name of [...oracleNames].sort()) {
-    if (memNames.has(name) || CONTEXT_ONLY.has(name) && memNames.has(name)) {
-      present.push(name);
-    } else if (memNames.has(name)) {
-      present.push(name);
-    } else {
-      missing.push(name);
-    }
+    if (memNames.has(name)) present.push(name);
+    else missing.push(name);
   }
   // Recompute cleanly
   const missingClean = [...oracleNames].filter((n) => !memNames.has(n)).sort();

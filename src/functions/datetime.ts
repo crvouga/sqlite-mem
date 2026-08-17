@@ -38,12 +38,24 @@ function applyModifier(date: Date, modifier: string): Date | null {
     if (!match) return null;
     const amount = Number(match[1]);
     switch (match[2]) {
-      case "second": result.setTime(result.getTime() + amount * 1000); break;
-      case "minute": result.setTime(result.getTime() + amount * 60000); break;
-      case "hour": result.setTime(result.getTime() + amount * 3600000); break;
-      case "day": result.setTime(result.getTime() + amount * 86400000); break;
-      case "month": result.setUTCMonth(result.getUTCMonth() + amount); break;
-      case "year": result.setUTCFullYear(result.getUTCFullYear() + amount); break;
+      case "second":
+        result.setTime(result.getTime() + amount * 1000);
+        break;
+      case "minute":
+        result.setTime(result.getTime() + amount * 60000);
+        break;
+      case "hour":
+        result.setTime(result.getTime() + amount * 3600000);
+        break;
+      case "day":
+        result.setTime(result.getTime() + amount * 86400000);
+        break;
+      case "month":
+        result.setUTCMonth(result.getUTCMonth() + amount);
+        break;
+      case "year":
+        result.setUTCFullYear(result.getUTCFullYear() + amount);
+        break;
     }
   }
   return result;
@@ -82,26 +94,45 @@ function isoTime(date: Date): string {
 }
 
 function dayOfYear(date: Date): number {
-  return Math.floor((Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) - Date.UTC(date.getUTCFullYear(), 0, 1)) / 86400000) + 1;
+  return (
+    Math.floor(
+      (Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) - Date.UTC(date.getUTCFullYear(), 0, 1)) /
+        86400000,
+    ) + 1
+  );
 }
 
 function formatDate(date: Date, format: string): string {
   return format.replace(/%[%YmdHMSfjswWJ]/g, (code) => {
     switch (code) {
-      case "%%": return "%";
-      case "%Y": return pad(date.getUTCFullYear(), 4);
-      case "%m": return pad(date.getUTCMonth() + 1);
-      case "%d": return pad(date.getUTCDate());
-      case "%H": return pad(date.getUTCHours());
-      case "%M": return pad(date.getUTCMinutes());
-      case "%S": return pad(date.getUTCSeconds());
-      case "%f": return `${pad(date.getUTCSeconds())}.${pad(date.getUTCMilliseconds(), 3)}`;
-      case "%j": return pad(dayOfYear(date), 3);
-      case "%s": return String(Math.floor(date.getTime() / 1000));
-      case "%w": return String(date.getUTCDay());
-      case "%W": return pad(Math.floor((dayOfYear(date) - 1 + 7 - date.getUTCDay()) / 7));
-      case "%J": return String(date.getTime() / 86400000 + JULIAN_UNIX_EPOCH);
-      default: return code;
+      case "%%":
+        return "%";
+      case "%Y":
+        return pad(date.getUTCFullYear(), 4);
+      case "%m":
+        return pad(date.getUTCMonth() + 1);
+      case "%d":
+        return pad(date.getUTCDate());
+      case "%H":
+        return pad(date.getUTCHours());
+      case "%M":
+        return pad(date.getUTCMinutes());
+      case "%S":
+        return pad(date.getUTCSeconds());
+      case "%f":
+        return `${pad(date.getUTCSeconds())}.${pad(date.getUTCMilliseconds(), 3)}`;
+      case "%j":
+        return pad(dayOfYear(date), 3);
+      case "%s":
+        return String(Math.floor(date.getTime() / 1000));
+      case "%w":
+        return String(date.getUTCDay());
+      case "%W":
+        return pad(Math.floor((dayOfYear(date) - 1 + 7 - date.getUTCDay()) / 7));
+      case "%J":
+        return String(date.getTime() / 86400000 + JULIAN_UNIX_EPOCH);
+      default:
+        return code;
     }
   });
 }

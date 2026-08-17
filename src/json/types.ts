@@ -10,15 +10,7 @@ export type JsonNode =
   | { kind: "array"; elements: JsonNode[] }
   | { kind: "object"; entries: Array<{ key: string; value: JsonNode }> };
 
-export type JsonTypeName =
-  | "null"
-  | "true"
-  | "false"
-  | "integer"
-  | "real"
-  | "text"
-  | "array"
-  | "object";
+export type JsonTypeName = "null" | "true" | "false" | "integer" | "real" | "text" | "array" | "object";
 
 export function jsonTypeName(node: JsonNode): JsonTypeName {
   switch (node.kind) {

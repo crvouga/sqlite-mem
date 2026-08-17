@@ -1,6 +1,6 @@
 import { SqliteError } from "../errors/index.ts";
-import type { SqlValue } from "../types/value.ts";
 import type { Rowid } from "../storage/row.ts";
+import type { SqlValue } from "../types/value.ts";
 
 export interface RTreeRow {
   id: number | bigint;
@@ -22,12 +22,7 @@ export class RTreeVirtualTable {
   /** Shadow node table content for rtreenode/rtreedepth. */
   readonly nodes = new Map<number, Uint8Array>();
 
-  constructor(
-    name: string,
-    columns: string[],
-    integerCoords = false,
-    originalSql: string | null = null,
-  ) {
+  constructor(name: string, columns: string[], integerCoords = false, originalSql: string | null = null) {
     if (columns.length < 3 || columns.length % 2 === 0) {
       throw new SqliteError("rtree tables must have an odd number of columns >= 3", "other");
     }

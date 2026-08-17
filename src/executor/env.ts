@@ -6,7 +6,7 @@ import type { DatabaseState } from "../storage/database-state.ts";
 import type { Rowid } from "../storage/row.ts";
 import type { TransactionManager } from "../transactions/manager.ts";
 import type { SqlValue } from "../types/value.ts";
-import { canonicalizeNumber, storageClassOf, type Affinity } from "../types/value.ts";
+import { type Affinity, canonicalizeNumber, storageClassOf } from "../types/value.ts";
 import type { ResultSet } from "./result.ts";
 
 export interface Cell {
@@ -95,35 +95,38 @@ export class ExecutionEnv {
         if (tableMatches && (key === "rowid" || key === "_rowid_" || key === "oid") && scope?.rowid !== undefined) {
           return scope.rowid;
         }
-        const matches = cells.filter((cell) =>
-          cell.name.toLowerCase() === key &&
-          (table !== null || !cell.hiddenByUsing) &&
-          (table === null || cell.table?.toLowerCase() === table.toLowerCase()),
+        const matches = cells.filter(
+          (cell) =>
+            cell.name.toLowerCase() === key &&
+            (table !== null || !cell.hiddenByUsing) &&
+            (table === null || cell.table?.toLowerCase() === table.toLowerCase()),
         );
-        if (matches.length === 0) throw new SqliteError(`no such column: ${table ? `${table}.` : ""}${name}`, "no_such_column");
+        if (matches.length === 0)
+          throw new SqliteError(`no such column: ${table ? `${table}.` : ""}${name}`, "no_such_column");
         if (matches.length > 1 && table === null) throw new SqliteError(`ambiguous column name: ${name}`, "other");
         return matches[0]!.value;
       },
       resolveStorageClass: (table, name) => {
         const key = name.toLowerCase();
-        const matches = cells.filter((cell) =>
-          cell.name.toLowerCase() === key &&
-          (table !== null || !cell.hiddenByUsing) &&
-          (table === null || cell.table?.toLowerCase() === table.toLowerCase()),
+        const matches = cells.filter(
+          (cell) =>
+            cell.name.toLowerCase() === key &&
+            (table !== null || !cell.hiddenByUsing) &&
+            (table === null || cell.table?.toLowerCase() === table.toLowerCase()),
         );
-        if (matches.length === 0) throw new SqliteError(`no such column: ${table ? `${table}.` : ""}${name}`, "no_such_column");
+        if (matches.length === 0)
+          throw new SqliteError(`no such column: ${table ? `${table}.` : ""}${name}`, "no_such_column");
         if (matches.length > 1 && table === null) throw new SqliteError(`ambiguous column name: ${name}`, "other");
         const cell = matches[0]!;
-        return cell.affinity === "REAL" && typeof cell.value === "number"
-          ? "real"
-          : storageClassOf(cell.value);
+        return cell.affinity === "REAL" && typeof cell.value === "number" ? "real" : storageClassOf(cell.value);
       },
       resolveCollation: (table, name) => {
         const key = name.toLowerCase();
-        const matches = cells.filter((cell) =>
-          cell.name.toLowerCase() === key &&
-          (table !== null || !cell.hiddenByUsing) &&
-          (table === null || cell.table?.toLowerCase() === table.toLowerCase()),
+        const matches = cells.filter(
+          (cell) =>
+            cell.name.toLowerCase() === key &&
+            (table !== null || !cell.hiddenByUsing) &&
+            (table === null || cell.table?.toLowerCase() === table.toLowerCase()),
         );
         if (matches.length === 0) return null;
         if (matches.length > 1 && table === null) return null;
@@ -131,7 +134,8 @@ export class ExecutionEnv {
       },
       getParameter: (name) => {
         if (typeof name === "number") {
-          if (name < 1 || name > this.positional.length) throw new SqliteError(`binding parameter ${name} is not supplied`, "misuse");
+          if (name < 1 || name > this.positional.length)
+            throw new SqliteError(`binding parameter ${name} is not supplied`, "misuse");
           return this.positional[name - 1]!;
         }
         const value = this.named.get(name.toLowerCase());
@@ -145,8 +149,9 @@ export class ExecutionEnv {
         const result = this.selectRunner(select, this, context);
         return {
           columns: result.columns,
-          rows: result.values?.map((row) => [...row])
-            ?? result.rows.map((record) => result.columns.map((column) => record[column] ?? null)),
+          rows:
+            result.values?.map((row) => [...row]) ??
+            result.rows.map((record) => result.columns.map((column) => record[column] ?? null)),
         };
       },
       matchFts: (table, column, query) => {

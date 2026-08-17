@@ -44,9 +44,7 @@ export const realArb = fc
   .filter((n) => !Number.isInteger(n));
 
 export const intArb = fc.integer({ min: -1000, max: 1000 });
-export const textArb = fc
-  .string({ maxLength: 24 })
-  .filter((s) => !s.includes("\0") && !s.includes("\uFFFD"));
+export const textArb = fc.string({ maxLength: 24 }).filter((s) => !s.includes("\0") && !s.includes("\uFFFD"));
 export const nullArb = fc.constant(null);
 
 export type FuzzSqlValue = null | number | string;

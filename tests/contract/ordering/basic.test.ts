@@ -1,6 +1,9 @@
 import { parity } from "../helpers.ts";
 
-const data = ["CREATE TABLE t(id INTEGER,v INTEGER,name TEXT)", "INSERT INTO t VALUES (1,2,'b'),(2,NULL,'z'),(3,1,'c'),(4,2,'a')"];
+const data = [
+  "CREATE TABLE t(id INTEGER,v INTEGER,name TEXT)",
+  "INSERT INTO t VALUES (1,2,'b'),(2,NULL,'z'),(3,1,'c'),(4,2,'a')",
+];
 
 parity("ORDER BY ASC places NULL first by default", data, "SELECT id,v FROM t ORDER BY v ASC,id");
 parity("ORDER BY DESC places NULL last by default", data, "SELECT id,v FROM t ORDER BY v DESC,id");

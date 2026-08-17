@@ -1,6 +1,6 @@
 import { SqliteError } from "../errors/index.ts";
-import { isSqlJsonText, isSqlReal, type SqlValue } from "../types/value.ts";
 import type { Rowid } from "../storage/row.ts";
+import { isSqlJsonText, isSqlReal, type SqlValue } from "../types/value.ts";
 
 export class IndexStore {
   readonly name: string;
@@ -82,7 +82,5 @@ function serializeValue(value: Exclude<SqlValue, null>): string {
 }
 
 function sameRowid(left: Rowid, right: Rowid): boolean {
-  return typeof left === "bigint" || typeof right === "bigint"
-    ? BigInt(left) === BigInt(right)
-    : left === right;
+  return typeof left === "bigint" || typeof right === "bigint" ? BigInt(left) === BigInt(right) : left === right;
 }

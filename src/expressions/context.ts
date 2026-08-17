@@ -1,7 +1,6 @@
 import type { SelectStmt } from "../ast/nodes.ts";
 import type { FunctionContext, FunctionRegistry } from "../functions/registry.ts";
-import type { SqlValue } from "../types/value.ts";
-import type { StorageClass } from "../types/value.ts";
+import type { SqlValue, StorageClass } from "../types/value.ts";
 
 export interface EvalContext {
   resolveColumn(table: string | null, name: string): SqlValue;

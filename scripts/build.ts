@@ -1,5 +1,5 @@
-import { $ } from "bun";
 import { mkdir, rm } from "node:fs/promises";
+import { $ } from "bun";
 
 await rm("dist", { recursive: true, force: true });
 await mkdir("dist", { recursive: true });

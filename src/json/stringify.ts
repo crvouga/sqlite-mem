@@ -21,13 +21,13 @@ export function stringifyJson(node: JsonNode): string {
 }
 
 export function jsonQuoteString(value: string): string {
-  let out = "\"";
+  let out = '"';
   for (let i = 0; i < value.length; i++) {
     const ch = value[i]!;
     const code = ch.charCodeAt(0);
     switch (ch) {
-      case "\"":
-        out += "\\\"";
+      case '"':
+        out += '\\"';
         break;
       case "\\":
         out += "\\\\";

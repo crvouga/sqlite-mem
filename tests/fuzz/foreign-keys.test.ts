@@ -31,13 +31,7 @@ describe("foreign key differential fuzz", () => {
                   : op.kind === "delete_parent"
                     ? `DELETE FROM parent WHERE id = ${op.id}`
                     : `DELETE FROM child WHERE id = ${op.id}`;
-            compareOutcomeOrReport(
-              `fk-${op.kind}`,
-              sql,
-              { operations, index },
-              memory.exec(sql),
-              sqlite.exec(sql),
-            );
+            compareOutcomeOrReport(`fk-${op.kind}`, sql, { operations, index }, memory.exec(sql), sqlite.exec(sql));
           }
 
           const parents = "SELECT id FROM parent ORDER BY id";

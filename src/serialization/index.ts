@@ -1,6 +1,6 @@
 export {
+  type DecodedSnapshot,
   decodeDatabaseState,
   encodeDatabaseState,
-  type DecodedSnapshot,
   type SnapshotRuntime,
 } from "./codec.ts";

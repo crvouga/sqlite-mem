@@ -1,8 +1,8 @@
 import type { SqlValue } from "../types/value.ts";
-import { encodeJsonb, walkJsonbTree, type JsonbWalkEntry } from "./jsonb.ts";
-import { ensureJson, extractOne, jsonNodeToSql } from "./ops.ts";
+import { encodeJsonb, type JsonbWalkEntry, walkJsonbTree } from "./jsonb.ts";
+import { ensureJson, jsonNodeToSql } from "./ops.ts";
 import { stringifyJson } from "./stringify.ts";
-import { jsonTypeName, type JsonNode } from "./types.ts";
+import { type JsonNode, jsonTypeName } from "./types.ts";
 
 export interface JsonTvfRow {
   key: SqlValue;
@@ -67,9 +67,7 @@ export function jsonEachRows(json: SqlValue, path?: SqlValue): JsonTvfRow[] {
     ];
   }
 
-  return walk
-    .filter((e) => e.parent === focus.idOffset)
-    .map((e) => rowFromWalk(e, true));
+  return walk.filter((e) => e.parent === focus.idOffset).map((e) => rowFromWalk(e, true));
 }
 
 export function jsonTreeRows(json: SqlValue, path?: SqlValue): JsonTvfRow[] {

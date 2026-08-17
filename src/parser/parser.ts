@@ -1,5 +1,3 @@
-import type { Token, TokenKind } from "../lexer/tokenize.ts";
-import { SqliteError, unsupported } from "../errors/index.ts";
 import type {
   AlterTableStmt,
   AttachStmt,
@@ -16,18 +14,18 @@ import type {
   CreateTriggerStmt,
   CreateViewStmt,
   CreateVirtualTableStmt,
-  DropTriggerStmt,
   Cte,
   DeleteStmt,
   DetachStmt,
   DropIndexStmt,
   DropTableStmt,
+  DropTriggerStmt,
   DropViewStmt,
   Expr,
+  FkAction,
   FrameBound,
   FrameSpec,
   FromItem,
-  FkAction,
   IndexedColumn,
   InExpr,
   InsertStmt,
@@ -50,30 +48,172 @@ import type {
   WindowSpec,
   WithClause,
 } from "../ast/nodes.ts";
+import { SqliteError } from "../errors/index.ts";
+import type { Token, TokenKind } from "../lexer/tokenize.ts";
 
 /** Keywords that may appear as identifiers via {@link Parser.parseIdent}. */
 const IDENT_KEYWORDS: ReadonlySet<TokenKind> = new Set<TokenKind>([
-  "ABORT", "ACTION", "ADD", "AFTER", "ALL", "ALTER", "ANALYZE", "AND", "AS", "ASC", "ATTACH",
-  "AUTOINCREMENT", "BEFORE", "BEGIN", "BETWEEN", "BY", "CASCADE", "CASE", "CAST", "CHECK",
-  "COLLATE", "COLUMN", "COMMIT", "CONFLICT", "CONSTRAINT", "CREATE", "CROSS", "CURRENT",
-  "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP", "DATABASE", "DEFAULT", "DEFERRABLE",
-  "DEFERRED", "DELETE", "DESC", "DETACH", "DISTINCT", "DO", "DROP", "EACH", "ELSE", "END",
-  "ESCAPE", "EXCEPT", "EXCLUDE", "EXCLUSIVE", "EXISTS", "EXPLAIN", "FAIL", "FILTER", "FIRST",
-  "FOLLOWING", "FOR", "FOREIGN", "FROM", "FULL", "GENERATED", "GLOB", "GROUP", "GROUPS",
-  "HAVING", "IF", "IGNORE", "IMMEDIATE", "IN", "INDEX", "INDEXED", "INITIALLY", "INNER",
-  "INSERT", "INSTEAD", "INTERSECT", "INTO", "IS", "ISNULL", "JOIN", "KEY", "LAST", "LEFT",
-  "LIKE", "LIMIT", "MATCH", "MATERIALIZED", "NATURAL", "NO", "NOT", "NOTHING", "NOTNULL",
-  "NULL", "NULLS", "OF", "OFFSET", "ON", "OR", "ORDER", "OTHERS", "OUTER", "OVER", "PARTITION",
-  "PLAN", "PRAGMA", "PRECEDING", "PRIMARY", "QUERY", "RAISE", "RANGE", "RECURSIVE", "REFERENCES",
-  "REGEXP", "REINDEX", "RELEASE", "RENAME", "REPLACE", "RESTRICT", "RETURNING", "RIGHT",
-  "ROLLBACK", "ROW", "ROWS", "SAVEPOINT", "SELECT", "SET", "TABLE", "TEMP", "TEMPORARY",
-  "THEN", "TIES", "TO", "TRANSACTION", "TRIGGER", "UNBOUNDED", "UNION", "UNIQUE", "UPDATE",
-  "USING", "VACUUM", "VALUES", "VIEW", "VIRTUAL", "WHEN", "WHERE", "WINDOW", "WITH", "WITHOUT",
+  "ABORT",
+  "ACTION",
+  "ADD",
+  "AFTER",
+  "ALL",
+  "ALTER",
+  "ANALYZE",
+  "AND",
+  "AS",
+  "ASC",
+  "ATTACH",
+  "AUTOINCREMENT",
+  "BEFORE",
+  "BEGIN",
+  "BETWEEN",
+  "BY",
+  "CASCADE",
+  "CASE",
+  "CAST",
+  "CHECK",
+  "COLLATE",
+  "COLUMN",
+  "COMMIT",
+  "CONFLICT",
+  "CONSTRAINT",
+  "CREATE",
+  "CROSS",
+  "CURRENT",
+  "CURRENT_DATE",
+  "CURRENT_TIME",
+  "CURRENT_TIMESTAMP",
+  "DATABASE",
+  "DEFAULT",
+  "DEFERRABLE",
+  "DEFERRED",
+  "DELETE",
+  "DESC",
+  "DETACH",
+  "DISTINCT",
+  "DO",
+  "DROP",
+  "EACH",
+  "ELSE",
+  "END",
+  "ESCAPE",
+  "EXCEPT",
+  "EXCLUDE",
+  "EXCLUSIVE",
+  "EXISTS",
+  "EXPLAIN",
+  "FAIL",
+  "FILTER",
+  "FIRST",
+  "FOLLOWING",
+  "FOR",
+  "FOREIGN",
+  "FROM",
+  "FULL",
+  "GENERATED",
+  "GLOB",
+  "GROUP",
+  "GROUPS",
+  "HAVING",
+  "IF",
+  "IGNORE",
+  "IMMEDIATE",
+  "IN",
+  "INDEX",
+  "INDEXED",
+  "INITIALLY",
+  "INNER",
+  "INSERT",
+  "INSTEAD",
+  "INTERSECT",
+  "INTO",
+  "IS",
+  "ISNULL",
+  "JOIN",
+  "KEY",
+  "LAST",
+  "LEFT",
+  "LIKE",
+  "LIMIT",
+  "MATCH",
+  "MATERIALIZED",
+  "NATURAL",
+  "NO",
+  "NOT",
+  "NOTHING",
+  "NOTNULL",
+  "NULL",
+  "NULLS",
+  "OF",
+  "OFFSET",
+  "ON",
+  "OR",
+  "ORDER",
+  "OTHERS",
+  "OUTER",
+  "OVER",
+  "PARTITION",
+  "PLAN",
+  "PRAGMA",
+  "PRECEDING",
+  "PRIMARY",
+  "QUERY",
+  "RAISE",
+  "RANGE",
+  "RECURSIVE",
+  "REFERENCES",
+  "REGEXP",
+  "REINDEX",
+  "RELEASE",
+  "RENAME",
+  "REPLACE",
+  "RESTRICT",
+  "RETURNING",
+  "RIGHT",
+  "ROLLBACK",
+  "ROW",
+  "ROWS",
+  "SAVEPOINT",
+  "SELECT",
+  "SET",
+  "TABLE",
+  "TEMP",
+  "TEMPORARY",
+  "THEN",
+  "TIES",
+  "TO",
+  "TRANSACTION",
+  "TRIGGER",
+  "UNBOUNDED",
+  "UNION",
+  "UNIQUE",
+  "UPDATE",
+  "USING",
+  "VACUUM",
+  "VALUES",
+  "VIEW",
+  "VIRTUAL",
+  "WHEN",
+  "WHERE",
+  "WINDOW",
+  "WITH",
+  "WITHOUT",
 ]);
 
 const AGGREGATE_FUNCTIONS = new Set([
-  "AVG", "COUNT", "GROUP_CONCAT", "STRING_AGG", "MAX", "MIN", "SUM", "TOTAL",
-  "JSON_GROUP_ARRAY", "JSON_GROUP_OBJECT", "JSONB_GROUP_ARRAY", "JSONB_GROUP_OBJECT",
+  "AVG",
+  "COUNT",
+  "GROUP_CONCAT",
+  "STRING_AGG",
+  "MAX",
+  "MIN",
+  "SUM",
+  "TOTAL",
+  "JSON_GROUP_ARRAY",
+  "JSON_GROUP_OBJECT",
+  "JSONB_GROUP_ARRAY",
+  "JSONB_GROUP_OBJECT",
 ]);
 
 /** SQLite binary operator precedence (higher binds tighter). */
@@ -322,7 +462,7 @@ export class Parser {
     this.match("ALL");
 
     if (this.at("FROM")) {
-      throw new SqliteError("near \"FROM\": syntax error", "syntax");
+      throw new SqliteError('near "FROM": syntax error', "syntax");
     }
     const columns = this.parseResultColumns();
     let from: FromItem | null = null;
@@ -422,7 +562,10 @@ export class Parser {
           const expr = this.parseExpr();
           let alias: string | null = null;
           if (this.match("AS")) alias = this.parseIdent();
-          else if (this.current().kind === "IDENT" || (IDENT_KEYWORDS.has(this.current().kind) && !this.isSelectClauseStart())) {
+          else if (
+            this.current().kind === "IDENT" ||
+            (IDENT_KEYWORDS.has(this.current().kind) && !this.isSelectClauseStart())
+          ) {
             alias = this.parseIdent();
           }
           cols.push({ type: "expr", expr, alias });
@@ -431,7 +574,10 @@ export class Parser {
         const expr = this.parseExpr();
         let alias: string | null = null;
         if (this.match("AS")) alias = this.parseIdent();
-        else if (this.current().kind === "IDENT" || (IDENT_KEYWORDS.has(this.current().kind) && !this.isSelectClauseStart())) {
+        else if (
+          this.current().kind === "IDENT" ||
+          (IDENT_KEYWORDS.has(this.current().kind) && !this.isSelectClauseStart())
+        ) {
           alias = this.parseIdent();
         }
         cols.push({ type: "expr", expr, alias });
@@ -442,8 +588,20 @@ export class Parser {
 
   private isSelectClauseStart(): boolean {
     return this.check(
-      "FROM", "WHERE", "GROUP", "HAVING", "WINDOW", "ORDER", "LIMIT",
-      "UNION", "INTERSECT", "EXCEPT", "COMMA", "SEMI", "EOF", "RPAREN",
+      "FROM",
+      "WHERE",
+      "GROUP",
+      "HAVING",
+      "WINDOW",
+      "ORDER",
+      "LIMIT",
+      "UNION",
+      "INTERSECT",
+      "EXCEPT",
+      "COMMA",
+      "SEMI",
+      "EOF",
+      "RPAREN",
     );
   }
 
@@ -490,7 +648,7 @@ export class Parser {
   }
 
   private parseJoinOp(): { type: JoinFrom["joinType"]; natural: boolean } | null {
-    let natural = this.match("NATURAL");
+    const natural = this.match("NATURAL");
     if (this.match("CROSS")) {
       this.expect("JOIN");
       return { type: "CROSS", natural: false };
@@ -513,11 +671,9 @@ export class Parser {
   private parseFromPrimary(): FromItem {
     if (this.match("LPAREN")) {
       if (this.at("SELECT") || this.at("WITH") || this.at("VALUES")) {
-        const select = this.at("SELECT") || this.at("WITH")
-          ? this.parseSelectStmt()
-          : this.parseValuesAsSelect();
+        const select = this.at("SELECT") || this.at("WITH") ? this.parseSelectStmt() : this.parseValuesAsSelect();
         this.expect("RPAREN");
-        const alias = this.optionalAlias() ?? this.syntaxError("subquery in FROM requires an alias") as never;
+        const alias = this.optionalAlias() ?? (this.syntaxError("subquery in FROM requires an alias") as never);
         return { type: "subquery", select, alias };
       }
       const item = this.parseFromItem();
@@ -831,11 +987,16 @@ export class Parser {
   private mapUpdateOr(action: ConflictAction | null): UpdateStmt["or"] {
     if (!action) return null;
     switch (action) {
-      case "ROLLBACK": return "rollback";
-      case "ABORT": return "abort";
-      case "FAIL": return "fail";
-      case "IGNORE": return "ignore";
-      case "REPLACE": return "replace";
+      case "ROLLBACK":
+        return "rollback";
+      case "ABORT":
+        return "abort";
+      case "FAIL":
+        return "fail";
+      case "IGNORE":
+        return "ignore";
+      case "REPLACE":
+        return "replace";
     }
   }
 
@@ -881,14 +1042,20 @@ export class Parser {
   private parseColumnDef(): ColumnDef {
     const name = this.parseIdent();
     let typeName: string | null = null;
-    if (
-      this.current().kind === "IDENT" ||
-      IDENT_KEYWORDS.has(this.current().kind)
-    ) {
-      if (!this.at("CONSTRAINT") && !this.at("PRIMARY") && !this.at("NOT") &&
-          !this.at("UNIQUE") && !this.at("CHECK") && !this.at("DEFAULT") &&
-          !this.at("REFERENCES") && !this.at("COLLATE") && !this.at("GENERATED") &&
-          !this.at("COMMA") && !this.at("RPAREN")) {
+    if (this.current().kind === "IDENT" || IDENT_KEYWORDS.has(this.current().kind)) {
+      if (
+        !this.at("CONSTRAINT") &&
+        !this.at("PRIMARY") &&
+        !this.at("NOT") &&
+        !this.at("UNIQUE") &&
+        !this.at("CHECK") &&
+        !this.at("DEFAULT") &&
+        !this.at("REFERENCES") &&
+        !this.at("COLLATE") &&
+        !this.at("GENERATED") &&
+        !this.at("COMMA") &&
+        !this.at("RPAREN")
+      ) {
         typeName = this.parseTypeName();
       }
     }
@@ -921,8 +1088,15 @@ export class Parser {
 
   private isColumnConstraintStart(): boolean {
     return this.check(
-      "CONSTRAINT", "PRIMARY", "NOT", "UNIQUE", "CHECK", "DEFAULT",
-      "COLLATE", "REFERENCES", "GENERATED",
+      "CONSTRAINT",
+      "PRIMARY",
+      "NOT",
+      "UNIQUE",
+      "CHECK",
+      "DEFAULT",
+      "COLLATE",
+      "REFERENCES",
+      "GENERATED",
     );
   }
 
@@ -930,8 +1104,14 @@ export class Parser {
     this.match("CONSTRAINT");
     if (this.current().kind === "IDENT" || IDENT_KEYWORDS.has(this.current().kind)) {
       const next = this.peek();
-      if (next.kind === "PRIMARY" || next.kind === "UNIQUE" || next.kind === "CHECK" ||
-          next.kind === "DEFAULT" || next.kind === "NOT" || next.kind === "REFERENCES") {
+      if (
+        next.kind === "PRIMARY" ||
+        next.kind === "UNIQUE" ||
+        next.kind === "CHECK" ||
+        next.kind === "DEFAULT" ||
+        next.kind === "NOT" ||
+        next.kind === "REFERENCES"
+      ) {
         this.parseIdent(); // constraint name, discarded for column level
       }
     }
@@ -1456,28 +1636,50 @@ export class Parser {
   private peekBinaryOp(): { op: BinaryOp; prec: number } | null {
     const t = this.current();
     switch (t.kind) {
-      case "OR": return { op: "OR", prec: PREC.OR };
-      case "AND": return { op: "AND", prec: PREC.AND };
-      case "CONCAT": return { op: "||", prec: PREC.CONCAT };
-      case "JSON_ARROW": return { op: "->", prec: PREC.JSON_ARROW };
-      case "JSON_ARROW2": return { op: "->>", prec: PREC.JSON_ARROW };
-      case "PLUS": return { op: "+", prec: PREC.ADD };
-      case "MINUS": return { op: "-", prec: PREC.ADD };
-      case "STAR": return { op: "*", prec: PREC.MUL };
-      case "SLASH": return { op: "/", prec: PREC.MUL };
-      case "PERCENT": return { op: "%", prec: PREC.MUL };
-      case "LT": return { op: "<", prec: PREC.COMPARE };
-      case "LE": return { op: "<=", prec: PREC.COMPARE };
-      case "GT": return { op: ">", prec: PREC.COMPARE };
-      case "GE": return { op: ">=", prec: PREC.COMPARE };
-      case "EQ": return { op: "=", prec: PREC.COMPARE };
-      case "EQEQ": return { op: "==", prec: PREC.COMPARE };
-      case "NE": return { op: t.value as "<>" | "!=", prec: PREC.COMPARE };
-      case "AMP": return { op: "&", prec: PREC.BIT_AND };
-      case "PIPE": return { op: "|", prec: PREC.BIT_OR };
-      case "LSHIFT": return { op: "<<", prec: PREC.SHIFT };
-      case "RSHIFT": return { op: ">>", prec: PREC.SHIFT };
-      default: return null;
+      case "OR":
+        return { op: "OR", prec: PREC.OR };
+      case "AND":
+        return { op: "AND", prec: PREC.AND };
+      case "CONCAT":
+        return { op: "||", prec: PREC.CONCAT };
+      case "JSON_ARROW":
+        return { op: "->", prec: PREC.JSON_ARROW };
+      case "JSON_ARROW2":
+        return { op: "->>", prec: PREC.JSON_ARROW };
+      case "PLUS":
+        return { op: "+", prec: PREC.ADD };
+      case "MINUS":
+        return { op: "-", prec: PREC.ADD };
+      case "STAR":
+        return { op: "*", prec: PREC.MUL };
+      case "SLASH":
+        return { op: "/", prec: PREC.MUL };
+      case "PERCENT":
+        return { op: "%", prec: PREC.MUL };
+      case "LT":
+        return { op: "<", prec: PREC.COMPARE };
+      case "LE":
+        return { op: "<=", prec: PREC.COMPARE };
+      case "GT":
+        return { op: ">", prec: PREC.COMPARE };
+      case "GE":
+        return { op: ">=", prec: PREC.COMPARE };
+      case "EQ":
+        return { op: "=", prec: PREC.COMPARE };
+      case "EQEQ":
+        return { op: "==", prec: PREC.COMPARE };
+      case "NE":
+        return { op: t.value as "<>" | "!=", prec: PREC.COMPARE };
+      case "AMP":
+        return { op: "&", prec: PREC.BIT_AND };
+      case "PIPE":
+        return { op: "|", prec: PREC.BIT_OR };
+      case "LSHIFT":
+        return { op: "<<", prec: PREC.SHIFT };
+      case "RSHIFT":
+        return { op: ">>", prec: PREC.SHIFT };
+      default:
+        return null;
     }
   }
 
@@ -1682,8 +1884,7 @@ export class Parser {
     const upper = name.toUpperCase();
     const argCount = args === "*" ? 1 : args.length;
     // min()/max() with 2+ args are scalar; single-arg (or *) forms are aggregates.
-    const isAgg = AGGREGATE_FUNCTIONS.has(upper) &&
-      !(argCount >= 2 && (upper === "MIN" || upper === "MAX"));
+    const isAgg = AGGREGATE_FUNCTIONS.has(upper) && !(argCount >= 2 && (upper === "MIN" || upper === "MAX"));
 
     if (this.match("OVER")) {
       let window: WindowSpec;

@@ -1,6 +1,6 @@
 import { Database, SqliteError, type Statement } from "../../src/index.ts";
-import { normalizeError } from "../harness/normalize.ts";
 import { okResult } from "../harness/assert.ts";
+import { normalizeError } from "../harness/normalize.ts";
 import type { ContractDb, ContractStatement, QueryResult, SqlValue } from "../harness/types.ts";
 
 function mapSqliteError(error: unknown): QueryResult {
@@ -26,7 +26,7 @@ function mapSqliteError(error: unknown): QueryResult {
   };
 }
 
-function rowsFromRecords(rows: Record<string, SqlValue>[]): { columns: string[]; rows: Record<string, SqlValue>[] } {
+function _rowsFromRecords(rows: Record<string, SqlValue>[]): { columns: string[]; rows: Record<string, SqlValue>[] } {
   if (rows.length === 0) {
     return { columns: [], rows: [] };
   }

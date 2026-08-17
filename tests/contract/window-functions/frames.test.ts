@@ -25,9 +25,6 @@ parity(
 
 parity(
   "ordered aggregate window uses SQLite default peer frame",
-  [
-    "CREATE TABLE values_table(id INTEGER, value INTEGER)",
-    "INSERT INTO values_table VALUES (1,10),(2,10),(3,20)",
-  ],
+  ["CREATE TABLE values_table(id INTEGER, value INTEGER)", "INSERT INTO values_table VALUES (1,10),(2,10),(3,20)"],
   "SELECT id,value,sum(value) OVER (ORDER BY value) running FROM values_table ORDER BY id",
 );

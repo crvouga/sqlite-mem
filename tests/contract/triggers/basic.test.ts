@@ -25,12 +25,13 @@ parity(
   "SELECT msg FROM log ORDER BY id",
 );
 
-sequenceParity("DROP TRIGGER removes trigger from schema", [
-  ...schema,
-  "CREATE TRIGGER items_log AFTER INSERT ON items BEGIN INSERT INTO log(msg) VALUES ('x'); END",
-], [
-  { sql: "DROP TRIGGER items_log" },
-  { sql: "SELECT name FROM sqlite_master WHERE type='trigger' AND name='items_log'", query: true },
-  { sql: "INSERT INTO items(name) VALUES ('after_drop')" },
-  { sql: "SELECT COUNT(*) AS c FROM log", query: true },
-]);
+sequenceParity(
+  "DROP TRIGGER removes trigger from schema",
+  [...schema, "CREATE TRIGGER items_log AFTER INSERT ON items BEGIN INSERT INTO log(msg) VALUES ('x'); END"],
+  [
+    { sql: "DROP TRIGGER items_log" },
+    { sql: "SELECT name FROM sqlite_master WHERE type='trigger' AND name='items_log'", query: true },
+    { sql: "INSERT INTO items(name) VALUES ('after_drop')" },
+    { sql: "SELECT COUNT(*) AS c FROM log", query: true },
+  ],
+);

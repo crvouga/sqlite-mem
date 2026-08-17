@@ -3,7 +3,7 @@ import { SqliteError } from "../errors/index.ts";
 import { evalExpr } from "../expressions/eval.ts";
 import { isTruthySql, type SqlValue } from "../types/value.ts";
 import type { ExecutionEnv } from "./env.ts";
-import { emptyResult, valuesToResult, type ResultSet } from "./result.ts";
+import { emptyResult, type ResultSet, valuesToResult } from "./result.ts";
 
 export function executePragma(name: string, expr: Expr | null, env: ExecutionEnv): ResultSet {
   const key = name.toLowerCase();
@@ -67,7 +67,8 @@ function pragmaTableInfo(expr: Expr | null, env: ExecutionEnv, xinfo: boolean): 
 }
 
 function defaultLiteral(expr: Expr): SqlValue {
-  if (expr.type === "literal") return typeof expr.value === "string" ? `'${expr.value.replace(/'/g, "''")}'` : expr.value;
+  if (expr.type === "literal")
+    return typeof expr.value === "string" ? `'${expr.value.replace(/'/g, "''")}'` : expr.value;
   if (expr.type === "null") return "NULL";
   return null;
 }
@@ -106,9 +107,13 @@ function pragmaForeignKeyList(expr: Expr | null, env: ExecutionEnv): ResultSet {
   let id = 0;
   for (const constraint of table.constraints) {
     if (constraint.type !== "foreign_key") continue;
-    const refColumns = constraint.refColumns
-      ?? env.state.tables.get(constraint.refTable.toLowerCase())?.columns.filter((c) => c.primaryKey).map((c) => c.name)
-      ?? [];
+    const refColumns =
+      constraint.refColumns ??
+      env.state.tables
+        .get(constraint.refTable.toLowerCase())
+        ?.columns.filter((c) => c.primaryKey)
+        .map((c) => c.name) ??
+      [];
     constraint.columns.forEach((column, seq) => {
       rows.push([
         id,
@@ -151,9 +156,14 @@ function pragmaIntVersion(
     return valuesToResult([label], [[env.state[field]]], 0, env.state.lastInsertRowid);
   }
   const value = pragmaValue(expr, env);
-  const num = typeof value === "number" ? Math.trunc(value)
-    : typeof value === "bigint" ? Number(value)
-    : typeof value === "string" ? Number.parseInt(value, 10) : 0;
+  const num =
+    typeof value === "number"
+      ? Math.trunc(value)
+      : typeof value === "bigint"
+        ? Number(value)
+        : typeof value === "string"
+          ? Number.parseInt(value, 10)
+          : 0;
   if (field === "userVersion") env.state.userVersion = Number.isFinite(num) ? num : 0;
   else env.state.schemaVersion = Number.isFinite(num) ? num : 0;
   return emptyResult(0, env.state.lastInsertRowid);

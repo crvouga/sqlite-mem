@@ -1,22 +1,26 @@
 export {
-  aggregateFunctions,
-  createAggregate,
   type AggregateAccumulator,
   type AggregateFactory,
+  aggregateFunctions,
+  createAggregate,
 } from "./aggregate.ts";
 export { dateTimeFunctions } from "./datetime.ts";
 export { jsonAggregateFunctions, jsonArrow, jsonScalarFunctions } from "./json.ts";
 export { mathFunctions } from "./math.ts";
-export { castSqlValue, getScalarFunctions, invokeScalar } from "./scalar.ts";
 export {
   defaultFunctionRegistry,
+  type FunctionContext,
   FunctionRegistry,
   isAggregateName,
   lookupAggregate,
   lookupScalar,
-  type FunctionContext,
   type ScalarFunction,
 } from "./registry.ts";
+export { castSqlValue, getScalarFunctions, invokeScalar } from "./scalar.ts";
+export {
+  evaluateTableFunction,
+  listTableValuedFunctions,
+} from "./table-valued.ts";
 export {
   denseRank,
   firstValue,
@@ -24,12 +28,8 @@ export {
   lastValue,
   lead,
   nthValue,
+  type PartitionRow,
   rank,
   rowNumber,
   windowFunctions,
-  type PartitionRow,
 } from "./window.ts";
-export {
-  evaluateTableFunction,
-  listTableValuedFunctions,
-} from "./table-valued.ts";

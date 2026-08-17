@@ -41,17 +41,11 @@ export class Statement {
   private execute(params: unknown[]): ResultSet {
     this.database.assertOpen();
     if (this.statements.length === 0) throw new SqliteError("empty statement", "misuse");
-    const env = new ExecutionEnv(
-      this.database.state,
-      this.database.transactions,
-      params,
-      undefined,
-      {
-        now: this.database.now,
-        random: () => this.database.prng.nextSqliteRandom(),
-        randomU64: () => this.database.prng.nextU64(),
-      },
-    );
+    const env = new ExecutionEnv(this.database.state, this.database.transactions, params, undefined, {
+      now: this.database.now,
+      random: () => this.database.prng.nextSqliteRandom(),
+      randomU64: () => this.database.prng.nextU64(),
+    });
     bindNamedParameters(env, this.sql, params);
     let result: ResultSet | undefined;
     let lastQuery: ResultSet | undefined;

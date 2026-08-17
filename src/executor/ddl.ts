@@ -9,11 +9,11 @@ import type {
 } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
 import { evalExpr } from "../expressions/eval.ts";
-import { makeColumnInfo } from "../storage/table.ts";
 import { normalizeColumnName } from "../storage/row.ts";
+import { makeColumnInfo } from "../storage/table.ts";
 import { normalizeForCollation } from "../types/collation.ts";
 import type { ExecutionEnv } from "./env.ts";
-import { emptyResult, resultValues, type ResultSet } from "./result.ts";
+import { emptyResult, type ResultSet, resultValues } from "./result.ts";
 import { executeSelect } from "./select.ts";
 
 export function executeCreateTable(stmt: CreateTableStmt, env: ExecutionEnv): ResultSet {
@@ -26,7 +26,9 @@ export function executeCreateTable(stmt: CreateTableStmt, env: ExecutionEnv): Re
   const columns = result.columns.map((name) => ({ name, typeName: null, constraints: [] }));
   const table = env.state.createTable({ ...stmt, columns, constraints: [], asSelect: null });
   for (const values of resultValues(result)) {
-    table.insert(new Map(table.columns.map((column, index) => [normalizeColumnName(column.name), values[index] ?? null])));
+    table.insert(
+      new Map(table.columns.map((column, index) => [normalizeColumnName(column.name), values[index] ?? null])),
+    );
   }
   env.state.recordChange(0);
   return emptyResult(0, env.state.lastInsertRowid);
@@ -40,15 +42,19 @@ export function executeCreateIndex(stmt: CreateIndexStmt, env: ExecutionEnv): Re
       const ctx = env.createEvalContext({
         rowid: row.rowid,
         sourceTable: table.name,
-        cells: table.columns.map((column) => ({ table: table.name, name: column.name, value: row.values.get(normalizeColumnName(column.name)) ?? null })),
+        cells: table.columns.map((column) => ({
+          table: table.name,
+          name: column.name,
+          value: row.values.get(normalizeColumnName(column.name)) ?? null,
+        })),
       });
       if (stmt.where && !evalExpr(stmt.where, ctx)) continue;
-      index.store.insert(stmt.columns.map((column) =>
-        normalizeForCollation(
-          row.values.get(normalizeColumnName(column.name)) ?? null,
-          column.collate ?? "BINARY",
-        )
-      ), row.rowid);
+      index.store.insert(
+        stmt.columns.map((column) =>
+          normalizeForCollation(row.values.get(normalizeColumnName(column.name)) ?? null, column.collate ?? "BINARY"),
+        ),
+        row.rowid,
+      );
     }
   } catch (error) {
     env.state.dropIndex(stmt.name, true);
@@ -65,7 +71,8 @@ export function executeAlterTable(stmt: AlterTableStmt, env: ExecutionEnv): Resu
   } else if (action.kind === "rename_column") {
     const column = table.columns.find((item) => item.name.toLowerCase() === action.oldName.toLowerCase());
     if (!column) throw new SqliteError(`no such column: ${action.oldName}`, "no_such_column");
-    if (table.columns.some((item) => item.name.toLowerCase() === action.newName.toLowerCase())) throw new SqliteError(`duplicate column name: ${action.newName}`, "other");
+    if (table.columns.some((item) => item.name.toLowerCase() === action.newName.toLowerCase()))
+      throw new SqliteError(`duplicate column name: ${action.newName}`, "other");
     const oldKey = normalizeColumnName(column.name);
     column.name = action.newName;
     for (const row of table.rows.values()) {
@@ -76,14 +83,18 @@ export function executeAlterTable(stmt: AlterTableStmt, env: ExecutionEnv): Resu
     for (const constraint of table.constraints) renameConstraintColumn(constraint, action.oldName, action.newName);
     for (const name of table.indexes) {
       const index = env.state.indexes.get(name.toLowerCase());
-      if (index) for (const indexed of index.columns) if (indexed.name.toLowerCase() === action.oldName.toLowerCase()) indexed.name = action.newName;
+      if (index)
+        for (const indexed of index.columns)
+          if (indexed.name.toLowerCase() === action.oldName.toLowerCase()) indexed.name = action.newName;
     }
     env.state.schemaVersion++;
   } else if (action.kind === "add_column") {
-    if (table.columns.some((item) => item.name.toLowerCase() === action.column.name.toLowerCase())) throw new SqliteError(`duplicate column name: ${action.column.name}`, "other");
+    if (table.columns.some((item) => item.name.toLowerCase() === action.column.name.toLowerCase()))
+      throw new SqliteError(`duplicate column name: ${action.column.name}`, "other");
     const primary = action.column.constraints.some((item) => item.type === "primary_key");
     const unique = action.column.constraints.some((item) => item.type === "unique");
-    if ((primary || unique) && table.rows.size > 0) throw new SqliteError("Cannot add a PRIMARY KEY or UNIQUE column", "other");
+    if ((primary || unique) && table.rows.size > 0)
+      throw new SqliteError("Cannot add a PRIMARY KEY or UNIQUE column", "other");
     const defaultExpr = action.column.constraints.find((item) => item.type === "default")?.expr ?? null;
     const collate = action.column.constraints.find((item) => item.type === "collate");
     const generated = action.column.constraints.find((item) => item.type === "generated");
@@ -96,14 +107,16 @@ export function executeAlterTable(stmt: AlterTableStmt, env: ExecutionEnv): Resu
       generated: generated?.type === "generated" ? { expr: generated.expr, stored: generated.stored } : null,
     });
     const defaultValue = defaultExpr ? evalExpr(defaultExpr, env.createEvalContext()) : null;
-    if (column.notNull && defaultValue === null && table.rows.size > 0) throw new SqliteError("Cannot add a NOT NULL column with default value NULL", "other");
+    if (column.notNull && defaultValue === null && table.rows.size > 0)
+      throw new SqliteError("Cannot add a NOT NULL column with default value NULL", "other");
     table.columns.push(column);
     for (const row of table.rows.values()) row.values.set(normalizeColumnName(column.name), defaultValue);
     env.state.schemaVersion++;
   } else {
     const index = table.columns.findIndex((item) => item.name.toLowerCase() === action.name.toLowerCase());
     if (index < 0) throw new SqliteError(`no such column: ${action.name}`, "no_such_column");
-    if (table.columns.length === 1) throw new SqliteError("cannot drop column: table must have at least one column", "other");
+    if (table.columns.length === 1)
+      throw new SqliteError("cannot drop column: table must have at least one column", "other");
     const column = table.columns[index]!;
     if (column.primaryKey) {
       throw new SqliteError(`cannot drop PRIMARY KEY or UNIQUE column: ${action.name}`, "other");
@@ -112,9 +125,10 @@ export function executeAlterTable(stmt: AlterTableStmt, env: ExecutionEnv): Resu
       throw new SqliteError(`cannot drop UNIQUE column: "${action.name}"`, "other");
     }
     if (
-      table.constraints.some((item) =>
-        (item.type === "primary_key" || item.type === "unique") &&
-        item.columns.some((part) => part.name.toLowerCase() === action.name.toLowerCase()),
+      table.constraints.some(
+        (item) =>
+          (item.type === "primary_key" || item.type === "unique") &&
+          item.columns.some((part) => part.name.toLowerCase() === action.name.toLowerCase()),
       )
     ) {
       throw new SqliteError(
@@ -158,10 +172,17 @@ export function executeDropView(stmt: DropViewStmt, env: ExecutionEnv): ResultSe
   return emptyResult(0, env.state.lastInsertRowid);
 }
 
-function renameConstraintColumn(constraint: import("../ast/nodes.ts").TableConstraint, oldName: string, newName: string): void {
+function renameConstraintColumn(
+  constraint: import("../ast/nodes.ts").TableConstraint,
+  oldName: string,
+  newName: string,
+): void {
   if (constraint.type === "primary_key" || constraint.type === "unique") {
-    for (const column of constraint.columns) if (column.name.toLowerCase() === oldName.toLowerCase()) column.name = newName;
+    for (const column of constraint.columns)
+      if (column.name.toLowerCase() === oldName.toLowerCase()) column.name = newName;
   } else if (constraint.type === "foreign_key") {
-    constraint.columns = constraint.columns.map((name) => name.toLowerCase() === oldName.toLowerCase() ? newName : name);
+    constraint.columns = constraint.columns.map((name) =>
+      name.toLowerCase() === oldName.toLowerCase() ? newName : name,
+    );
   }
 }

@@ -1,10 +1,10 @@
 import type { SqlValue } from "../types/value.ts";
-import { aggregateFunctions, type AggregateAccumulator, type AggregateFactory } from "./aggregate.ts";
+import { type AggregateAccumulator, type AggregateFactory, aggregateFunctions } from "./aggregate.ts";
 import { dateTimeFunctions } from "./datetime.ts";
+import { ftsAuxFunctions, rtreeAuxFunctions } from "./extensions.ts";
 import { jsonAggregateFunctions, jsonScalarFunctions } from "./json.ts";
 import { mathFunctions } from "./math.ts";
 import { getScalarFunctions } from "./scalar.ts";
-import { ftsAuxFunctions, rtreeAuxFunctions } from "./extensions.ts";
 
 export interface FunctionContext {
   changes?: () => number;

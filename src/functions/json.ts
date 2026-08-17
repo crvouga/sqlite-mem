@@ -1,26 +1,26 @@
+import { SqliteError } from "../errors/index.ts";
 import {
   ensureJson,
   extractOne,
+  isValidJsonText,
   jsonArrowPath,
   jsonErrorPosition,
   jsonNodeToSql,
-  isValidJsonText,
   mutateJson,
   patchJson,
   prettyJson,
   removeJson,
   sqlValueToJsonNode,
   stringifyJson,
-  toJsonText,
   toJsonbBlob,
+  toJsonText,
   wrapJsonError,
 } from "../json/index.ts";
-import { asSqlJsonText, isSqlJsonText, subtypeOf, utf8Decode, type SqlValue } from "../types/value.ts";
-import { SqliteError } from "../errors/index.ts";
-import type { ScalarFunction } from "./registry.ts";
-import type { AggregateAccumulator, AggregateFactory } from "./aggregate.ts";
+import { decodeJsonb, looksLikeJsonb } from "../json/jsonb.ts";
 import { jsonTypeName } from "../json/types.ts";
-import { looksLikeJsonb, decodeJsonb } from "../json/jsonb.ts";
+import { asSqlJsonText, isSqlJsonText, type SqlValue, subtypeOf, utf8Decode } from "../types/value.ts";
+import type { AggregateAccumulator, AggregateFactory } from "./aggregate.ts";
+import type { ScalarFunction } from "./registry.ts";
 
 function textOf(value: SqlValue): string {
   if (value instanceof Uint8Array) return utf8Decode(value);
@@ -28,7 +28,7 @@ function textOf(value: SqlValue): string {
   return String(value);
 }
 
-function requireOdd(name: string, args: SqlValue[]): void {
+function _requireOdd(name: string, args: SqlValue[]): void {
   if (args.length % 2 === 0) {
     throw new SqliteError(`json_${name}() requires an odd number of arguments`, "misuse");
   }

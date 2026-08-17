@@ -1,10 +1,6 @@
 import { parity } from "../helpers.ts";
 
-parity(
-  "CAST empty string to INTEGER is 0",
-  [],
-  "SELECT CAST('' AS INTEGER) i, typeof(CAST('' AS INTEGER)) t",
-);
+parity("CAST empty string to INTEGER is 0", [], "SELECT CAST('' AS INTEGER) i, typeof(CAST('' AS INTEGER)) t");
 
 parity(
   "CAST text to BLOB yields utf8 bytes",
@@ -24,8 +20,4 @@ parity(
   "SELECT typeof(CAST('12.5' AS INT)) a, typeof(CAST('12.5' AS VARCHAR(10))) b, typeof(CAST('12.5' AS FLOAT)) c",
 );
 
-parity(
-  "CAST blob to TEXT decodes utf8",
-  [],
-  "SELECT CAST(X'6869' AS TEXT) value",
-);
+parity("CAST blob to TEXT decodes utf8", [], "SELECT CAST(X'6869' AS TEXT) value");

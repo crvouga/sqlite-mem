@@ -12,10 +12,7 @@ function wrapBackendError(backend: "memory" | "sqlite", error: unknown): Error {
   return wrapped;
 }
 
-export function matrix(
-  name: string,
-  fn: (db: ContractDb, backend: "memory" | "sqlite") => void | Promise<void>,
-): void {
+export function matrix(name: string, fn: (db: ContractDb, backend: "memory" | "sqlite") => void | Promise<void>): void {
   describe(name, () => {
     test("memory", async () => {
       const db = new InMemoryAdapter();
@@ -41,10 +38,7 @@ export function matrix(
   });
 }
 
-export function matrixBoth(
-  name: string,
-  fn: (memory: ContractDb, sqlite: ContractDb) => void | Promise<void>,
-): void {
+export function matrixBoth(name: string, fn: (memory: ContractDb, sqlite: ContractDb) => void | Promise<void>): void {
   test(name, async () => {
     const memory = new InMemoryAdapter();
     const sqlite = new RealSqliteAdapter();

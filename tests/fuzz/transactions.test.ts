@@ -3,15 +3,7 @@ import * as fc from "fast-check";
 import { fuzzAssertConfig, textArb } from "./config.ts";
 import { compareOrReport, compareOutcomeOrReport, withDatabases } from "./helpers.ts";
 
-const actionArb = fc.constantFrom(
-  "insert",
-  "begin",
-  "commit",
-  "rollback",
-  "savepoint",
-  "release",
-  "rollback_to",
-);
+const actionArb = fc.constantFrom("insert", "begin", "commit", "rollback", "savepoint", "release", "rollback_to");
 
 describe("transaction differential fuzz", () => {
   test("random transaction and savepoint sequences match SQLite", () => {
@@ -68,33 +60,15 @@ describe("transaction differential fuzz", () => {
                 sql = `ROLLBACK TO sp${savepointDepth}`;
               }
 
-              compareOutcomeOrReport(
-                `txn-${step.action}`,
-                sql,
-                { steps, index },
-                memory.exec(sql),
-                sqlite.exec(sql),
-              );
+              compareOutcomeOrReport(`txn-${step.action}`, sql, { steps, index }, memory.exec(sql), sqlite.exec(sql));
             }
 
             if (inTxn) {
-              compareOutcomeOrReport(
-                "txn-final-commit",
-                "COMMIT",
-                steps,
-                memory.exec("COMMIT"),
-                sqlite.exec("COMMIT"),
-              );
+              compareOutcomeOrReport("txn-final-commit", "COMMIT", steps, memory.exec("COMMIT"), sqlite.exec("COMMIT"));
             }
 
             const select = "SELECT id, value FROM t ORDER BY id";
-            compareOrReport(
-              "txn-final",
-              select,
-              steps,
-              memory.query(select),
-              sqlite.query(select),
-            );
+            compareOrReport("txn-final", select, steps, memory.query(select), sqlite.query(select));
           });
         },
       ),

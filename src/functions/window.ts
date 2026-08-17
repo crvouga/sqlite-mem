@@ -6,7 +6,7 @@ function rowsEqual(left: PartitionRow, right: PartitionRow): boolean {
   if (left.length !== right.length) return false;
   return left.every((value, index) => {
     const other = right[index];
-    return value === null && other === null || (other !== undefined && compareSql(value, other) === 0);
+    return (value === null && other === null) || (other !== undefined && compareSql(value, other) === 0);
   });
 }
 

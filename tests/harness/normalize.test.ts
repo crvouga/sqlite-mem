@@ -1,11 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-  deepCompareResults,
-  normalizeError,
-  normalizeValue,
-  valuesEqual,
-} from "./normalize.ts";
 import { okResult } from "./assert.ts";
+import { deepCompareResults, normalizeError, normalizeValue, valuesEqual } from "./normalize.ts";
 
 describe("normalizeValue", () => {
   test("preserves null, empty text, empty blob, and unicode", () => {
@@ -48,21 +43,9 @@ describe("deepCompareResults", () => {
   });
 
   test("detects column name, value, and counter mismatches", () => {
-    expect(
-      deepCompareResults(
-        okResult(["a"], [{ a: 1 }]),
-        okResult(["b"], [{ b: 1 }]),
-      ).equal,
-    ).toBe(false);
-    expect(
-      deepCompareResults(
-        okResult(["a"], [{ a: 1 }]),
-        okResult(["a"], [{ a: 2 }]),
-      ).equal,
-    ).toBe(false);
-    expect(
-      deepCompareResults(okResult([], [], 1, 1), okResult([], [], 2, 1)).equal,
-    ).toBe(false);
+    expect(deepCompareResults(okResult(["a"], [{ a: 1 }]), okResult(["b"], [{ b: 1 }])).equal).toBe(false);
+    expect(deepCompareResults(okResult(["a"], [{ a: 1 }]), okResult(["a"], [{ a: 2 }])).equal).toBe(false);
+    expect(deepCompareResults(okResult([], [], 1, 1), okResult([], [], 2, 1)).equal).toBe(false);
   });
 
   test("compares error category and normalized message", () => {

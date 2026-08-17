@@ -6,11 +6,11 @@ import {
   asSqlReal,
   coerceToNumber,
   compareSql,
+  type SqlValue,
   storageClassOf,
   typeofSql,
   utf8Decode,
   utf8Encode,
-  type SqlValue,
 } from "../types/value.ts";
 import type { FunctionContext, ScalarFunction } from "./registry.ts";
 
@@ -63,7 +63,7 @@ function trimChars(value: string, chars: string, left: boolean, right: boolean):
 
 function substr(value: string, startValue: number, lengthValue?: number): string {
   const chars = [...value];
-  let start = Math.trunc(startValue);
+  const start = Math.trunc(startValue);
   let index = start > 0 ? start - 1 : start < 0 ? chars.length + start : 0;
   index = Math.max(0, index);
   if (lengthValue === undefined) return chars.slice(index).join("");
@@ -74,7 +74,8 @@ function substr(value: string, startValue: number, lengthValue?: number): string
 
 function formatPrintf(format: string, args: SqlValue[]): string {
   let index = 0;
-  return format.replace(/%([0 +\-#]*)(\d+)?(?:\.(\d+))?([%sdifgGxXcqQ])/g,
+  return format.replace(
+    /%([0 +\-#]*)(\d+)?(?:\.(\d+))?([%sdifgGxXcqQ])/g,
     (_match, flags: string, widthText: string | undefined, precisionText: string | undefined, kind: string) => {
       if (kind === "%") return "%";
       const value = args[index++] ?? null;
@@ -82,16 +83,33 @@ function formatPrintf(format: string, args: SqlValue[]): string {
       let result: string;
       switch (kind) {
         case "d":
-        case "i": result = String(Math.trunc(numeric(value))); break;
-        case "f": result = numeric(value).toFixed(precision ?? 6); break;
+        case "i":
+          result = String(Math.trunc(numeric(value)));
+          break;
+        case "f":
+          result = numeric(value).toFixed(precision ?? 6);
+          break;
         case "g":
-        case "G": result = numeric(value).toPrecision(precision ?? 6).replace(/\.?0+(e|$)/i, "$1"); break;
+        case "G":
+          result = numeric(value)
+            .toPrecision(precision ?? 6)
+            .replace(/\.?0+(e|$)/i, "$1");
+          break;
         case "x":
-        case "X": result = Math.trunc(numeric(value)).toString(16); break;
-        case "c": result = String.fromCodePoint(Math.trunc(numeric(value))); break;
-        case "q": result = value === null ? "(NULL)" : text(value).replace(/'/g, "''"); break;
-        case "Q": result = value === null ? "NULL" : `'${text(value).replace(/'/g, "''")}'`; break;
-        default: result = value === null ? "" : text(value);
+        case "X":
+          result = Math.trunc(numeric(value)).toString(16);
+          break;
+        case "c":
+          result = String.fromCodePoint(Math.trunc(numeric(value)));
+          break;
+        case "q":
+          result = value === null ? "(NULL)" : text(value).replace(/'/g, "''");
+          break;
+        case "Q":
+          result = value === null ? "NULL" : `'${text(value).replace(/'/g, "''")}'`;
+          break;
+        default:
+          result = value === null ? "" : text(value);
       }
       if (kind === "G" || kind === "X") result = result.toUpperCase();
       const width = Number(widthText ?? 0);
@@ -100,7 +118,8 @@ function formatPrintf(format: string, args: SqlValue[]): string {
         result = flags.includes("-") ? result.padEnd(width, pad) : result.padStart(width, pad);
       }
       return result;
-    });
+    },
+  );
 }
 
 function requireArgs(name: string, args: SqlValue[], min: number, max = min): void {
@@ -226,7 +245,10 @@ const scalarFunctions: Record<string, ScalarFunction> = {
     requireArgs("hex", args, 1);
     if (args[0] === null) return "";
     const bytes = args[0] instanceof Uint8Array ? args[0] : utf8Encode(text(args[0]!));
-    return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("").toUpperCase();
+    return [...bytes]
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("")
+      .toUpperCase();
   },
   quote(args) {
     requireArgs("quote", args, 1);
@@ -264,7 +286,9 @@ const scalarFunctions: Record<string, ScalarFunction> = {
   sqlite_compileoption_used(args) {
     requireArgs("sqlite_compileoption_used", args, 1);
     if (args[0] === null) return null;
-    const needle = text(args[0]!).toUpperCase().replace(/^SQLITE_/, "");
+    const needle = text(args[0]!)
+      .toUpperCase()
+      .replace(/^SQLITE_/, "");
     return COMPILE_OPTIONS.some((opt) => opt === needle || opt.startsWith(`${needle}=`)) ? 1 : 0;
   },
   sqlite_compileoption_get(args) {

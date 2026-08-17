@@ -1,5 +1,5 @@
 import { expect } from "bun:test";
-import { matrixBoth, expectParity } from "../../harness/index.ts";
+import { expectParity, matrixBoth } from "../../harness/index.ts";
 
 function setup(db: { exec: (sql: string) => { ok: boolean } }): void {
   expect(db.exec("CREATE VIRTUAL TABLE t USING fts5(content)").ok).toBe(true);

@@ -3,12 +3,13 @@
  * Builds the package, serves dist via a tiny HTML page, and verifies Database works
  * in Chromium, Firefox, and WebKit without Node/Bun/WASM APIs.
  */
-import { chromium, firefox, webkit, type BrowserType } from "playwright";
+
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { type BrowserType, chromium, firefox, webkit } from "playwright";
 
 const root = path.resolve(import.meta.dir, "../..");
-const distDir = path.join(root, "dist");
+const _distDir = path.join(root, "dist");
 
 async function ensureBuild(): Promise<void> {
   const build = Bun.spawn(["bun", "run", "build"], { cwd: root, stdout: "inherit", stderr: "inherit" });
@@ -126,7 +127,9 @@ async function runBrowser(type: BrowserType, name: string, url: string): Promise
     await page.waitForFunction(() => (window as unknown as { __SMOKE__?: unknown }).__SMOKE__ !== undefined, null, {
       timeout: 30_000,
     });
-    const result = await page.evaluate(() => (window as unknown as { __SMOKE__: { ok: boolean; error?: string } }).__SMOKE__);
+    const result = await page.evaluate(
+      () => (window as unknown as { __SMOKE__: { ok: boolean; error?: string } }).__SMOKE__,
+    );
     if (errors.length) {
       throw new Error(`${name} page errors: ${errors.join("; ")}`);
     }

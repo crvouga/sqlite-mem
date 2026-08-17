@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import { Database as BunDatabase } from "bun:sqlite";
+import { describe, expect, test } from "bun:test";
 import { listMemoryFunctionNames } from "../../../scripts/sqlite-inventory.ts";
 
 /**

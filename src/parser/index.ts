@@ -1,6 +1,6 @@
+import type { Statement } from "../ast/nodes.ts";
 import { tokenize } from "../lexer/tokenize.ts";
 import { parseTokens } from "./parser.ts";
-import type { Statement } from "../ast/nodes.ts";
 
 export { parseTokens } from "./parser.ts";
 

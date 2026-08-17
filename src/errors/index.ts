@@ -34,7 +34,11 @@ export class TriggerRaiseError extends SqliteError {
   readonly action: "IGNORE" | "ABORT" | "FAIL" | "ROLLBACK";
 
   constructor(action: "IGNORE" | "ABORT" | "FAIL" | "ROLLBACK", message?: string) {
-    super(message ?? action, action === "FAIL" ? "constraint" : "other", action === "FAIL" ? "SQLITE_CONSTRAINT" : undefined);
+    super(
+      message ?? action,
+      action === "FAIL" ? "constraint" : "other",
+      action === "FAIL" ? "SQLITE_CONSTRAINT" : undefined,
+    );
     this.action = action;
   }
 }

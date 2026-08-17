@@ -1,5 +1,5 @@
 import { utf8Decode, utf8Encode } from "../types/value.ts";
-import { parseJsonText, JsonParseError } from "./parse.ts";
+import { JsonParseError, parseJsonText } from "./parse.ts";
 import { stringifyJson } from "./stringify.ts";
 import type { JsonNode } from "./types.ts";
 
@@ -94,13 +94,7 @@ function writeHeader(out: number[], size: number, type: number): void {
     out.push((13 << 4) | type, (size >> 8) & 0xff, size & 0xff);
     return;
   }
-  out.push(
-    (14 << 4) | type,
-    (size >> 24) & 0xff,
-    (size >> 16) & 0xff,
-    (size >> 8) & 0xff,
-    size & 0xff,
-  );
+  out.push((14 << 4) | type, (size >> 24) & 0xff, (size >> 16) & 0xff, (size >> 8) & 0xff, size & 0xff);
 }
 
 export interface JsonbElement {
@@ -214,7 +208,7 @@ function normalizeIntText(text: string): string {
 function unescapeJsonPayload(raw: string): string {
   // Payload may contain JSON escapes without surrounding quotes
   try {
-    return (JSON.parse(`"${raw.replace(/"/g, '\\"')}"`) as string);
+    return JSON.parse(`"${raw.replace(/"/g, '\\"')}"`) as string;
   } catch {
     return raw;
   }

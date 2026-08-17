@@ -26,10 +26,7 @@ describe("constraint differential fuzz", () => {
             const sql = "INSERT INTO t(id, a, b) VALUES (?, ?, ?)";
             // Avoid candidates that violate CHECK and UNIQUE simultaneously:
             // SQLite does not promise which constraint error is reported first.
-            const b =
-              candidate.a >= -10 && candidate.a <= 10
-                ? candidate.b
-                : `check-failure-${index}`;
+            const b = candidate.a >= -10 && candidate.a <= 10 ? candidate.b : `check-failure-${index}`;
             const params = [index + 1, candidate.a, b] as const;
             compareOutcomeOrReport(
               "constraints-insert",
@@ -41,13 +38,7 @@ describe("constraint differential fuzz", () => {
           });
 
           const select = "SELECT id, a, b FROM t ORDER BY id";
-          compareOrReport(
-            "constraints-final",
-            select,
-            candidates,
-            memory.query(select),
-            sqlite.query(select),
-          );
+          compareOrReport("constraints-final", select, candidates, memory.query(select), sqlite.query(select));
         });
       }),
       fuzzAssertConfig(35),

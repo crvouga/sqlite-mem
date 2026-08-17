@@ -283,15 +283,9 @@ export interface Cte {
   select: SelectStmt;
 }
 
-export type ResultColumn =
-  | { type: "star"; table: string | null }
-  | { type: "expr"; expr: Expr; alias: string | null };
+export type ResultColumn = { type: "star"; table: string | null } | { type: "expr"; expr: Expr; alias: string | null };
 
-export type FromItem =
-  | TableRef
-  | JoinFrom
-  | SubqueryFrom
-  | TableFuncFrom;
+export type FromItem = TableRef | JoinFrom | SubqueryFrom | TableFuncFrom;
 
 export interface TableRef {
   type: "table";
@@ -325,7 +319,14 @@ export interface JoinFrom {
 export interface InsertStmt {
   type: "insert";
   with: WithClause | null;
-  mode: "insert" | "replace" | "insert_or_replace" | "insert_or_ignore" | "insert_or_abort" | "insert_or_rollback" | "insert_or_fail";
+  mode:
+    | "insert"
+    | "replace"
+    | "insert_or_replace"
+    | "insert_or_ignore"
+    | "insert_or_abort"
+    | "insert_or_rollback"
+    | "insert_or_fail";
   table: string;
   columns: string[] | null;
   values: Expr[][] | null;
@@ -390,14 +391,28 @@ export type ColumnConstraint =
   | { type: "check"; expr: Expr }
   | { type: "default"; expr: Expr }
   | { type: "collate"; name: string }
-  | { type: "references"; table: string; columns: string[] | null; onDelete: FkAction | null; onUpdate: FkAction | null }
+  | {
+      type: "references";
+      table: string;
+      columns: string[] | null;
+      onDelete: FkAction | null;
+      onUpdate: FkAction | null;
+    }
   | { type: "generated"; expr: Expr; stored: boolean };
 
 export type TableConstraint =
   | { type: "primary_key"; columns: IndexedColumn[]; conflict: ConflictAction | null }
   | { type: "unique"; columns: IndexedColumn[]; conflict: ConflictAction | null; name: string | null }
   | { type: "check"; expr: Expr; name: string | null }
-  | { type: "foreign_key"; columns: string[]; refTable: string; refColumns: string[] | null; onDelete: FkAction | null; onUpdate: FkAction | null; name: string | null };
+  | {
+      type: "foreign_key";
+      columns: string[];
+      refTable: string;
+      refColumns: string[] | null;
+      onDelete: FkAction | null;
+      onUpdate: FkAction | null;
+      name: string | null;
+    };
 
 export interface IndexedColumn {
   name: string;

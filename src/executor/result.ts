@@ -31,7 +31,9 @@ export function valuesToResult(
     values: values.map((row) => row.map(exportSqlValue)),
     rows: values.map((row) => {
       const object: Record<string, SqlValue> = {};
-      columns.forEach((name, index) => { object[name] = exportSqlValue(row[index] ?? null); });
+      columns.forEach((name, index) => {
+        object[name] = exportSqlValue(row[index] ?? null);
+      });
       return object;
     }),
     changes,
@@ -40,6 +42,8 @@ export function valuesToResult(
 }
 
 export function resultValues(result: ResultSet): SqlValue[][] {
-  return result.values?.map((row) => [...row])
-    ?? result.rows.map((row) => result.columns.map((column) => row[column] ?? null));
+  return (
+    result.values?.map((row) => [...row]) ??
+    result.rows.map((row) => result.columns.map((column) => row[column] ?? null))
+  );
 }

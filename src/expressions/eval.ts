@@ -1,8 +1,8 @@
 import type { BinaryOp, Expr, SelectStmt } from "../ast/nodes.ts";
-import { jsonArrow } from "../functions/json.ts";
 import { SqliteError } from "../errors/index.ts";
-import { castSqlValue } from "../functions/scalar.ts";
+import { jsonArrow } from "../functions/json.ts";
 import { defaultFunctionRegistry } from "../functions/registry.ts";
+import { castSqlValue } from "../functions/scalar.ts";
 import { compareWithCollation } from "../types/collation.ts";
 import {
   asSqlReal,
@@ -10,10 +10,10 @@ import {
   coerceToNumber,
   compareSql,
   isTruthySql,
+  type SqlValue,
   storageClassOf,
   toInteger,
   utf8Decode,
-  type SqlValue,
 } from "../types/value.ts";
 import type { EvalContext } from "./context.ts";
 import { globMatch, likeMatch } from "./like.ts";
@@ -33,7 +33,12 @@ function integerValue(value: SqlValue): bigint {
 
 function textValue(value: SqlValue): string {
   if (value instanceof Uint8Array) return utf8Decode(value);
-  if (typeof value === "object" && value !== null && "value" in value && typeof (value as { value: unknown }).value === "string") {
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "value" in value &&
+    typeof (value as { value: unknown }).value === "string"
+  ) {
     return (value as { value: string }).value;
   }
   return String(value);
@@ -79,9 +84,10 @@ function sqlOr(left: SqlValue, right: () => SqlValue): SqlValue {
 
 function compareResult(op: BinaryOp, left: SqlValue, right: SqlValue, collation?: string): SqlValue {
   if (op === "IS" || op === "IS NOT" || op === "IS DISTINCT FROM" || op === "IS NOT DISTINCT FROM") {
-    const equal = left === null || right === null
-      ? left === right
-      : (collation ? compareWithCollation(left, right, collation) : compareSql(left, right)) === 0;
+    const equal =
+      left === null || right === null
+        ? left === right
+        : (collation ? compareWithCollation(left, right, collation) : compareSql(left, right)) === 0;
     if (op === "IS" || op === "IS NOT DISTINCT FROM") return booleanValue(equal);
     return booleanValue(!equal);
   }
@@ -89,14 +95,21 @@ function compareResult(op: BinaryOp, left: SqlValue, right: SqlValue, collation?
   if (comparison === null) return null;
   switch (op) {
     case "=":
-    case "==": return booleanValue(comparison === 0);
+    case "==":
+      return booleanValue(comparison === 0);
     case "!=":
-    case "<>": return booleanValue(comparison !== 0);
-    case "<": return booleanValue(comparison < 0);
-    case "<=": return booleanValue(comparison <= 0);
-    case ">": return booleanValue(comparison > 0);
-    case ">=": return booleanValue(comparison >= 0);
-    default: throw new SqliteError(`unsupported comparison operator: ${op}`, "unsupported");
+    case "<>":
+      return booleanValue(comparison !== 0);
+    case "<":
+      return booleanValue(comparison < 0);
+    case "<=":
+      return booleanValue(comparison <= 0);
+    case ">":
+      return booleanValue(comparison > 0);
+    case ">=":
+      return booleanValue(comparison >= 0);
+    default:
+      throw new SqliteError(`unsupported comparison operator: ${op}`, "unsupported");
   }
 }
 
@@ -115,7 +128,9 @@ function evalBinary(op: BinaryOp, leftExpr: Expr, rightExpr: Expr, ctx: EvalCont
   if (
     leftExpr.type === "row" &&
     rightExpr.type === "row" &&
-    ["=", "==", "!=", "<>", "<", "<=", ">", ">=", "IS", "IS NOT", "IS DISTINCT FROM", "IS NOT DISTINCT FROM"].includes(op)
+    ["=", "==", "!=", "<>", "<", "<=", ">", ">=", "IS", "IS NOT", "IS DISTINCT FROM", "IS NOT DISTINCT FROM"].includes(
+      op,
+    )
   ) {
     return compareRowValues(op, leftExpr.values, rightExpr.values, ctx);
   }
@@ -129,13 +144,12 @@ function evalBinary(op: BinaryOp, leftExpr: Expr, rightExpr: Expr, ctx: EvalCont
     return jsonArrow(left, right, op);
   }
 
-  if (["=", "==", "!=", "<>", "<", "<=", ">", ">=", "IS", "IS NOT", "IS DISTINCT FROM", "IS NOT DISTINCT FROM"].includes(op)) {
-    return compareResult(
+  if (
+    ["=", "==", "!=", "<>", "<", "<=", ">", ">=", "IS", "IS NOT", "IS DISTINCT FROM", "IS NOT DISTINCT FROM"].includes(
       op,
-      left,
-      right,
-      resolveComparisonCollation(leftExpr, rightExpr, ctx) ?? undefined,
-    );
+    )
+  ) {
+    return compareResult(op, left, right, resolveComparisonCollation(leftExpr, rightExpr, ctx) ?? undefined);
   }
   if (op === "LIKE" || op === "NOT LIKE" || op === "GLOB" || op === "NOT GLOB") {
     if (left === null || right === null) return null;
@@ -146,9 +160,12 @@ function evalBinary(op: BinaryOp, leftExpr: Expr, rightExpr: Expr, ctx: EvalCont
   }
   if (left === null || right === null) return null;
   switch (op) {
-    case "+": return asNumber(numberValue(left) + numberValue(right));
-    case "-": return asNumber(numberValue(left) - numberValue(right));
-    case "*": return asNumber(numberValue(left) * numberValue(right));
+    case "+":
+      return asNumber(numberValue(left) + numberValue(right));
+    case "-":
+      return asNumber(numberValue(left) - numberValue(right));
+    case "*":
+      return asNumber(numberValue(left) * numberValue(right));
     case "/": {
       const divisor = numberValue(right);
       if (divisor === 0) return null;
@@ -168,11 +185,16 @@ function evalBinary(op: BinaryOp, leftExpr: Expr, rightExpr: Expr, ctx: EvalCont
         ? Number(remainder)
         : remainder;
     }
-    case "||": return textValue(left) + textValue(right);
-    case "&": return safeIntegerResult(integerValue(left) & integerValue(right));
-    case "|": return safeIntegerResult(integerValue(left) | integerValue(right));
-    case "<<": return safeIntegerResult(integerValue(left) << integerValue(right));
-    case ">>": return safeIntegerResult(integerValue(left) >> integerValue(right));
+    case "||":
+      return textValue(left) + textValue(right);
+    case "&":
+      return safeIntegerResult(integerValue(left) & integerValue(right));
+    case "|":
+      return safeIntegerResult(integerValue(left) | integerValue(right));
+    case "<<":
+      return safeIntegerResult(integerValue(left) << integerValue(right));
+    case ">>":
+      return safeIntegerResult(integerValue(left) >> integerValue(right));
     case "IN":
     case "NOT IN":
       throw new SqliteError(`${op} requires an IN expression node`, "misuse");
@@ -182,9 +204,7 @@ function evalBinary(op: BinaryOp, leftExpr: Expr, rightExpr: Expr, ctx: EvalCont
 }
 
 function safeIntegerResult(value: bigint): number | bigint {
-  return value <= BigInt(Number.MAX_SAFE_INTEGER) && value >= BigInt(Number.MIN_SAFE_INTEGER)
-    ? Number(value)
-    : value;
+  return value <= BigInt(Number.MAX_SAFE_INTEGER) && value >= BigInt(Number.MIN_SAFE_INTEGER) ? Number(value) : value;
 }
 
 function compareRowValues(op: BinaryOp, leftExprs: Expr[], rightExprs: Expr[], ctx: EvalContext): SqlValue {
@@ -216,13 +236,19 @@ function compareRowValues(op: BinaryOp, leftExprs: Expr[], rightExprs: Expr[], c
     if (cmp !== 0) {
       switch (op) {
         case "=":
-        case "==": return booleanValue(false);
+        case "==":
+          return booleanValue(false);
         case "!=":
-        case "<>": return booleanValue(true);
-        case "<": return booleanValue(cmp < 0);
-        case "<=": return booleanValue(cmp < 0);
-        case ">": return booleanValue(cmp > 0);
-        case ">=": return booleanValue(cmp > 0);
+        case "<>":
+          return booleanValue(true);
+        case "<":
+          return booleanValue(cmp < 0);
+        case "<=":
+          return booleanValue(cmp < 0);
+        case ">":
+          return booleanValue(cmp > 0);
+        case ">=":
+          return booleanValue(cmp > 0);
       }
     }
   }
@@ -235,12 +261,15 @@ function compareRowValues(op: BinaryOp, leftExprs: Expr[], rightExprs: Expr[], c
     case "=":
     case "==":
     case "<=":
-    case ">=": return booleanValue(true);
+    case ">=":
+      return booleanValue(true);
     case "!=":
     case "<>":
     case "<":
-    case ">": return booleanValue(false);
-    default: return null;
+    case ">":
+      return booleanValue(false);
+    default:
+      return null;
   }
 }
 
@@ -266,22 +295,36 @@ function rowValuesEqual(left: SqlValue[], right: SqlValue[]): boolean | null {
 
 function explicitCollation(expr: Expr): string | null {
   switch (expr.type) {
-    case "collate": return expr.collation;
+    case "collate":
+      return expr.collation;
     case "unary":
-    case "cast": return explicitCollation(expr.expr);
-    case "binary": return explicitCollation(expr.left) ?? explicitCollation(expr.right);
-    case "between": return explicitCollation(expr.expr) ?? explicitCollation(expr.lower) ?? explicitCollation(expr.upper);
+    case "cast":
+      return explicitCollation(expr.expr);
+    case "binary":
+      return explicitCollation(expr.left) ?? explicitCollation(expr.right);
+    case "between":
+      return explicitCollation(expr.expr) ?? explicitCollation(expr.lower) ?? explicitCollation(expr.upper);
     case "in":
-      return explicitCollation(expr.expr) ??
-        (Array.isArray(expr.values) ? expr.values.map(explicitCollation).find((name) => name !== null) ?? null : null);
-    case "like": return explicitCollation(expr.expr) ?? explicitCollation(expr.pattern);
+      return (
+        explicitCollation(expr.expr) ??
+        (Array.isArray(expr.values) ? (expr.values.map(explicitCollation).find((name) => name !== null) ?? null) : null)
+      );
+    case "like":
+      return explicitCollation(expr.expr) ?? explicitCollation(expr.pattern);
     case "case":
-      return (expr.base && explicitCollation(expr.base)) ??
-        expr.whens.flatMap((branch) => [branch.when, branch.then]).map(explicitCollation).find((name) => name !== null) ??
+      return (
+        (expr.base && explicitCollation(expr.base)) ??
+        expr.whens
+          .flatMap((branch) => [branch.when, branch.then])
+          .map(explicitCollation)
+          .find((name) => name !== null) ??
         (expr.else && explicitCollation(expr.else)) ??
-        null;
-    case "row": return expr.values.map(explicitCollation).find((name) => name !== null) ?? null;
-    default: return null;
+        null
+      );
+    case "row":
+      return expr.values.map(explicitCollation).find((name) => name !== null) ?? null;
+    default:
+      return null;
   }
 }
 
@@ -294,14 +337,17 @@ function resolveComparisonCollation(leftExpr: Expr, rightExpr: Expr, ctx: EvalCo
 
 function inheritedCollation(expr: Expr, ctx: EvalContext): string | null {
   switch (expr.type) {
-    case "collate": return inheritedCollation(expr.expr, ctx);
+    case "collate":
+      return inheritedCollation(expr.expr, ctx);
     case "column":
-      return ctx.resolveCollation?.(expr.table, expr.name)
-        ?? ctx.parent?.resolveCollation?.(expr.table, expr.name)
-        ?? null;
+      return (
+        ctx.resolveCollation?.(expr.table, expr.name) ?? ctx.parent?.resolveCollation?.(expr.table, expr.name) ?? null
+      );
     case "unary":
-    case "cast": return inheritedCollation(expr.expr, ctx);
-    default: return null;
+    case "cast":
+      return inheritedCollation(expr.expr, ctx);
+    default:
+      return null;
   }
 }
 
@@ -328,10 +374,14 @@ export function evalExpr(expr: Expr, ctx: EvalContext): SqlValue {
       }
       return expr.value;
     }
-    case "null": return null;
-    case "column": return resolveColumn(ctx, expr.table, expr.name);
-    case "parameter": return ctx.getParameter(expr.name);
-    case "collate": return evalExpr(expr.expr, ctx);
+    case "null":
+      return null;
+    case "column":
+      return resolveColumn(ctx, expr.table, expr.name);
+    case "parameter":
+      return ctx.getParameter(expr.name);
+    case "collate":
+      return evalExpr(expr.expr, ctx);
     case "unary": {
       const value = evalExpr(expr.expr, ctx);
       if (expr.op === "NOT") {
@@ -343,12 +393,14 @@ export function evalExpr(expr: Expr, ctx: EvalContext): SqlValue {
       if (expr.op === "-") return asNumber(-numberValue(value));
       return ~integerValue(value);
     }
-    case "binary": return evalBinary(expr.op, expr.left, expr.right, ctx);
+    case "binary":
+      return evalBinary(expr.op, expr.left, expr.right, ctx);
     case "between": {
       const value = evalExpr(expr.expr, ctx);
-      const collation = resolveComparisonCollation(expr.expr, expr.lower, ctx)
-        ?? resolveComparisonCollation(expr.expr, expr.upper, ctx)
-        ?? undefined;
+      const collation =
+        resolveComparisonCollation(expr.expr, expr.lower, ctx) ??
+        resolveComparisonCollation(expr.expr, expr.upper, ctx) ??
+        undefined;
       const lower = compareResult(">=", value, evalExpr(expr.lower, ctx), collation);
       const result = sqlAnd(lower, () => compareResult("<=", value, evalExpr(expr.upper, ctx), collation));
       if (result === null) return null;
@@ -385,10 +437,11 @@ export function evalExpr(expr: Expr, ctx: EvalContext): SqlValue {
       const value = evalExpr(expr.expr, ctx);
       const pattern = evalExpr(expr.pattern, ctx);
       const escape = expr.escape === null ? null : evalExpr(expr.escape, ctx);
-      if (value === null || pattern === null || escape === null && expr.escape !== null) return null;
-      const match = expr.op === "LIKE"
-        ? likeMatch(textValue(value), textValue(pattern), escape === null ? null : textValue(escape))
-        : globMatch(textValue(value), textValue(pattern));
+      if (value === null || pattern === null || (escape === null && expr.escape !== null)) return null;
+      const match =
+        expr.op === "LIKE"
+          ? likeMatch(textValue(value), textValue(pattern), escape === null ? null : textValue(escape))
+          : globMatch(textValue(value), textValue(pattern));
       return booleanValue(expr.not ? !match : match);
     }
     case "case": {
@@ -404,7 +457,8 @@ export function evalExpr(expr: Expr, ctx: EvalContext): SqlValue {
       }
       return expr.else === null ? null : evalExpr(expr.else, ctx);
     }
-    case "cast": return castSqlValue(evalExpr(expr.expr, ctx), expr.typeName);
+    case "cast":
+      return castSqlValue(evalExpr(expr.expr, ctx), expr.typeName);
     case "function": {
       if (expr.args === "*") throw new SqliteError(`wrong number of arguments to function ${expr.name}()`, "misuse");
       if (expr.name.toLowerCase() === "raise") {
@@ -421,7 +475,10 @@ export function evalExpr(expr: Expr, ctx: EvalContext): SqlValue {
       }
       const fn = (ctx.functions ?? defaultFunctionRegistry).lookupScalar(expr.name);
       if (!fn) throw new SqliteError(`no such function: ${expr.name}`, "other");
-      return fn(expr.args.map((arg) => evalExpr(arg, ctx)), ctx.functionContext ?? {});
+      return fn(
+        expr.args.map((arg) => evalExpr(arg, ctx)),
+        ctx.functionContext ?? {},
+      );
     }
     case "exists": {
       const exists = executeSelect(ctx, expr.select).rows.length > 0;

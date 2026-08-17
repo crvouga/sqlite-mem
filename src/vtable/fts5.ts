@@ -1,6 +1,6 @@
 import { SqliteError } from "../errors/index.ts";
-import type { SqlValue } from "../types/value.ts";
 import type { Rowid } from "../storage/row.ts";
+import type { SqlValue } from "../types/value.ts";
 
 export interface Fts5Row {
   rowid: Rowid;

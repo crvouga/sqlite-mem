@@ -51,9 +51,7 @@ export function compareOutcomeOrReport(
   memory: QueryResult,
   sqlite: QueryResult,
 ): void {
-  const sameOutcome =
-    memory.ok === sqlite.ok &&
-    (memory.ok || memory.error?.category === sqlite.error?.category);
+  const sameOutcome = memory.ok === sqlite.ok && (memory.ok || memory.error?.category === sqlite.error?.category);
   if (sameOutcome) return;
 
   throw new Error(

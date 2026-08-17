@@ -92,6 +92,10 @@ Requires [Bun](https://bun.sh).
 
 ```bash
 bun install
+bun run check                # format + lint + typecheck + sqlite-compat suite
+bun run format               # write Biome formatting
+bun run lint                 # Biome lint
+bun run typecheck
 bun run test:sqlite-compat   # requirements + inventory gate + differential suite
 bun test                     # contract + fuzz + harness
 bun run build

@@ -1,9 +1,9 @@
 import type { Expr } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
-import { evalExpr } from "../expressions/eval.ts";
 import type { ExecutionEnv, ScopeRow } from "../executor/env.ts";
+import { evalExpr } from "../expressions/eval.ts";
 import { jsonEachRows, jsonTreeRows } from "../json/tvf.ts";
-import { toInteger, type SqlValue } from "../types/value.ts";
+import { type SqlValue, toInteger } from "../types/value.ts";
 
 export interface TableValuedResult {
   columns: string[];
@@ -81,9 +81,7 @@ registry.set("json_tree", (args, alias) => {
 });
 
 function safeInt(value: bigint): number | bigint {
-  return value <= BigInt(Number.MAX_SAFE_INTEGER) && value >= BigInt(Number.MIN_SAFE_INTEGER)
-    ? Number(value)
-    : value;
+  return value <= BigInt(Number.MAX_SAFE_INTEGER) && value >= BigInt(Number.MIN_SAFE_INTEGER) ? Number(value) : value;
 }
 
 export function evaluateTableFunction(

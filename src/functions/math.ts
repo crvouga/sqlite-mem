@@ -1,5 +1,5 @@
-import { asSqlReal, coerceToNumber, type SqlValue } from "../types/value.ts";
 import { SqliteError } from "../errors/index.ts";
+import { asSqlReal, coerceToNumber, type SqlValue } from "../types/value.ts";
 import type { FunctionContext, ScalarFunction } from "./registry.ts";
 
 function requireArgs(name: string, args: SqlValue[], min: number, max = min): void {

@@ -8,4 +8,8 @@ sequenceParity("delete selected rows", data, [
 ]);
 parity("delete matching no rows", [...data, "DELETE FROM t WHERE id=99"], "SELECT * FROM t ORDER BY id");
 parity("delete all rows without WHERE", [...data, "DELETE FROM t"], "SELECT count(*) AS n FROM t");
-parity("delete predicate observes NULL", [...data, "INSERT INTO t VALUES (NULL,'n')", "DELETE FROM t WHERE id IS NULL"], "SELECT * FROM t ORDER BY id");
+parity(
+  "delete predicate observes NULL",
+  [...data, "INSERT INTO t VALUES (NULL,'n')", "DELETE FROM t WHERE id IS NULL"],
+  "SELECT * FROM t ORDER BY id",
+);

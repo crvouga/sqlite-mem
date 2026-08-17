@@ -1,13 +1,7 @@
 import { Database as BunDatabase, SQLiteError } from "bun:sqlite";
-import { categorizeErrorMessage, normalizeError } from "../harness/normalize.ts";
 import { okResult } from "../harness/assert.ts";
-import type {
-  ContractDb,
-  ContractStatement,
-  ErrorCategory,
-  QueryResult,
-  SqlValue,
-} from "../harness/types.ts";
+import { categorizeErrorMessage, normalizeError } from "../harness/normalize.ts";
+import type { ContractDb, ContractStatement, ErrorCategory, QueryResult, SqlValue } from "../harness/types.ts";
 
 function mapSqliteError(error: unknown): QueryResult {
   if (error instanceof SQLiteError) {
@@ -32,10 +26,7 @@ function mapSqliteError(error: unknown): QueryResult {
   };
 }
 
-function shapeStatementResult(
-  stmt: ReturnType<BunDatabase["prepare"]>,
-  params?: SqlValue[],
-): QueryResult {
+function shapeStatementResult(stmt: ReturnType<BunDatabase["prepare"]>, params?: SqlValue[]): QueryResult {
   const columns = columnNamesFromStatement(stmt);
   let typeWidth = 0;
   try {
@@ -45,13 +36,11 @@ function shapeStatementResult(
     typeWidth = 0;
   }
 
-  const rawValues =
-    params && params.length > 0 ? stmt.values(...params as never[]) : stmt.values();
+  const rawValues = params && params.length > 0 ? stmt.values(...(params as never[])) : stmt.values();
   const valueRows = (rawValues ? [...rawValues] : []) as SqlValue[][];
 
   const width = Math.max(typeWidth, valueRows[0]?.length ?? 0, columns.length);
-  const resolvedColumns =
-    columns.length > 0 ? columns : Array.from({ length: width }, (_, i) => `column${i}`);
+  const resolvedColumns = columns.length > 0 ? columns : Array.from({ length: width }, (_, i) => `column${i}`);
   const rows = valueRows.map((values) => {
     const object: Record<string, SqlValue> = {};
     for (let i = 0; i < width; i++) {
@@ -68,7 +57,10 @@ function columnNamesFromStatement(stmt: { columnNames?: string[] }): string[] {
 }
 
 function isMultiStatement(sql: string): boolean {
-  const parts = sql.split(";").map((part) => part.trim()).filter(Boolean);
+  const parts = sql
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean);
   return parts.length > 1;
 }
 
@@ -85,13 +77,13 @@ class RealSqliteStatement implements ContractStatement {
   }
 
   bind(...params: SqlValue[]): ContractStatement {
-    this.stmt.bind(...params as never[]);
+    this.stmt.bind(...(params as never[]));
     return this;
   }
 
   run(...params: SqlValue[]): QueryResult {
     try {
-      const result = params.length > 0 ? this.stmt.run(...params as never[]) : this.stmt.run();
+      const result = params.length > 0 ? this.stmt.run(...(params as never[])) : this.stmt.run();
       this.onRun(result.changes, result.lastInsertRowid);
       return okResult([], [], result.changes, result.lastInsertRowid);
     } catch (error) {
@@ -113,13 +105,7 @@ class RealSqliteStatement implements ContractStatement {
       if (shaped.rows.length === 0) {
         return okResult(shaped.columns, [], 0, 0, []);
       }
-      return okResult(
-        shaped.columns,
-        [shaped.rows[0]!],
-        0,
-        0,
-        shaped.values ? [shaped.values[0]!] : undefined,
-      );
+      return okResult(shaped.columns, [shaped.rows[0]!], 0, 0, shaped.values ? [shaped.values[0]!] : undefined);
     } catch (error) {
       return mapSqliteError(error);
     }
@@ -147,7 +133,7 @@ export class RealSqliteAdapter implements ContractDb {
     try {
       if (params && params.length > 0) {
         const stmt = this.db.prepare(sql);
-        const result = stmt.run(...params as never[]);
+        const result = stmt.run(...(params as never[]));
         this.recordRun(result.changes, result.lastInsertRowid);
         return okResult([], [], this.lastChanges, this.lastInsertRowid);
       }

@@ -1,15 +1,8 @@
 import { SqliteError } from "../errors/index.ts";
-import {
-  asSqlJsonText,
-  asSqlReal,
-  isSqlJsonText,
-  SqlJsonText,
-  utf8Decode,
-  type SqlValue,
-} from "../types/value.ts";
-import { decodeJsonb, encodeJsonb, looksLikeJsonb, textToJsonb } from "./jsonb.ts";
+import { asSqlJsonText, asSqlReal, isSqlJsonText, SqlJsonText, type SqlValue, utf8Decode } from "../types/value.ts";
+import { decodeJsonb, encodeJsonb, looksLikeJsonb } from "./jsonb.ts";
 import { JsonParseError, parseJsonText } from "./parse.ts";
-import { parseJsonPath, pathGet, pathParent, type PathStep } from "./path.ts";
+import { type PathStep, parseJsonPath, pathGet, pathParent } from "./path.ts";
 import { stringifyJson } from "./stringify.ts";
 import { cloneJson, type JsonNode } from "./types.ts";
 
@@ -194,14 +187,12 @@ function createPathAndSet(root: JsonNode, steps: PathStep[], value: JsonNode, mo
       continue;
     }
     if (cur.kind !== "array") return false;
-    let idx =
-      step.kind === "index" ? step.index : step.kind === "fromEnd" ? cur.elements.length - step.n : -1;
+    let idx = step.kind === "index" ? step.index : step.kind === "fromEnd" ? cur.elements.length - step.n : -1;
     if (step.kind === "append") idx = cur.elements.length;
     if (idx < 0 || idx > cur.elements.length) return false;
     if (idx === cur.elements.length) {
       if (mode === "replace") return false;
-      const child: JsonNode =
-        next.kind === "key" ? { kind: "object", entries: [] } : { kind: "array", elements: [] };
+      const child: JsonNode = next.kind === "key" ? { kind: "object", entries: [] } : { kind: "array", elements: [] };
       cur.elements.push(child);
     }
     cur = cur.elements[idx]!;
@@ -230,8 +221,7 @@ export function removeJson(root: JsonNode, path: string): JsonNode {
 /** RFC7396-ish JSON Merge Patch as implemented by SQLite json_patch. */
 export function patchJson(target: JsonNode, patch: JsonNode): JsonNode {
   if (patch.kind !== "object") return cloneJson(patch);
-  const base =
-    target.kind === "object" ? cloneJson(target) : ({ kind: "object", entries: [] } as JsonNode);
+  const base = target.kind === "object" ? cloneJson(target) : ({ kind: "object", entries: [] } as JsonNode);
   if (base.kind !== "object") return cloneJson(patch);
   for (const entry of patch.entries) {
     if (entry.value.kind === "null") {

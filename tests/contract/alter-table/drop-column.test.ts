@@ -1,27 +1,32 @@
 import { errorParity, parity, sequenceParity } from "../helpers.ts";
 
-parity("DROP COLUMN removes column and preserves remaining data", [
-  "CREATE TABLE t(id INTEGER, name TEXT, note TEXT)",
-  "INSERT INTO t VALUES (1,'a','x'),(2,'b','y')",
-  "ALTER TABLE t DROP COLUMN note",
-], "SELECT id,name FROM t ORDER BY id");
+parity(
+  "DROP COLUMN removes column and preserves remaining data",
+  [
+    "CREATE TABLE t(id INTEGER, name TEXT, note TEXT)",
+    "INSERT INTO t VALUES (1,'a','x'),(2,'b','y')",
+    "ALTER TABLE t DROP COLUMN note",
+  ],
+  "SELECT id,name FROM t ORDER BY id",
+);
 
-sequenceParity("DROP COLUMN works after dependent index is dropped", [
-  "CREATE TABLE t(id INTEGER, name TEXT, note TEXT)",
-  "CREATE INDEX t_note ON t(note)",
-  "INSERT INTO t VALUES (1,'a','x')",
-], [
-  { sql: "DROP INDEX t_note" },
-  { sql: "ALTER TABLE t DROP COLUMN note" },
-  { sql: "SELECT id,name FROM t", query: true },
-]);
-
-errorParity(
-  "DROP COLUMN rejects column referenced by an index",
+sequenceParity(
+  "DROP COLUMN works after dependent index is dropped",
   [
     "CREATE TABLE t(id INTEGER, name TEXT, note TEXT)",
     "CREATE INDEX t_note ON t(note)",
+    "INSERT INTO t VALUES (1,'a','x')",
   ],
+  [
+    { sql: "DROP INDEX t_note" },
+    { sql: "ALTER TABLE t DROP COLUMN note" },
+    { sql: "SELECT id,name FROM t", query: true },
+  ],
+);
+
+errorParity(
+  "DROP COLUMN rejects column referenced by an index",
+  ["CREATE TABLE t(id INTEGER, name TEXT, note TEXT)", "CREATE INDEX t_note ON t(note)"],
   "ALTER TABLE t DROP COLUMN note",
 );
 

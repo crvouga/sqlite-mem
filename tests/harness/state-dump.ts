@@ -119,9 +119,7 @@ function quoteIdent(name: string): string {
 
 function isWithoutRowid(db: ContractDb, table: string): boolean {
   // Prefer schema SQL when present; sqlite-mem may omit CREATE text.
-  const schema = db.query(
-    `SELECT sql FROM sqlite_master WHERE type='table' AND name=${sqlString(table)}`,
-  );
+  const schema = db.query(`SELECT sql FROM sqlite_master WHERE type='table' AND name=${sqlString(table)}`);
   if (schema.ok && schema.rows.length > 0) {
     const sql = String(schema.rows[0]!.sql ?? "");
     if (sql.toUpperCase().includes("WITHOUT ROWID")) return true;
@@ -131,9 +129,7 @@ function isWithoutRowid(db: ContractDb, table: string): boolean {
 }
 
 function pkOrderColumns(info: QueryResult): string {
-  const pks = info.rows
-    .filter((r) => Number(r.pk) > 0)
-    .sort((a, b) => Number(a.pk) - Number(b.pk));
+  const pks = info.rows.filter((r) => Number(r.pk) > 0).sort((a, b) => Number(a.pk) - Number(b.pk));
   if (pks.length === 0) {
     return info.rows.map((r) => quoteIdent(String(r.name))).join(", ") || "1";
   }

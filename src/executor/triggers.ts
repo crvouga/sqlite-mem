@@ -1,14 +1,14 @@
 import type { CreateTriggerStmt, DropTriggerStmt, Statement } from "../ast/nodes.ts";
 import { SqliteError, TriggerRaiseError } from "../errors/index.ts";
 import { evalExpr } from "../expressions/eval.ts";
-import { normalizeColumnName } from "../storage/row.ts";
-import type { Row } from "../storage/row.ts";
 import type { TriggerInfo } from "../storage/database-state.ts";
 import { splitQualifiedName } from "../storage/database-state.ts";
+import type { Row } from "../storage/row.ts";
+import { normalizeColumnName } from "../storage/row.ts";
 import type { Table } from "../storage/table.ts";
 import { isTruthySql, type SqlValue } from "../types/value.ts";
-import { executeStatement } from "./execute.ts";
 import type { ExecutionEnv, ScopeRow } from "./env.ts";
+import { executeStatement } from "./execute.ts";
 import { emptyResult, type ResultSet } from "./result.ts";
 
 const MAX_TRIGGER_DEPTH = 1000;
@@ -93,10 +93,11 @@ function runTriggers(
   env: ExecutionEnv,
 ): "ok" | "ignore" {
   const db = env.state.databaseForTable(table);
-  const triggers = [...db.triggers.values()].filter((trigger) =>
-    trigger.tableName.toLowerCase() === table.name.toLowerCase() &&
-    trigger.event === event &&
-    trigger.timing === timing
+  const triggers = [...db.triggers.values()].filter(
+    (trigger) =>
+      trigger.tableName.toLowerCase() === table.name.toLowerCase() &&
+      trigger.event === event &&
+      trigger.timing === timing,
   );
 
   for (const trigger of triggers) {
@@ -159,14 +160,14 @@ function triggerScope(table: Table, oldRow: Row | null, newValues: Map<string, S
     cells.push({
       table: "old",
       name: column.name,
-      value: oldRow ? oldRow.values.get(key) ?? null : null,
+      value: oldRow ? (oldRow.values.get(key) ?? null) : null,
       affinity: column.affinity,
       collate: column.collate,
     });
     cells.push({
       table: "new",
       name: column.name,
-      value: newValues ? newValues.get(key) ?? null : null,
+      value: newValues ? (newValues.get(key) ?? null) : null,
       affinity: column.affinity,
       collate: column.collate,
     });

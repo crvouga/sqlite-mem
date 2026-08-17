@@ -1,4 +1,4 @@
-import { matrixBoth, expectParity } from "../../harness/index.ts";
+import { expectParity, matrixBoth } from "../../harness/index.ts";
 
 matrixBoth("SELECT 1", (memory, sqlite) => {
   const memoryResult = memory.query("SELECT 1");

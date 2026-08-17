@@ -316,7 +316,7 @@ class JsonTextParser {
     if (!this.strictCanonical) {
       if (lower === "nan" || lower === "qnan" || lower === "snan") return { kind: "null" };
       if (lower === "infinity" || lower === "inf") {
-        const sign = this.s[start - 1] === "-" ? "-" : "";
+        const _sign = this.s[start - 1] === "-" ? "-" : "";
         // Treat as null-ish? Docs say Inf is allowed in JSON5 input and converted; use a large number string?
         // SQLite converts Infinity to null when rendering? Actually json() of Infinity might error or become null.
         // Probe showed NaN -> null. For Inf, check:
@@ -367,8 +367,5 @@ function canonicalizeNumberText(raw: string): { kind: "integer" | "real"; text: 
 }
 
 export function malformedJsonError(position?: number): SqliteError {
-  return new SqliteError(
-    position !== undefined ? `malformed JSON` : "malformed JSON",
-    "other",
-  );
+  return new SqliteError(position !== undefined ? `malformed JSON` : "malformed JSON", "other");
 }

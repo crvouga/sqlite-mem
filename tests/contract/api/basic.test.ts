@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { Database } from "../../../src/index.ts";
+import { InMemoryAdapter } from "../../adapters/in-memory.ts";
 import { expectParity } from "../../harness/assert.ts";
 import { matrixBoth } from "../../harness/matrix.ts";
-import { InMemoryAdapter } from "../../adapters/in-memory.ts";
-import { Database } from "../../../src/index.ts";
 import { setupBoth } from "../helpers.ts";
 
 matrixBoth("multi-statement exec runs DDL and DML together", (memory, sqlite) => {
@@ -31,10 +31,7 @@ matrixBoth("prepare bind run all get reuse a statement", (memory, sqlite) => {
   const insertMem = memory.prepare("INSERT INTO t(name) VALUES (?)");
   const insertSql = sqlite.prepare("INSERT INTO t(name) VALUES (?)");
   expectParity(insertMem.run("d"), insertSql.run("d"));
-  expectParity(
-    memory.query("SELECT name FROM t ORDER BY id"),
-    sqlite.query("SELECT name FROM t ORDER BY id"),
-  );
+  expectParity(memory.query("SELECT name FROM t ORDER BY id"), sqlite.query("SELECT name FROM t ORDER BY id"));
 });
 
 matrixBoth("transaction commits successful work", (memory, sqlite) => {
@@ -45,10 +42,7 @@ matrixBoth("transaction commits successful work", (memory, sqlite) => {
   sqlite.transaction(() => {
     expect(sqlite.exec("INSERT INTO t(name) VALUES ('ok')").ok).toBe(true);
   });
-  expectParity(
-    memory.query("SELECT name FROM t"),
-    sqlite.query("SELECT name FROM t"),
-  );
+  expectParity(memory.query("SELECT name FROM t"), sqlite.query("SELECT name FROM t"));
 });
 
 matrixBoth("transaction rolls back when the callback throws", (memory, sqlite) => {
@@ -68,10 +62,7 @@ matrixBoth("transaction rolls back when the callback throws", (memory, sqlite) =
       throw new Error("boom");
     }),
   ).toThrow("boom");
-  expectParity(
-    memory.query("SELECT name FROM t ORDER BY id"),
-    sqlite.query("SELECT name FROM t ORDER BY id"),
-  );
+  expectParity(memory.query("SELECT name FROM t ORDER BY id"), sqlite.query("SELECT name FROM t ORDER BY id"));
 });
 
 describe("api memory-only", () => {

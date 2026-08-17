@@ -364,7 +364,14 @@ export function tokenize(input: string): Token[] {
     return ch;
   };
 
-  const push = (kind: TokenKind, start: number, startLine: number, startCol: number, value: string, extra?: Partial<Token>) => {
+  const push = (
+    kind: TokenKind,
+    start: number,
+    startLine: number,
+    startCol: number,
+    value: string,
+    extra?: Partial<Token>,
+  ) => {
     tokens.push({
       kind,
       value,
@@ -649,12 +656,40 @@ export function tokenize(input: string): Token[] {
 }
 
 export function isKeyword(kind: TokenKind): boolean {
-  return kind !== "EOF" &&
+  return (
+    kind !== "EOF" &&
     kind !== "IDENT" &&
     kind !== "STRING" &&
     kind !== "NUMBER" &&
     kind !== "BLOB" &&
     kind !== "PARAM_POS" &&
     kind !== "PARAM_NAMED" &&
-    !["DOT", "COMMA", "SEMI", "LPAREN", "RPAREN", "PLUS", "MINUS", "STAR", "SLASH", "PERCENT", "EQ", "EQEQ", "NE", "LT", "LE", "GT", "GE", "CONCAT", "AMP", "PIPE", "LSHIFT", "RSHIFT", "JSON_ARROW", "JSON_ARROW2", "TILDE"].includes(kind);
+    ![
+      "DOT",
+      "COMMA",
+      "SEMI",
+      "LPAREN",
+      "RPAREN",
+      "PLUS",
+      "MINUS",
+      "STAR",
+      "SLASH",
+      "PERCENT",
+      "EQ",
+      "EQEQ",
+      "NE",
+      "LT",
+      "LE",
+      "GT",
+      "GE",
+      "CONCAT",
+      "AMP",
+      "PIPE",
+      "LSHIFT",
+      "RSHIFT",
+      "JSON_ARROW",
+      "JSON_ARROW2",
+      "TILDE",
+    ].includes(kind)
+  );
 }

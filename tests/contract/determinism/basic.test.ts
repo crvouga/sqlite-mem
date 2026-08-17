@@ -6,8 +6,12 @@ describe("determinism", () => {
   test("identical seeds produce identical random() streams", () => {
     const a = new Database({ seed: 42 });
     const b = new Database({ seed: 42 });
-    const left = a.query<{ v: bigint | number }>("SELECT random() AS v UNION ALL SELECT random() AS v UNION ALL SELECT random() AS v");
-    const right = b.query<{ v: bigint | number }>("SELECT random() AS v UNION ALL SELECT random() AS v UNION ALL SELECT random() AS v");
+    const left = a.query<{ v: bigint | number }>(
+      "SELECT random() AS v UNION ALL SELECT random() AS v UNION ALL SELECT random() AS v",
+    );
+    const right = b.query<{ v: bigint | number }>(
+      "SELECT random() AS v UNION ALL SELECT random() AS v UNION ALL SELECT random() AS v",
+    );
     expect(left.map((row) => String(row.v))).toEqual(right.map((row) => String(row.v)));
   });
 

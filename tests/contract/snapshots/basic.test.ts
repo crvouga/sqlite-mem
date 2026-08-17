@@ -76,10 +76,7 @@ test("snapshot clone stays in lockstep under identical ops", () => {
       source.query("SELECT id, name, n FROM t ORDER BY id"),
       clone.query("SELECT id, name, n FROM t ORDER BY id"),
     );
-    expectParity(
-      source.query("SELECT * FROM v ORDER BY id"),
-      clone.query("SELECT * FROM v ORDER BY id"),
-    );
+    expectParity(source.query("SELECT * FROM v ORDER BY id"), clone.query("SELECT * FROM v ORDER BY id"));
     expectParity(
       source.query("SELECT name FROM sqlite_master WHERE type IN ('index','view') ORDER BY name"),
       clone.query("SELECT name FROM sqlite_master WHERE type IN ('index','view') ORDER BY name"),
@@ -98,15 +95,9 @@ test("snapshot preserves rowids across restore and further inserts", () => {
     source.exec("INSERT INTO t(id, name) VALUES (10, 'x')");
     source.exec("INSERT INTO t(name) VALUES ('y')");
     clone.restore(source.snapshot());
-    expectParity(
-      source.query("SELECT id, name FROM t ORDER BY id"),
-      clone.query("SELECT id, name FROM t ORDER BY id"),
-    );
+    expectParity(source.query("SELECT id, name FROM t ORDER BY id"), clone.query("SELECT id, name FROM t ORDER BY id"));
     expectParity(source.exec("INSERT INTO t(name) VALUES ('z')"), clone.exec("INSERT INTO t(name) VALUES ('z')"));
-    expectParity(
-      source.query("SELECT id, name FROM t ORDER BY id"),
-      clone.query("SELECT id, name FROM t ORDER BY id"),
-    );
+    expectParity(source.query("SELECT id, name FROM t ORDER BY id"), clone.query("SELECT id, name FROM t ORDER BY id"));
   } finally {
     source.close();
     clone.close();
