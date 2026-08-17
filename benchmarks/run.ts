@@ -1,8 +1,9 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { memFactory } from "./compare/mem.ts";
-import { printReport, runSuite } from "./harness/run-suite.ts";
+import { renderHtmlReport } from "./harness/html-report.ts";
 import { toJson } from "./harness/report.ts";
+import { printReport, runSuite } from "./harness/run-suite.ts";
 import type { NamedFactory, SuiteTier } from "./harness/types.ts";
 import { allSpecs } from "./workloads/index.ts";
 
@@ -59,3 +60,6 @@ await mkdir(resultsDir, { recursive: true });
 const outPath = out ?? path.join(resultsDir, `${tier}-${report.environment.runtime}.json`);
 await Bun.write(outPath, toJson(report));
 console.log(`Wrote ${outPath}`);
+const htmlPath = outPath.replace(/\.json$/i, ".html");
+await Bun.write(htmlPath, renderHtmlReport(report));
+console.log(`Wrote ${htmlPath}`);

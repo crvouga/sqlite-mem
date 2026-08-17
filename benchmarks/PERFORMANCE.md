@@ -143,12 +143,25 @@ Fidelity: `snapshot/fidelity/200` plus `tests/contract/snapshots` and determinis
 
 ## Remaining bottlenecks
 
-1. **Insert / update row construction** — still Map-backed rows, affinity, index maintenance, trigger/FK checks; ~3k inserts/sec vs ~2M in bun:sqlite
+1. **Insert / update row construction** — still Map-backed rows, affinity, index maintenance, trigger/FK checks. Uniqueness now uses `IndexStore` / autoindexes instead of full-table scans; TX still deep-clones on `BEGIN` (no fsync win in-memory).
 2. **BEGIN still deep-clones `DatabaseState`** — cheap on empty tables, painful for large DBs + many savepoints (copy-on-write not implemented)
-3. **Row representation** — `Map<string, SqlValue>` + per-query `Cell[]` still dominate full scans
-4. **FTS MATCH** still scans virtual-table rows (inverted index exists but is not the MATCH cursor path)
-5. **RIGHT/FULL joins** still nested-loop
+3. **Row representation** — `Map<string, SqlValue>` + per-query `Cell[]` still dominate full scans and snapshot hydrate memory amplification (~8–10× heap vs payload)
+4. **FTS MATCH** still scans virtual-table rows (inverted index exists but is not the MATCH cursor path). Acceptable for small corpora; do not prioritize until product-critical.
+5. **RIGHT/FULL joins** still nested-loop (INNER/LEFT equality joins use index probe or hash-join fallback)
 6. **No range scans** (only equality index lookup)
 7. **1M-row / 100 MB snapshot** cases are Bun/desktop-only; not claimed on throttled mobile
+
+## Local-first guidance (JSON / FTS)
+
+- **`json_extract` / `->>` / `json_set`** are cheap point ops (~tens of µs). Prefer them over expanding JSON into rows.
+- **`json_each`** is intentionally expensive: it materializes relational rows from nested JSON. Avoid in hot paths. Prefer normalizing frequently queried fields, generated/materialized columns, or indexed extracts; reserve `json_each` for genuinely dynamic traversal.
+- **FTS**: benchmark scaling is roughly linear in corpus size while MATCH filters after a virtual-table scan. Realistic search terms and result cardinality matter more than micro-optimizing FTS until it is on a critical path.
+
+## Benchmark methodology notes
+
+- Reports include **perOp** (`mean / opsPerSample`) so multi-op samples are comparable.
+- When `iterations < 5`, p95/p99 are shown as **n/a** (mean marked with `~`) — do not treat those as percentile estimates.
+- Stateful write benches use **`isolateIterations`** (fresh engine + setup per sample) so rows do not accumulate across iterations.
+- Workload-c reports per-query timings (`userMs`, `projectMs`, `joinMs`) plus separate email-lookup and join-only cases.
 
 Stop condition: mobile interactive and 1 MB snapshot targets met without a bytecode VM or format break.

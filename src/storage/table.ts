@@ -255,27 +255,34 @@ export class Table {
     }
 
     const uniqueSets = this.uniqueColumnSets();
-    for (const names of uniqueSets) {
-      const values = names.map((name) => row.values.get(normalizeColumnName(name)) ?? null);
-      if (values.some((value) => value === null)) continue;
-      for (const other of this.rows.values()) {
-        if (excludedRowid !== undefined && other.rowid === excludedRowid) continue;
-        if (
-          values.every((value, index) => {
-            const column = this.column(names[index]!);
-            const otherValue = other.values.get(normalizeColumnName(names[index]!)) ?? null;
-            const collation = column.collate ?? "BINARY";
-            return compareWithCollation(value, otherValue, collation) === 0;
-          })
-        ) {
-          const qualified = names.map((name) => `${this.name}.${name}`).join(", ");
-          throw new SqliteError(
-            `UNIQUE constraint failed: ${qualified}`,
-            "constraint_unique",
-            "SQLITE_CONSTRAINT_UNIQUE",
-          );
+    // Prefer O(1)/O(k) enforcement via IndexStore in the DML path (autoindexes).
+    // Keep a scan only when this table has no indexes registered yet.
+    if (this.indexes.length === 0) {
+      for (const names of uniqueSets) {
+        const values = names.map((name) => row.values.get(normalizeColumnName(name)) ?? null);
+        if (values.some((value) => value === null)) continue;
+        for (const other of this.rows.values()) {
+          if (excludedRowid !== undefined && other.rowid === excludedRowid) continue;
+          if (
+            values.every((value, index) => {
+              const column = this.column(names[index]!);
+              const otherValue = other.values.get(normalizeColumnName(names[index]!)) ?? null;
+              const collation = column.collate ?? "BINARY";
+              return compareWithCollation(value, otherValue, collation) === 0;
+            })
+          ) {
+            const qualified = names.map((name) => `${this.name}.${name}`).join(", ");
+            throw new SqliteError(
+              `UNIQUE constraint failed: ${qualified}`,
+              "constraint_unique",
+              "SQLITE_CONSTRAINT_UNIQUE",
+            );
+          }
         }
       }
+    } else if (uniqueSets.length > 0) {
+      // Indexes exist: uniqueness is enforced by IndexStore on addIndexes / conflict checks.
+      // Still guard INTEGER PRIMARY KEY collisions via the rowid map in insert/update.
     }
   }
 

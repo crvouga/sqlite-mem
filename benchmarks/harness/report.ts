@@ -1,4 +1,5 @@
 import type { BenchReport, BenchResult, EnvironmentInfo } from "./types.ts";
+import { RELIABLE_PERCENTILE_MIN_SAMPLES } from "./types.ts";
 
 export function detectEnvironment(overrides: Partial<EnvironmentInfo> = {}): EnvironmentInfo {
   const proc = globalThis as {
@@ -51,7 +52,7 @@ export function formatReport(report: BenchReport): string {
     "n".padStart(8),
     "p50".padStart(12),
     "p95".padStart(12),
-    "p99".padStart(12),
+    "perOp".padStart(12),
     "ops/s".padStart(14),
     "heapΔ".padStart(10),
   ].join(" ");
@@ -61,14 +62,16 @@ export function formatReport(report: BenchReport): string {
     const heapBefore = result.memoryBefore?.heapUsed;
     const heapAfter = result.memoryAfter?.heapUsed;
     const delta = heapBefore !== undefined && heapAfter !== undefined ? heapAfter - heapBefore : undefined;
+    const p50 = result.reliablePercentiles ? formatMs(result.p50) : `${formatMs(result.mean)}~`;
+    const p95 = result.reliablePercentiles ? formatMs(result.p95) : "n/a";
     lines.push(
       [
         result.name.slice(0, 48).padEnd(48),
         result.engine.padEnd(12),
         String(result.datasetSize ?? "").padStart(8),
-        formatMs(result.p50).padStart(12),
-        formatMs(result.p95).padStart(12),
-        formatMs(result.p99).padStart(12),
+        p50.padStart(12),
+        p95.padStart(12),
+        formatMs(result.perOpMs).padStart(12),
         result.opsPerSec.toFixed(0).padStart(14),
         formatBytes(delta).padStart(10),
       ].join(" "),
@@ -76,6 +79,8 @@ export function formatReport(report: BenchReport): string {
   }
   lines.push("");
   lines.push(`${report.results.length} results`);
+  lines.push("Note: p95 is n/a and p50 shows mean~ when iterations < 5 (unreliable percentiles).");
+  lines.push("perOp = mean sample time / opsPerSample.");
   return lines.join("\n");
 }
 
@@ -105,15 +110,27 @@ export function compareReports(
   const currentByKey = new Map(current.results.map((result) => [`${result.engine}::${result.name}`, result]));
   for (const base of baseline.results) {
     const match = currentByKey.get(`${base.engine}::${base.name}`);
-    if (!match || base.p95 <= 0) continue;
-    const ratio = match.p95 / base.p95;
+    if (!match) continue;
+    // CI suites use few iterations — gate on median (p50), not noisy p95 tails.
+    const useMedian =
+      base.reliablePercentiles === false ||
+      match.reliablePercentiles === false ||
+      base.iterations < 12 ||
+      match.iterations < 12 ||
+      base.iterations < RELIABLE_PERCENTILE_MIN_SAMPLES;
+    const baseMetric = useMedian ? base.p50 || base.mean : base.p95;
+    const matchMetric = useMedian ? match.p50 || match.mean : match.p95;
+    if (baseMetric <= 0) continue;
+    // Ignore absolute noise on sub-50µs micros where scheduling dominates.
+    if (baseMetric < 0.05 && matchMetric < 0.2) continue;
+    const ratio = matchMetric / baseMetric;
     if (ratio > slowerThan) {
       regressions.push({
         name: base.name,
         engine: base.engine,
         ratio,
-        baselineP95: base.p95,
-        currentP95: match.p95,
+        baselineP95: baseMetric,
+        currentP95: matchMetric,
       });
     }
   }

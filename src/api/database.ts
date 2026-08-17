@@ -81,6 +81,9 @@ export class Database {
   restore(snapshot: Uint8Array): void {
     this.assertOpen();
     if (this.transactions.inTransaction) throw new SqliteError("cannot restore during a transaction", "transaction");
+    // Drop live state before decode so peak ≈ snapshot bytes + one decoded tree
+    // (not old DB + decoded + snapshot).
+    this.state.replaceWith(new DatabaseState(), { adopt: true });
     const decoded = decodeDatabaseState(snapshot);
     this.state.replaceWith(decoded.state, { adopt: true });
     if (decoded.runtime) {

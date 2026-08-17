@@ -112,6 +112,8 @@ class Writer {
     this.raw(value);
   }
   finish(): Uint8Array {
+    // Avoid retaining unused capacity when the buffer grew past the payload.
+    if (this.len === this.buf.length) return this.buf;
     return this.buf.slice(0, this.len);
   }
 }

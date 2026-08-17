@@ -151,6 +151,50 @@ export interface JoinProbe {
   lookup: (leftCellsValue: (table: string | null, name: string) => SqlValue) => Row[];
 }
 
+/** Equality join keys extracted from ON (column = column), for hash join when no index probe. */
+export interface JoinEqualityKeys {
+  /** Right-side column names in join-key order. */
+  rightColumns: string[];
+  /** Corresponding left-side (probe) column references. */
+  leftKeys: { table: string | null; column: string }[];
+}
+
+export function tryJoinEqualityKeys(right: FromItem, on: Expr | null, env?: ExecutionEnv): JoinEqualityKeys | null {
+  if (!on || right.type !== "table") return null;
+  if (env) {
+    const db = env.state.databaseForSchema(right.schema, right.schema ? `${right.schema}.${right.name}` : right.name);
+    if (db.virtualTables.has(right.name.toLowerCase()) || db.views.has(right.name.toLowerCase())) return null;
+    if (env.ctes.has(right.name.toLowerCase())) return null;
+  }
+  const alias = right.alias ?? right.name;
+  const pairs: { rightColumn: string; leftTable: string | null; leftColumn: string }[] = [];
+  for (const part of conjunctions(on)) {
+    if (part.type !== "binary" || (part.op !== "=" && part.op !== "==")) continue;
+    if (part.left.type !== "column" || part.right.type !== "column") continue;
+    const leftOnRight = columnOnTable(part.left, alias, right.name);
+    const rightOnRight = columnOnTable(part.right, alias, right.name);
+    if (leftOnRight && !rightOnRight) {
+      pairs.push({ rightColumn: part.left.name, leftTable: part.right.table, leftColumn: part.right.name });
+    } else if (rightOnRight && !leftOnRight) {
+      pairs.push({ rightColumn: part.right.name, leftTable: part.left.table, leftColumn: part.left.name });
+    }
+  }
+  if (pairs.length === 0) return null;
+  // Require the entire ON to be only equality conjunctions (no leftover predicates).
+  const parts = conjunctions(on);
+  if (parts.length !== pairs.length) return null;
+  for (const part of parts) {
+    if (part.type !== "binary" || (part.op !== "=" && part.op !== "==")) return null;
+    if (part.left.type !== "column" || part.right.type !== "column") return null;
+  }
+  // rowid join keys need ScopeRow.rowid, not a regular cell — keep nested loop.
+  if (pairs.some((pair) => isRowidName(pair.rightColumn))) return null;
+  return {
+    rightColumns: pairs.map((pair) => pair.rightColumn),
+    leftKeys: pairs.map((pair) => ({ table: pair.leftTable, column: pair.leftColumn })),
+  };
+}
+
 export function tryJoinProbe(right: FromItem, on: Expr | null, env: ExecutionEnv): JoinProbe | null {
   if (!on || right.type !== "table") return null;
   const alias = right.alias ?? right.name;

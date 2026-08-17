@@ -381,7 +381,7 @@ function removeOne(table: Table, row: Row, env: ExecutionEnv): void {
 }
 
 function conflictingRows(table: Table, values: Map<string, SqlValue>, env: ExecutionEnv): Row[] {
-  return conflictsForSets(table, values, uniqueColumnSets(table, env));
+  return conflictsForSets(table, values, uniqueColumnSets(table, env), env);
 }
 
 function conflictsMatchingTarget(
@@ -414,44 +414,102 @@ function conflictsMatchingTarget(
         table,
         values,
         pkSets.length > 0 ? pkSets : [[{ name: targetColumns[0]!, collate: null, order: null }]],
+        env,
       );
     }
     return [];
   }
-  return conflictsForSets(table, values, matchingSets);
+  return conflictsForSets(table, values, matchingSets, env);
 }
 
 function uniqueColumnSets(table: Table, env: ExecutionEnv): IndexedColumn[][] {
   const sets: IndexedColumn[][] = [];
+  const seen = new Set<string>();
+  const remember = (columns: IndexedColumn[]): void => {
+    const key = columns.map((column) => normalizeColumnName(column.name)).join("\0");
+    if (seen.has(key)) return;
+    seen.add(key);
+    sets.push(columns);
+  };
+
+  for (const indexName of table.indexes) {
+    const index = env.state.databaseForTable(table).indexes.get(indexName.toLowerCase());
+    if (index?.unique && !index.where) remember(index.columns);
+  }
+
+  // INTEGER PRIMARY KEY / rowid uniqueness (no autoindex).
+  const pk = table.integerPkColumn();
+  if (pk) remember([{ name: pk.name, collate: pk.collate, order: null }]);
+
+  // Fallback for any UNIQUE/PK constraints not yet covered by an index (legacy / edge cases).
   const hasTablePrimary = table.constraints.some((constraint) => constraint.type === "primary_key");
   for (const column of table.columns) {
     if (column.unique || (column.primaryKey && !hasTablePrimary)) {
-      sets.push([{ name: column.name, collate: column.collate, order: null }]);
+      remember([{ name: column.name, collate: column.collate, order: null }]);
     }
   }
   for (const constraint of table.constraints) {
-    if (constraint.type === "unique" || constraint.type === "primary_key") sets.push(constraint.columns);
-  }
-  for (const indexName of table.indexes) {
-    const index = env.state.databaseForTable(table).indexes.get(indexName.toLowerCase());
-    if (index?.unique) sets.push(index.columns);
+    if (constraint.type === "unique" || constraint.type === "primary_key") remember(constraint.columns);
   }
   return sets;
 }
 
-function conflictsForSets(table: Table, values: Map<string, SqlValue>, sets: IndexedColumn[][]): Row[] {
-  return [...table.scan()].filter((row) =>
-    sets.some((columns) => {
-      const desired = columns.map((column) =>
-        normalizeForCollation(values.get(normalizeColumnName(column.name)) ?? null, column.collate ?? "BINARY"),
-      );
+function conflictsForSets(table: Table, values: Map<string, SqlValue>, sets: IndexedColumn[][], env: ExecutionEnv): Row[] {
+  const found: Row[] = [];
+  const seen = new Set<string>();
+  const push = (row: Row): void => {
+    const key = String(row.rowid);
+    if (seen.has(key)) return;
+    seen.add(key);
+    found.push(row);
+  };
+
+  const db = env.state.databaseForTable(table);
+  for (const columns of sets) {
+    const desired = columns.map((column) =>
+      normalizeForCollation(values.get(normalizeColumnName(column.name)) ?? null, column.collate ?? "BINARY"),
+    );
+    if (desired.some((value) => value === null)) continue;
+
+    // INTEGER PRIMARY KEY / rowid map.
+    if (columns.length === 1) {
+      const pk = table.integerPkColumn();
+      if (pk && normalizeColumnName(columns[0]!.name) === normalizeColumnName(pk.name)) {
+        const row = table.getByKey(desired[0]!);
+        if (row) push(row);
+        continue;
+      }
+    }
+
+    // Prefer IndexStore lookup (autoindexes + CREATE INDEX).
+    let usedIndex = false;
+    for (const indexName of table.indexes) {
+      const index = db.indexes.get(indexName.toLowerCase());
+      if (!index?.unique || index.where) continue;
+      if (index.columns.length !== columns.length) continue;
+      if (
+        !index.columns.every(
+          (column, i) => normalizeColumnName(column.name) === normalizeColumnName(columns[i]!.name),
+        )
+      ) {
+        continue;
+      }
+      usedIndex = true;
+      for (const rowid of index.store.lookup(desired)) {
+        const row = table.get(rowid);
+        if (row) push(row);
+      }
+      break;
+    }
+    if (usedIndex) continue;
+
+    // Slow fallback: full scan (should be rare once autoindexes exist).
+    for (const row of table.scan()) {
       const existing = indexValues(columns, row);
-      return (
-        desired.every((value) => value !== null) &&
-        desired.every((value, index) => compareSql(value, existing[index] ?? null) === 0)
-      );
-    }),
-  );
+      if (desired.every((value, index) => compareSql(value, existing[index] ?? null) === 0)) push(row);
+    }
+  }
+  return found;
 }
 
 function indexValues(columns: IndexedColumn[], row: Row): SqlValue[] {

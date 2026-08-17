@@ -64,6 +64,8 @@ export function transactionSpecs(): BenchSpec[] {
       operation: "1000 inserts autocommit",
       datasetSize: 1000,
       tiers: ["ci", "default", "full"],
+      layer: "engine",
+      isolateIterations: true,
       warmup: 0,
       iterations: 3,
       opsPerSample: 1000,
@@ -81,6 +83,29 @@ export function transactionSpecs(): BenchSpec[] {
       operation: "1000 inserts in transaction",
       datasetSize: 1000,
       tiers: ["ci", "default", "full"],
+      layer: "engine",
+      isolateIterations: true,
+      warmup: 0,
+      iterations: 3,
+      opsPerSample: 1000,
+      setup: (engine) => {
+        engine.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)");
+        return engine.prepare("INSERT INTO t(v) VALUES (?)");
+      },
+      fn: (engine, ctx) => {
+        const stmt = ctx as { run: (v: string) => unknown };
+        engine.transaction(() => {
+          for (let i = 0; i < 1000; i++) stmt.run(`v${i}`);
+        });
+      },
+    }),
+    spec({
+      name: "tx/prepared-tx-inserts/1000",
+      operation: "1000 prepared inserts in transaction",
+      datasetSize: 1000,
+      tiers: ["default", "full"],
+      layer: "engine",
+      isolateIterations: true,
       warmup: 0,
       iterations: 3,
       opsPerSample: 1000,
@@ -100,6 +125,8 @@ export function transactionSpecs(): BenchSpec[] {
       operation: "10000 inserts in transaction",
       datasetSize: 10_000,
       tiers: ["default", "full"],
+      layer: "engine",
+      isolateIterations: true,
       warmup: 0,
       iterations: 2,
       opsPerSample: 10_000,
@@ -119,6 +146,8 @@ export function transactionSpecs(): BenchSpec[] {
       operation: "batch update",
       datasetSize: 1000,
       tiers: ["default", "full"],
+      layer: "engine",
+      isolateIterations: true,
       warmup: 0,
       iterations: 4,
       setup: (engine) => {
@@ -141,6 +170,8 @@ export function transactionSpecs(): BenchSpec[] {
       operation: "savepoint rollback",
       datasetSize: 1000,
       tiers: ["default", "full"],
+      layer: "engine",
+      isolateIterations: true,
       warmup: 0,
       iterations: 4,
       setup: (engine) => {
@@ -226,12 +257,14 @@ export function indexSpecs(): BenchSpec[] {
       },
     }),
     spec({
-      name: "index/composite/1000",
-      operation: "composite unique index lookup",
+      name: "index/composite-pk/1000",
+      operation: "composite primary key lookup",
       datasetSize: 1000,
       tiers: ["default", "full"],
+      layer: "engine",
       warmup: 2,
       iterations: 12,
+      opsPerSample: 20,
       setup: (engine) => {
         engine.exec("CREATE TABLE kv (a INTEGER NOT NULL, b INTEGER NOT NULL, v TEXT, PRIMARY KEY (a, b))");
         const ins = engine.prepare("INSERT INTO kv(a, b, v) VALUES (?, ?, ?)");
@@ -241,7 +274,31 @@ export function indexSpecs(): BenchSpec[] {
         return engine.prepare("SELECT v FROM kv WHERE a = ? AND b = ?");
       },
       fn: (_engine, ctx) => {
-        (ctx as { get: (a: number, b: number) => unknown }).get(50, 0);
+        const stmt = ctx as { get: (a: number, b: number) => unknown };
+        for (let i = 0; i < 20; i++) stmt.get(50 + i, (50 + i) % 10);
+      },
+    }),
+    spec({
+      name: "index/composite-unique/1000",
+      operation: "composite unique index lookup",
+      datasetSize: 1000,
+      tiers: ["default", "full"],
+      layer: "engine",
+      warmup: 2,
+      iterations: 12,
+      opsPerSample: 20,
+      setup: (engine) => {
+        engine.exec("CREATE TABLE kv (a INTEGER NOT NULL, b INTEGER NOT NULL, v TEXT)");
+        engine.exec("CREATE UNIQUE INDEX idx_kv_ab ON kv(a, b)");
+        const ins = engine.prepare("INSERT INTO kv(a, b, v) VALUES (?, ?, ?)");
+        engine.transaction(() => {
+          for (let i = 1; i <= 1000; i++) ins.run(i, i % 10, `v${i}`);
+        });
+        return engine.prepare("SELECT v FROM kv WHERE a = ? AND b = ?");
+      },
+      fn: (_engine, ctx) => {
+        const stmt = ctx as { get: (a: number, b: number) => unknown };
+        for (let i = 0; i < 20; i++) stmt.get(50 + i, (50 + i) % 10);
       },
     }),
   ];
@@ -254,6 +311,7 @@ export function joinSpecs(): BenchSpec[] {
       operation: "join small to large",
       datasetSize: 1000,
       tiers: ["ci", "default", "full"],
+      layer: "engine",
       warmup: 1,
       iterations: 8,
       setup: (engine) => {
@@ -277,6 +335,7 @@ export function joinSpecs(): BenchSpec[] {
       operation: "join on strings",
       datasetSize: 500,
       tiers: ["default", "full"],
+      layer: "engine",
       warmup: 1,
       iterations: 6,
       setup: (engine) => {
@@ -299,14 +358,16 @@ export function joinSpecs(): BenchSpec[] {
     }),
     spec({
       name: "join/with-nulls/500",
-      operation: "join with nulls",
+      operation: "LEFT JOIN with nulls (indexed)",
       datasetSize: 500,
       tiers: ["default", "full"],
+      layer: "engine",
       warmup: 1,
       iterations: 6,
       setup: (engine) => {
         engine.exec("CREATE TABLE a (id INTEGER PRIMARY KEY, k INTEGER)");
         engine.exec("CREATE TABLE b (id INTEGER PRIMARY KEY, k INTEGER)");
+        engine.exec("CREATE INDEX idx_b_k ON b(k)");
         const insA = engine.prepare("INSERT INTO a(id, k) VALUES (?, ?)");
         const insB = engine.prepare("INSERT INTO b(id, k) VALUES (?, ?)");
         engine.transaction(() => {
@@ -316,6 +377,56 @@ export function joinSpecs(): BenchSpec[] {
           }
         });
         return engine.prepare("SELECT a.id FROM a LEFT JOIN b ON a.k = b.k");
+      },
+      fn: (_engine, ctx) => {
+        (ctx as { all: () => unknown }).all();
+      },
+    }),
+    spec({
+      name: "join/unindexed-eq/500",
+      operation: "unindexed equality join (hash fallback)",
+      datasetSize: 500,
+      tiers: ["default", "full"],
+      layer: "engine",
+      warmup: 1,
+      iterations: 6,
+      setup: (engine) => {
+        engine.exec("CREATE TABLE a (id INTEGER PRIMARY KEY, k INTEGER NOT NULL)");
+        engine.exec("CREATE TABLE b (id INTEGER PRIMARY KEY, k INTEGER NOT NULL)");
+        const insA = engine.prepare("INSERT INTO a(id, k) VALUES (?, ?)");
+        const insB = engine.prepare("INSERT INTO b(id, k) VALUES (?, ?)");
+        engine.transaction(() => {
+          for (let i = 1; i <= 500; i++) {
+            insA.run(i, i);
+            insB.run(i, i);
+          }
+        });
+        return engine.prepare("SELECT a.id FROM a JOIN b ON a.k = b.k");
+      },
+      fn: (_engine, ctx) => {
+        (ctx as { all: () => unknown }).all();
+      },
+    }),
+    spec({
+      name: "join/nested-loop/200",
+      operation: "non-equality nested loop join",
+      datasetSize: 200,
+      tiers: ["default", "full"],
+      layer: "engine",
+      warmup: 1,
+      iterations: 4,
+      setup: (engine) => {
+        engine.exec("CREATE TABLE a (id INTEGER PRIMARY KEY, k INTEGER NOT NULL)");
+        engine.exec("CREATE TABLE b (id INTEGER PRIMARY KEY, k INTEGER NOT NULL)");
+        const insA = engine.prepare("INSERT INTO a(id, k) VALUES (?, ?)");
+        const insB = engine.prepare("INSERT INTO b(id, k) VALUES (?, ?)");
+        engine.transaction(() => {
+          for (let i = 1; i <= 200; i++) {
+            insA.run(i, i);
+            insB.run(i, i);
+          }
+        });
+        return engine.prepare("SELECT a.id FROM a JOIN b ON a.k < b.k AND b.k < a.k + 3");
       },
       fn: (_engine, ctx) => {
         (ctx as { all: () => unknown }).all();

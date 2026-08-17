@@ -14,10 +14,11 @@ import { evalExpr } from "../expressions/eval.ts";
 import { evaluateTableFunction } from "../functions/table-valued.ts";
 import { buildSqliteMaster, buildSqliteSchema } from "../schema/catalog.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
-import { tryIndexedTableRows, tryJoinProbe } from "../planner/access.ts";
+import { tryIndexedTableRows, tryJoinEqualityKeys, tryJoinProbe } from "../planner/access.ts";
+import { serializeIndexKey } from "../indexes/index.ts";
 import type { Row } from "../storage/row.ts";
 import type { Table } from "../storage/table.ts";
-import { compareWithCollation } from "../types/collation.ts";
+import { compareWithCollation, normalizeForCollation } from "../types/collation.ts";
 import {
   type Affinity,
   applyAffinity,
@@ -277,6 +278,57 @@ export function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext
           if (item.on && isTruthySql(evalExpr(item.on, env.createEvalContext(joined, parent))) !== true) continue;
           matched = true;
           result.push(joined);
+        }
+        if (!matched && (item.joinType === "LEFT" || item.joinType === "FULL")) {
+          result.push({ cells: [...lhs.cells, ...nullRight] });
+        }
+      }
+      return result;
+    }
+
+    // Hash-join fallback for unindexed equality INNER/LEFT joins (NULL keys never match).
+    const hashKeys =
+      !item.using && item.joinType !== "RIGHT" && item.joinType !== "FULL"
+        ? tryJoinEqualityKeys(item.right, item.on, env)
+        : null;
+    if (hashKeys) {
+      const right = scanFrom(item.right, env, parent);
+      const rightShape = (right[0]?.cells ?? shapeOf(item.right, env)).map((cell) => cell);
+      const nullRight = rightShape.map((cell) => ({ ...cell, value: null as SqlValue }));
+      const buckets = new Map<string, ScopeRow[]>();
+      for (const rhs of right) {
+        const values = hashKeys.rightColumns.map((name) => {
+          const cell = rhs.cells.find((c) => c.name.toLowerCase() === name.toLowerCase());
+          return normalizeForCollation(cell?.value ?? null, "BINARY");
+        });
+        const key = serializeIndexKey(values);
+        if (key === null) continue; // NULL join key → never matches via =
+        const bucket = buckets.get(key);
+        if (bucket) bucket.push(rhs);
+        else buckets.set(key, [rhs]);
+      }
+      const result: ScopeRow[] = [];
+      for (const lhs of left) {
+        const values = hashKeys.leftKeys.map((key) => {
+          const cell = lhs.cells.find(
+            (c) =>
+              c.name.toLowerCase() === key.column.toLowerCase() &&
+              (key.table === null || c.table?.toLowerCase() === key.table.toLowerCase()),
+          );
+          return normalizeForCollation(cell?.value ?? null, "BINARY");
+        });
+        const mapKey = serializeIndexKey(values);
+        let matched = false;
+        if (mapKey !== null) {
+          const matches = buckets.get(mapKey);
+          if (matches) {
+            for (const rhs of matches) {
+              const joined = { cells: [...lhs.cells, ...rhs.cells] };
+              if (item.on && isTruthySql(evalExpr(item.on, env.createEvalContext(joined, parent))) !== true) continue;
+              matched = true;
+              result.push(joined);
+            }
+          }
         }
         if (!matched && (item.joinType === "LEFT" || item.joinType === "FULL")) {
           result.push({ cells: [...lhs.cells, ...nullRight] });

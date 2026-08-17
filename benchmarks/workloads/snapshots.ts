@@ -35,6 +35,7 @@ export function snapshotSpecs(): BenchSpec[] {
         operation: "snapshot export",
         datasetSize: target.rows,
         tiers: target.tiers,
+        layer: "engine",
         warmup: 0,
         iterations: target.rows >= 25_000 ? 1 : 3,
         setup: (engine) => {
@@ -62,20 +63,39 @@ export function snapshotSpecs(): BenchSpec[] {
         operation: "snapshot hydrate",
         datasetSize: target.rows,
         tiers: target.tiers,
+        layer: "engine",
+        isolateIterations: target.rows >= 25_000,
         warmup: 0,
         iterations: target.rows >= 25_000 ? 1 : 3,
         setup: (engine) => {
           populateSnapshotDb(engine, target.rows, target.payloadBytes);
           const bytes = engine.snapshot();
-          return { bytes, size: bytes.byteLength };
+          // Clear live rows before timed restore so peak reflects hydrate cost,
+          // not (live DB + decoded).
+          engine.exec("DELETE FROM blobs");
+          maybeGc();
+          return { bytes, size: bytes.byteLength, before: sampleMemory() };
         },
         fn: (engine, ctx) => {
-          const { bytes } = ctx as { bytes: Uint8Array };
-          engine.restore(bytes);
+          const state = ctx as { bytes: Uint8Array; after?: ReturnType<typeof sampleMemory> };
+          engine.restore(state.bytes);
+          state.after = sampleMemory();
         },
         extra: (ctx) => {
-          const state = ctx as { size?: number };
-          return state.size !== undefined ? { snapshotBytes: state.size } : undefined;
+          const state = ctx as {
+            size?: number;
+            before?: ReturnType<typeof sampleMemory>;
+            after?: ReturnType<typeof sampleMemory>;
+          };
+          const out: Record<string, number | string> = {};
+          if (state.size !== undefined) out.snapshotBytes = state.size;
+          if (state.before?.heapUsed !== undefined && state.after?.heapUsed !== undefined) {
+            out.heapDelta = state.after.heapUsed - state.before.heapUsed;
+          }
+          if (state.before?.rss !== undefined && state.after?.rss !== undefined) {
+            out.rssDelta = state.after.rss - state.before.rss;
+          }
+          return out;
         },
       }),
       spec({
@@ -83,6 +103,7 @@ export function snapshotSpecs(): BenchSpec[] {
         operation: "export+hydrate+query",
         datasetSize: target.rows,
         tiers: target.tiers,
+        layer: "engine",
         warmup: 0,
         iterations: 1,
         setup: (engine) => {

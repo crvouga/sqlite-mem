@@ -2,6 +2,14 @@ import type { BenchSpec } from "../harness/types.ts";
 import { fillFts, fillJsonDocs } from "./populate.ts";
 import { spec } from "./tiers.ts";
 
+/**
+ * JSON / FTS microbenchmarks.
+ *
+ * Local-first guidance:
+ * - Prefer json_extract / ->> / json_set for point access.
+ * - Avoid json_each on hot paths (row expansion); normalize or index extracted fields.
+ * - FTS MATCH currently filters after a virtual-table scan; fine for small corpora.
+ */
 export function jsonSpecs(): BenchSpec[] {
   return [
     spec({
@@ -9,6 +17,7 @@ export function jsonSpecs(): BenchSpec[] {
       operation: "json_extract",
       datasetSize: 500,
       tiers: ["ci", "default", "full"],
+      layer: "engine",
       warmup: 1,
       iterations: 8,
       setup: (engine) => {
@@ -24,6 +33,7 @@ export function jsonSpecs(): BenchSpec[] {
       operation: "json ->>",
       datasetSize: 500,
       tiers: ["default", "full"],
+      layer: "engine",
       warmup: 1,
       iterations: 8,
       setup: (engine) => {
@@ -39,6 +49,7 @@ export function jsonSpecs(): BenchSpec[] {
       operation: "json_set",
       datasetSize: 500,
       tiers: ["default", "full"],
+      layer: "engine",
       warmup: 1,
       iterations: 8,
       setup: (engine) => {
@@ -51,9 +62,10 @@ export function jsonSpecs(): BenchSpec[] {
     }),
     spec({
       name: "json/each/200",
-      operation: "json_each",
+      operation: "json_each (row expansion — avoid on hot paths)",
       datasetSize: 200,
       tiers: ["default", "full"],
+      layer: "engine",
       warmup: 1,
       iterations: 6,
       setup: (engine) => {
@@ -71,9 +83,10 @@ export function ftsSpecs(): BenchSpec[] {
   return [
     spec({
       name: "fts/match/200",
-      operation: "FTS MATCH",
+      operation: "FTS MATCH (scan + filter)",
       datasetSize: 200,
       tiers: ["ci", "default", "full"],
+      layer: "engine",
       warmup: 1,
       iterations: 8,
       setup: (engine) => {
@@ -86,9 +99,10 @@ export function ftsSpecs(): BenchSpec[] {
     }),
     spec({
       name: "fts/match/2000",
-      operation: "FTS MATCH",
+      operation: "FTS MATCH (scan + filter)",
       datasetSize: 2000,
       tiers: ["default", "full"],
+      layer: "engine",
       warmup: 1,
       iterations: 6,
       setup: (engine) => {

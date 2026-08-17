@@ -286,8 +286,56 @@ export class DatabaseState {
       }
     }
     this.tables.set(key, table);
+    this.createAutoIndexesForTable(table);
     this.schemaVersion++;
     return table;
+  }
+
+  /**
+   * SQLite-like autoindexes for PRIMARY KEY / UNIQUE so lookups and uniqueness
+   * checks can use IndexStore. Skips single-column INTEGER PRIMARY KEY (rowid alias).
+   */
+  private createAutoIndexesForTable(table: Table): void {
+    let seq = 1;
+    const add = (columns: IndexedColumn[], unique: boolean): void => {
+      if (columns.length === 0) return;
+      // INTEGER PRIMARY KEY is the rowid map — no secondary autoindex.
+      if (
+        unique &&
+        columns.length === 1 &&
+        !table.withoutRowid &&
+        table.integerPkColumn()?.name.toLowerCase() === columns[0]!.name.toLowerCase()
+      ) {
+        return;
+      }
+      const name = `sqlite_autoindex_${table.name}_${seq++}`;
+      const index: IndexInfo = {
+        name,
+        tableName: table.name,
+        unique,
+        columns: structuredClone(columns),
+        where: null,
+        originalSql: null,
+        store: new IndexStore(name),
+      };
+      this.indexes.set(keyOf(name), index);
+      table.indexes.push(index.name);
+    };
+
+    const hasTablePrimary = table.constraints.some((constraint) => constraint.type === "primary_key");
+    for (const column of table.columns) {
+      if (column.unique) {
+        add([{ name: column.name, collate: column.collate, order: null }], true);
+      }
+      if (column.primaryKey && !hasTablePrimary) {
+        add([{ name: column.name, collate: column.collate, order: null }], true);
+      }
+    }
+    for (const constraint of table.constraints) {
+      if (constraint.type === "primary_key" || constraint.type === "unique") {
+        add(constraint.columns, true);
+      }
+    }
   }
 
   dropTable(name: string, ifExists = false): boolean {

@@ -6,6 +6,7 @@ export interface TimingStats {
   min: number;
   max: number;
   opsPerSec: number;
+  perOpMs: number;
 }
 
 export function percentile(sorted: readonly number[], p: number): number {
@@ -21,13 +22,14 @@ export function percentile(sorted: readonly number[], p: number): number {
 
 export function summarize(samplesMs: readonly number[], opsPerSample: number): TimingStats {
   if (samplesMs.length === 0) {
-    return { p50: 0, p95: 0, p99: 0, mean: 0, min: 0, max: 0, opsPerSec: 0 };
+    return { p50: 0, p95: 0, p99: 0, mean: 0, min: 0, max: 0, opsPerSec: 0, perOpMs: 0 };
   }
   const sorted = [...samplesMs].sort((a, b) => a - b);
   const sum = samplesMs.reduce((acc, value) => acc + value, 0);
   const mean = sum / samplesMs.length;
   const totalOps = samplesMs.length * opsPerSample;
   const opsPerSec = sum > 0 ? (totalOps / sum) * 1000 : 0;
+  const ops = Math.max(1, opsPerSample);
   return {
     p50: percentile(sorted, 50),
     p95: percentile(sorted, 95),
@@ -36,6 +38,7 @@ export function summarize(samplesMs: readonly number[], opsPerSample: number): T
     min: sorted[0] ?? 0,
     max: sorted[sorted.length - 1] ?? 0,
     opsPerSec,
+    perOpMs: mean / ops,
   };
 }
 

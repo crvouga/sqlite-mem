@@ -46,11 +46,23 @@ export interface BenchSpec {
    * Used for ops/sec. Default 1.
    */
   opsPerSample?: number;
+  /**
+   * Measurement layer for reports: raw engine, sqlite-mem API, or app composition.
+   */
+  layer?: "engine" | "api" | "app";
+  /**
+   * When true, recreate the engine and re-run setup for every timed iteration
+   * so stateful benches (inserts, etc.) do not accumulate across samples.
+   */
+  isolateIterations?: boolean;
   setup?: (engine: BenchEngine) => unknown;
   fn: (engine: BenchEngine, ctx: unknown) => void;
   teardown?: (engine: BenchEngine, ctx: unknown) => void;
   extra?: (ctx: unknown) => Record<string, number | string> | undefined;
 }
+
+/** Minimum timed samples before percentile columns are considered reliable. */
+export const RELIABLE_PERCENTILE_MIN_SAMPLES = 5;
 
 export interface BenchResult {
   name: string;
@@ -60,6 +72,7 @@ export interface BenchResult {
   iterations: number;
   warmup: number;
   opsPerSample: number;
+  /** Wall-clock sample stats (one timed `fn` call). */
   p50: number;
   p95: number;
   p99: number;
@@ -67,6 +80,12 @@ export interface BenchResult {
   min: number;
   max: number;
   opsPerSec: number;
+  /** Mean ms per logical op (`mean / opsPerSample`). */
+  perOpMs: number;
+  /** False when iterations are too few for meaningful p95/p99. */
+  reliablePercentiles: boolean;
+  /** Optional layer tag: engine | api | app */
+  layer?: string;
   memoryBefore?: MemorySample;
   memoryAfter?: MemorySample;
   extra?: Record<string, number | string>;

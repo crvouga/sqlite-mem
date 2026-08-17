@@ -1,6 +1,20 @@
 import type { BenchSpec } from "../harness/types.ts";
+import { nowMs } from "../harness/stats.ts";
 import { fillAppSchema, fillUsers } from "./populate.ts";
 import { spec } from "./tiers.ts";
+
+const APP_JOIN_SQL = `
+  SELECT u.name, COUNT(t.id) AS open_tasks
+  FROM users u
+  JOIN tasks t ON t.assignee_id = u.id
+  WHERE t.completed = 0
+  GROUP BY u.id, u.name
+  ORDER BY open_tasks DESC
+  LIMIT 20
+`;
+
+const PROJECT_TASKS_SQL =
+  "SELECT t.id, t.title FROM tasks t WHERE t.project_id = ? AND t.completed = 0 ORDER BY t.id LIMIT 50";
 
 export function appSpecs(): BenchSpec[] {
   return [
@@ -9,6 +23,7 @@ export function appSpecs(): BenchSpec[] {
       operation: "local-first CRUD loop",
       datasetSize: 100,
       tiers: ["ci", "default", "full"],
+      layer: "app",
       warmup: 1,
       iterations: 8,
       opsPerSample: 50,
@@ -46,6 +61,7 @@ export function appSpecs(): BenchSpec[] {
       operation: "sync batch apply",
       datasetSize: 1000,
       tiers: ["ci", "default", "full"],
+      layer: "app",
       warmup: 1,
       iterations: 6,
       setup: (engine) => {
@@ -76,29 +92,30 @@ export function appSpecs(): BenchSpec[] {
         s.changed.all(10_000);
       },
     }),
+    ...appQuerySpecs(200, ["ci", "default", "full"]),
+    ...appQuerySpecs(2000, ["default", "full"]),
+  ];
+}
+
+function appQuerySpecs(users: number, tiers: BenchSpec["tiers"]): BenchSpec[] {
+  const email = `u${Math.floor(users / 2)}@ex.test`;
+  const projectId = Math.max(1, Math.floor(users / 40));
+  return [
     spec({
-      name: "workload-c/app-queries/200",
-      operation: "indexed app queries",
-      datasetSize: 200,
-      tiers: ["ci", "default", "full"],
+      name: `workload-c/app-queries/${users}`,
+      operation: "indexed app queries (composed)",
+      datasetSize: users,
+      tiers,
+      layer: "app",
       warmup: 1,
-      iterations: 8,
+      iterations: users >= 2000 ? 6 : 8,
       setup: (engine) => {
-        fillAppSchema(engine, 200);
+        fillAppSchema(engine, users);
         return {
           user: engine.prepare("SELECT id, name FROM users WHERE email = ?"),
-          projectTasks: engine.prepare(
-            "SELECT t.id, t.title FROM tasks t WHERE t.project_id = ? AND t.completed = 0 ORDER BY t.id LIMIT 50",
-          ),
-          join: engine.prepare(`
-            SELECT u.name, COUNT(t.id) AS open_tasks
-            FROM users u
-            JOIN tasks t ON t.assignee_id = u.id
-            WHERE t.completed = 0
-            GROUP BY u.id, u.name
-            ORDER BY open_tasks DESC
-            LIMIT 20
-          `),
+          projectTasks: engine.prepare(PROJECT_TASKS_SQL),
+          join: engine.prepare(APP_JOIN_SQL),
+          timings: { userMs: 0, projectMs: 0, joinMs: 0 },
         };
       },
       fn: (_engine, ctx) => {
@@ -106,43 +123,58 @@ export function appSpecs(): BenchSpec[] {
           user: { get: (email: string) => unknown };
           projectTasks: { all: (id: number) => unknown };
           join: { all: () => unknown };
+          timings: { userMs: number; projectMs: number; joinMs: number };
         };
-        s.user.get("u100@ex.test");
-        s.projectTasks.all(5);
+        let t0 = nowMs();
+        s.user.get(email);
+        s.timings.userMs = nowMs() - t0;
+        t0 = nowMs();
+        s.projectTasks.all(projectId);
+        s.timings.projectMs = nowMs() - t0;
+        t0 = nowMs();
         s.join.all();
+        s.timings.joinMs = nowMs() - t0;
+      },
+      extra: (ctx) => {
+        const s = ctx as { timings?: { userMs: number; projectMs: number; joinMs: number } };
+        if (!s.timings) return undefined;
+        return {
+          userMs: s.timings.userMs,
+          projectMs: s.timings.projectMs,
+          joinMs: s.timings.joinMs,
+        };
       },
     }),
     spec({
-      name: "workload-c/app-queries/2000",
-      operation: "indexed app queries",
-      datasetSize: 2000,
-      tiers: ["default", "full"],
+      name: `workload-c/app-query-user/${users}`,
+      operation: "app email lookup only",
+      datasetSize: users,
+      tiers,
+      layer: "api",
       warmup: 1,
-      iterations: 6,
+      iterations: 8,
       setup: (engine) => {
-        fillAppSchema(engine, 2000);
-        return {
-          user: engine.prepare("SELECT id, name FROM users WHERE email = ?"),
-          projectTasks: engine.prepare("SELECT t.id, t.title FROM tasks t WHERE t.project_id = ? LIMIT 50"),
-          join: engine.prepare(`
-            SELECT u.name, COUNT(t.id) AS open_tasks
-            FROM users u
-            JOIN tasks t ON t.assignee_id = u.id
-            WHERE t.completed = 0
-            GROUP BY u.id, u.name
-            LIMIT 20
-          `),
-        };
+        fillAppSchema(engine, users);
+        return engine.prepare("SELECT id, name FROM users WHERE email = ?");
       },
       fn: (_engine, ctx) => {
-        const s = ctx as {
-          user: { get: (email: string) => unknown };
-          projectTasks: { all: (id: number) => unknown };
-          join: { all: () => unknown };
-        };
-        s.user.get("u1000@ex.test");
-        s.projectTasks.all(10);
-        s.join.all();
+        (ctx as { get: (e: string) => unknown }).get(email);
+      },
+    }),
+    spec({
+      name: `workload-c/app-query-join/${users}`,
+      operation: "app open-tasks aggregate join",
+      datasetSize: users,
+      tiers,
+      layer: "api",
+      warmup: 1,
+      iterations: users >= 2000 ? 6 : 8,
+      setup: (engine) => {
+        fillAppSchema(engine, users);
+        return engine.prepare(APP_JOIN_SQL);
+      },
+      fn: (_engine, ctx) => {
+        (ctx as { all: () => unknown }).all();
       },
     }),
   ];

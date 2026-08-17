@@ -30,6 +30,22 @@ export function executeCreateTable(stmt: CreateTableStmt, env: ExecutionEnv): Re
       new Map(table.columns.map((column, index) => [normalizeColumnName(column.name), values[index] ?? null])),
     );
   }
+  // Populate any autoindexes created with the empty table.
+  const db = env.state.databaseForTable(table);
+  for (const indexName of table.indexes) {
+    const index = db.indexes.get(indexName.toLowerCase());
+    if (!index) continue;
+    index.store.clear();
+    for (const row of table.scan()) {
+      index.store.insert(
+        index.columns.map((column) =>
+          normalizeForCollation(row.values.get(normalizeColumnName(column.name)) ?? null, column.collate ?? "BINARY"),
+        ),
+        row.rowid,
+        index.unique,
+      );
+    }
+  }
   env.state.recordChange(0);
   return emptyResult(0, env.state.lastInsertRowid);
 }
