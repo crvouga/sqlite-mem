@@ -25,7 +25,6 @@ import {
   sqlValueEquals,
   toInteger,
 } from "../types/value.ts";
-import { tokenizeFtsText } from "../vtable/fts5.ts";
 import type { FtsVocabVirtualTable } from "../vtable/modules.ts";
 import type { ExecutionEnv, ScopeRow } from "./env.ts";
 import { type ResultSet, resultValues, valuesToResult } from "./result.ts";
@@ -977,33 +976,11 @@ function scanDbStat(db: DatabaseState, alias: string, _schemaArg: string | null)
 function scanFtsVocab(db: DatabaseState, alias: string, vocab: FtsVocabVirtualTable): ScopeRow[] {
   const fts = db.virtualTables.get(vocab.ftsTable.toLowerCase());
   if (!fts || (fts.kind !== "fts5" && fts.kind !== "fts3" && fts.kind !== "fts4")) return [];
-  const counts = new Map<string, { doc: number; cnt: number }>();
-  for (const row of fts.scan()) {
-    const seen = new Set<string>();
-    for (const tokens of row.tokensByColumn.values()) {
-      for (const token of tokens) {
-        const entry = counts.get(token) ?? { doc: 0, cnt: 0 };
-        entry.cnt++;
-        if (!seen.has(token)) {
-          entry.doc++;
-          seen.add(token);
-        }
-        counts.set(token, entry);
-      }
-    }
-  }
-  return [...counts.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([term, stats]) => ({
-      cells: vocab.columns.map((column) => {
-        if (column === "term") return { table: alias, name: column, value: term };
-        if (column === "doc") return { table: alias, name: column, value: stats.doc };
-        if (column === "cnt") return { table: alias, name: column, value: stats.cnt };
-        if (column === "col") return { table: alias, name: column, value: "*" };
-        if (column === "offset") return { table: alias, name: column, value: 0 };
-        return { table: alias, name: column, value: null };
-      }),
-    }));
+  return fts.vocabRows("row").map((record) => ({
+    cells: vocab.columns.map((column) => ({
+      table: alias,
+      name: column,
+      value: record[column] ?? (column === "col" ? "*" : column === "offset" ? 0 : null),
+    })),
+  }));
 }
-
-void tokenizeFtsText;

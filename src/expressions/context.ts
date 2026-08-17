@@ -1,6 +1,7 @@
 import type { SelectStmt } from "../ast/nodes.ts";
 import type { FunctionContext, FunctionRegistry } from "../functions/registry.ts";
 import type { SqlValue, StorageClass } from "../types/value.ts";
+import type { FtsMatchCursor } from "../vtable/fts5.ts";
 
 export interface EvalContext {
   resolveColumn(table: string | null, name: string): SqlValue;
@@ -12,6 +13,8 @@ export interface EvalContext {
   executeSelect?(select: SelectStmt): { columns: string[]; rows: SqlValue[][] };
   /** Evaluate FTS MATCH against the current row when available. */
   matchFts?(table: string | null, column: string, query: string): boolean;
+  /** Active FTS MATCH cursor for auxiliary functions (bm25/highlight/snippet). */
+  ftsMatch?: FtsMatchCursor | null;
   /** Context used to resolve correlated column references. */
   /** When set, RAISE() is allowed in expression evaluation. */
   raise?: (action: "IGNORE" | "ABORT" | "FAIL" | "ROLLBACK", message?: string) => never;

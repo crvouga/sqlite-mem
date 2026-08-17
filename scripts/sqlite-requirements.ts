@@ -584,14 +584,22 @@ const SOURCE_SEED: Record<string, { status: CoverageStatus; evidence: string[]; 
     notes: "",
   },
   "fts5.html": {
-    status: "VERIFIED",
-    evidence: ["tests/contract/fts/", "tests/contract/modules/scope3-modules.test.ts"],
-    notes: "",
+    status: "PARTIALLY_VERIFIED",
+    evidence: [
+      "tests/contract/fts/",
+      "tests/contract/modules/scope3-modules.test.ts",
+      "compat/fts-oracle-surface.json",
+    ],
+    notes: "FTS5 rewrite in progress: basic MATCH exists; tokenizers/query language/ranking/content modes expanding",
   },
   "fts3.html": {
-    status: "VERIFIED",
-    evidence: ["tests/contract/modules/scope3-modules.test.ts"],
-    notes: "",
+    status: "PARTIALLY_VERIFIED",
+    evidence: [
+      "tests/contract/fts/",
+      "tests/contract/modules/scope3-modules.test.ts",
+      "compat/fts-oracle-surface.json",
+    ],
+    notes: "FTS3/4 surface expanding toward oracle parity (matchinfo/offsets/snippet/query syntax)",
   },
   "rtree.html": {
     status: "VERIFIED",
@@ -833,6 +841,19 @@ async function main(): Promise<void> {
     existing = JSON.parse(readFileSync(coveragePath, "utf8")).coverage ?? {};
   }
   const coverage = mergeCoverage(existing, seeded);
+
+  // Intentional FTS honesty downgrade: do not preserve stale VERIFIED from thin MATCH-only evidence.
+  for (const req of requirements) {
+    const base = req.source.split("#")[0]!.toLowerCase();
+    if (base !== "fts5.html" && base !== "fts3.html") continue;
+    const seed = SOURCE_SEED[base];
+    if (!seed) continue;
+    coverage[req.id] = {
+      status: seed.status,
+      evidence: [...seed.evidence],
+      notes: seed.notes,
+    };
+  }
 
   const sqlBehavior = requirements.filter((r) => r.classification === "SQL_BEHAVIOR");
   const counts = {

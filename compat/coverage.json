@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-08-17T19:10:28.764Z",
+  "generatedAt": "2026-08-17T19:33:39.123Z",
   "referenceSqliteVersion": "3.51.0",
   "counts": {
     "total": 3487,
     "notApplicable": 1586,
     "sqlBehavior": 1901,
-    "verified": 1207,
-    "partiallyVerified": 516,
+    "verified": 1194,
+    "partiallyVerified": 529,
     "unsupported": 178,
     "unknown": 0
   },
@@ -343,11 +343,13 @@
       "notes": "C API / storage / non-SQL surface (c3ref/create_collation.html)"
     },
     "R-00888-53115-42960-22822-38463-42827-06390-25797": {
-      "status": "VERIFIED",
+      "status": "PARTIALLY_VERIFIED",
       "evidence": [
-        "tests/contract/modules/scope3-modules.test.ts"
+        "tests/contract/fts/",
+        "tests/contract/modules/scope3-modules.test.ts",
+        "compat/fts-oracle-surface.json"
       ],
-      "notes": "FTS3/4 module pending Scope-3 implementation"
+      "notes": "FTS3/4 surface expanding toward oracle parity (matchinfo/offsets/snippet/query syntax)"
     },
     "R-00896-24328-65526-17085-61980-08171-20681-33021": {
       "status": "NOT_APPLICABLE",
@@ -355,11 +357,13 @@
       "notes": "C API / storage / non-SQL surface (c3ref/c_config_covering_index_scan.html)"
     },
     "R-00918-16997-33541-06619-01421-44106-53820-17907": {
-      "status": "VERIFIED",
+      "status": "PARTIALLY_VERIFIED",
       "evidence": [
-        "tests/contract/modules/scope3-modules.test.ts"
+        "tests/contract/fts/",
+        "tests/contract/modules/scope3-modules.test.ts",
+        "compat/fts-oracle-surface.json"
       ],
-      "notes": "FTS3/4 module pending Scope-3 implementation"
+      "notes": "FTS3/4 surface expanding toward oracle parity (matchinfo/offsets/snippet/query syntax)"
     },
     "R-00932-23802-62098-12819-52011-48588-05338-32758": {
       "status": "PARTIALLY_VERIFIED",
@@ -1285,11 +1289,13 @@
       "notes": "Unmapped SQL source: optoverview.html"
     },
     "R-03650-18079-61121-63570-57348-35510-07530-48237": {
-      "status": "VERIFIED",
+      "status": "PARTIALLY_VERIFIED",
       "evidence": [
-        "tests/contract/modules/scope3-modules.test.ts"
+        "tests/contract/fts/",
+        "tests/contract/modules/scope3-modules.test.ts",
+        "compat/fts-oracle-surface.json"
       ],
-      "notes": "FTS3/4 module pending Scope-3 implementation"
+      "notes": "FTS3/4 surface expanding toward oracle parity (matchinfo/offsets/snippet/query syntax)"
     },
     "R-03668-38040-63384-47924-51655-15922-38013-57392": {
       "status": "NOT_APPLICABLE",
@@ -3396,11 +3402,13 @@
       "notes": ""
     },
     "R-10734-24248-12820-36089-32208-53594-64364-42192": {
-      "status": "VERIFIED",
+      "status": "PARTIALLY_VERIFIED",
       "evidence": [
-        "tests/contract/modules/scope3-modules.test.ts"
+        "tests/contract/fts/",
+        "tests/contract/modules/scope3-modules.test.ts",
+        "compat/fts-oracle-surface.json"
       ],
-      "notes": "FTS3/4 module pending Scope-3 implementation"
+      "notes": "FTS3/4 surface expanding toward oracle parity (matchinfo/offsets/snippet/query syntax)"
     },
     "R-10777-25114-28148-35067-60781-11341-59885-20930": {
       "status": "PARTIALLY_VERIFIED",
@@ -5002,11 +5010,13 @@
       "notes": "Schema/FK pragmas verified; storage pragmas N/A or no-op"
     },
     "R-15704-22093-19659-04811-31747-18777-12777-21799": {
-      "status": "VERIFIED",
+      "status": "PARTIALLY_VERIFIED",
       "evidence": [
-        "tests/contract/modules/scope3-modules.test.ts"
+        "tests/contract/fts/",
+        "tests/contract/modules/scope3-modules.test.ts",
+        "compat/fts-oracle-surface.json"
       ],
-      "notes": "FTS3/4 module pending Scope-3 implementation"
+      "notes": "FTS3/4 surface expanding toward oracle parity (matchinfo/offsets/snippet/query syntax)"
     },
     "R-15707-53749-16663-50259-17040-65136-59107-02793": {
       "status": "UNSUPPORTED",
@@ -6082,11 +6092,13 @@
       "notes": "Schema/FK pragmas verified; storage pragmas N/A or no-op"
     },
     "R-18879-47479-26487-44670-60127-29624-08821-22011": {
-      "status": "VERIFIED",
+      "status": "PARTIALLY_VERIFIED",
       "evidence": [
-        "tests/contract/modules/scope3-modules.test.ts"
+        "tests/contract/fts/",
+        "tests/contract/modules/scope3-modules.test.ts",
+        "compat/fts-oracle-surface.json"
       ],
-      "notes": "FTS3/4 module pending Scope-3 implementation"
+      "notes": "FTS3/4 surface expanding toward oracle parity (matchinfo/offsets/snippet/query syntax)"
     },
     "R-18885-42713-55126-22349-03815-15805-20030-42091": {
       "status": "VERIFIED",
@@ -6373,11 +6385,13 @@
       "notes": "string_agg and FILTER edges pending full VERIFIED"
     },
     "R-19570-53558-20410-64757-41149-53677-54257-63723": {
-      "status": "VERIFIED",
+      "status": "PARTIALLY_VERIFIED",
       "evidence": [
-        "tests/contract/modules/scope3-modules.test.ts"
+        "tests/contract/fts/",
+        "tests/contract/modules/scope3-modules.test.ts",
+        "compat/fts-oracle-surface.json"
       ],
-      "notes": "FTS3/4 module pending Scope-3 implementation"
+      "notes": "FTS3/4 surface expanding toward oracle parity (matchinfo/offsets/snippet/query syntax)"
     },
     "R-19582-19642-51467-45115-55963-42677-19295-17348": {
       "status": "PARTIALLY_VERIFIED",
@@ -7191,11 +7205,13 @@
       "notes": "C API / storage / non-SQL surface (c3ref/c_stmtstatus_counter.html)"
     },
     "R-22517-03298-06877-11770-25908-54043-03696-50918": {
-      "status": "VERIFIED",
+      "status": "PARTIALLY_VERIFIED",
       "evidence": [
-        "tests/contract/modules/scope3-modules.test.ts"
+        "tests/contract/fts/",
+        "tests/contract/modules/scope3-modules.test.ts",
+        "compat/fts-oracle-surface.json"
       ],
-      "notes": "FTS3/4 module pending Scope-3 implementation"
+      "notes": "FTS3/4 surface expanding toward oracle parity (matchinfo/offsets/snippet/query syntax)"
     },
     "R-22528-31592-23814-33593-53187-04400-51621-15631": {
       "status": "UNSUPPORTED",
@@ -9415,11 +9431,13 @@
       "notes": "C API / storage / non-SQL surface (c3ref/column_blob.html)"
     },
     "R-29005-40549-62573-61718-07162-40054-58592-42696": {
-      "status": "VERIFIED",
+      "status": "PARTIALLY_VERIFIED",
       "evidence": [
-        "tests/contract/modules/scope3-modules.test.ts"
+        "tests/contract/fts/",
+        "tests/contract/modules/scope3-modules.test.ts",
+        "compat/fts-oracle-surface.json"
       ],
-      "notes": "FTS3/4 module pending Scope-3 implementation"
+      "notes": "FTS3/4 surface expanding toward oracle parity (matchinfo/offsets/snippet/query syntax)"
     },
     "R-29031-55583-59701-40159-49217-55206-58141-58993": {
       "status": "VERIFIED",
@@ -9905,11 +9923,13 @@
       "notes": "C API / storage / non-SQL surface (c3ref/wal_autocheckpoint.html)"
     },
     "R-30140-15527-13572-28268-32284-47435-56739-50325": {
-      "status": "VERIFIED",
+      "status": "PARTIALLY_VERIFIED",
       "evidence": [
-        "tests/contract/modules/scope3-modules.test.ts"
+        "tests/contract/fts/",
+        "tests/contract/modules/scope3-modules.test.ts",
+        "compat/fts-oracle-surface.json"
       ],
-      "notes": "FTS3/4 module pending Scope-3 implementation"
+      "notes": "FTS3/4 surface expanding toward oracle parity (matchinfo/offsets/snippet/query syntax)"
     },
     "R-30164-60316-40156-60446-50221-53227-39726-53106": {
       "status": "PARTIALLY_VERIFIED",
@@ -10334,11 +10354,13 @@
       "notes": "string_agg and FILTER edges pending full VERIFIED"
     },
     "R-31509-21858-22614-04075-64482-13479-08451-58532": {
-      "status": "VERIFIED",
+      "status": "PARTIALLY_VERIFIED",
       "evidence": [
-        "tests/contract/modules/scope3-modules.test.ts"
+        "tests/contract/fts/",
+        "tests/contract/modules/scope3-modules.test.ts",
+        "compat/fts-oracle-surface.json"
       ],
-      "notes": "FTS3/4 module pending Scope-3 implementation"
+      "notes": "FTS3/4 surface expanding toward oracle parity (matchinfo/offsets/snippet/query syntax)"
     },
     "R-31509-40414-28527-23209-39294-56164-06955-51281": {
       "status": "VERIFIED",
@@ -11066,11 +11088,13 @@
       "notes": "C API / storage / non-SQL surface (fileformat2.html)"
     },
     "R-33708-43819-48693-15112-15003-18731-38490-26979": {
-      "status": "VERIFIED",
+      "status": "PARTIALLY_VERIFIED",
       "evidence": [
-        "tests/contract/modules/scope3-modules.test.ts"
+        "tests/contract/fts/",
+        "tests/contract/modules/scope3-modules.test.ts",
+        "compat/fts-oracle-surface.json"
       ],
-      "notes": "FTS3/4 module pending Scope-3 implementation"
+      "notes": "FTS3/4 surface expanding toward oracle parity (matchinfo/offsets/snippet/query syntax)"
     },
     "R-33724-43128-37475-21517-54367-56577-55269-13573": {
       "status": "PARTIALLY_VERIFIED",
@@ -13355,11 +13379,13 @@
       "notes": "In-memory schemas"
     },
     "R-40630-02268-40288-03121-46855-38283-56768-00095": {
-      "status": "VERIFIED",
+      "status": "PARTIALLY_VERIFIED",
       "evidence": [
-        "tests/contract/modules/scope3-modules.test.ts"
+        "tests/contract/fts/",
+        "tests/contract/modules/scope3-modules.test.ts",
+        "compat/fts-oracle-surface.json"
       ],
-      "notes": "FTS3/4 module pending Scope-3 implementation"
+      "notes": "FTS3/4 surface expanding toward oracle parity (matchinfo/offsets/snippet/query syntax)"
     },
     "R-40637-59981-01912-00645-08216-04874-58946-55893": {
       "status": "VERIFIED",

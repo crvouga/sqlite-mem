@@ -25,11 +25,26 @@ export function executeFtsInsert(
       throw new SqliteError(`${source.length} values for ${columnNames.length} columns`, "other");
     }
     const values = new Map<string, SqlValue>();
-    for (const column of table.columns) {
-      const suppliedIndex = columnNames.findIndex((name) => name.toLowerCase() === column.toLowerCase());
-      values.set(normalizeColumnName(column), suppliedIndex >= 0 ? (source[suppliedIndex] ?? null) : null);
+    let explicitRowid: number | bigint | undefined;
+    for (let i = 0; i < columnNames.length; i++) {
+      const name = columnNames[i]!;
+      const lower = name.toLowerCase();
+      const value = source[i] ?? null;
+      if (lower === "rowid" || lower === "_rowid_" || lower === "oid") {
+        if (typeof value === "number" || typeof value === "bigint") explicitRowid = value;
+        else if (value !== null) explicitRowid = Number(value);
+        continue;
+      }
+      values.set(normalizeColumnName(name), value);
     }
-    const rowid = table.insert(values);
+    for (const column of table.columns) {
+      const key = normalizeColumnName(column);
+      if (!values.has(key) && !columnNames.some((n) => n.toLowerCase() === key)) {
+        values.set(key, null);
+      }
+    }
+    const rowid = table.insert(values, explicitRowid);
+    // Special commands don't change row counts the same way — still count as a write
     changes++;
     last = rowid;
   }

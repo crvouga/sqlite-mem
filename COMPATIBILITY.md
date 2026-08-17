@@ -40,7 +40,39 @@ Oracle builtins (math, string extras, uuid, ieee754, …) and modules (FTS3/4/5,
 | Windows (incl. ntile/cume_dist/percent_rank) | VERIFIED | EXCLUDE still thinner |
 | JSON1 / JSONB / TVFs | VERIFIED | |
 | Math / string / date extras / uuid / ieee754 | VERIFIED | Scope-3 inventory |
-| FTS3 / FTS4 / FTS5 + MATCH | VERIFIED | Aux helpers (bm25/highlight) context-gated like SQLite |
+| FTS3 / FTS4 / FTS5 + MATCH | PARTIALLY VERIFIED | Differential FTS suite + fuzz vs 3.51.0; see FTS matrix below. Shadow-table change counters intentionally diverge. |
+
+## FTS compatibility matrix
+
+Reference: **SQLite 3.51.0** (`bun:sqlite`). Inventory: `bun run scripts/fts-oracle-surface.ts` → `compat/fts-oracle-surface.json`.
+
+| Feature | Status |
+| --- | --- |
+| FTS3 | PARTIALLY VERIFIED |
+| FTS4 | PARTIALLY VERIFIED |
+| FTS5 | PARTIALLY VERIFIED |
+| Virtual table creation (options/tokenizers) | VERIFIED |
+| Tokenizers (unicode61/ascii/porter/trigram) | VERIFIED |
+| MATCH grammar (AND/OR/NOT/phrase/prefix/NEAR/columns) | VERIFIED |
+| Boolean operators | VERIFIED |
+| Phrases | VERIFIED |
+| Prefix queries | VERIFIED |
+| NEAR | VERIFIED |
+| Column filters | VERIFIED |
+| Ranking / bm25 / rank | VERIFIED |
+| highlight / snippet | VERIFIED |
+| matchinfo / offsets (FTS3/4) | PARTIALLY VERIFIED |
+| Contentless tables | VERIFIED |
+| External content | PARTIALLY VERIFIED |
+| Content tables | VERIFIED |
+| Triggers + FTS | PARTIALLY VERIFIED |
+| Special commands (optimize/rebuild/integrity-check) | VERIFIED |
+| Prefix indexes | VERIFIED |
+| Unicode / adversarial corpus | VERIFIED |
+| Transactions / savepoints | VERIFIED |
+| Error behavior | VERIFIED |
+| FTS differential fuzz | VERIFIED |
+| FTS stateful fuzz | VERIFIED |
 | RTREE / dbstat / bytecode / tables_used | VERIFIED | dbstat synthetic pages; bytecode empty cursor |
 | ANALYZE / REINDEX / VACUUM | VERIFIED | `:memory:` observable parity |
 | EXPLAIN / INDEXED BY | PARTIALLY VERIFIED | Stub shapes / no-ops |

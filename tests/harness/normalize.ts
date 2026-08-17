@@ -174,7 +174,7 @@ export function valuesEqual(a: SqlValue, b: SqlValue, options: ValuesEqualOption
   return false;
 }
 
-function normalizedValuesEqual(a: NormalizedValue, b: NormalizedValue, rowid = false): boolean {
+function normalizedValuesEqual(a: NormalizedValue, b: NormalizedValue, rowid = false, realEpsilon?: number): boolean {
   if (a.kind !== b.kind) {
     if (rowid && a.kind === "integer" && b.kind === "integer") {
       try {
@@ -195,8 +195,15 @@ function normalizedValuesEqual(a: NormalizedValue, b: NormalizedValue, rowid = f
       } catch {
         return false;
       }
-    case "real":
-      return Object.is(a.value, (b as Extract<NormalizedValue, { kind: "real" }>).value);
+    case "real": {
+      const av = a.value;
+      const bv = (b as Extract<NormalizedValue, { kind: "real" }>).value;
+      if (Object.is(av, bv)) return true;
+      if (realEpsilon !== undefined && Number.isFinite(av) && Number.isFinite(bv)) {
+        return Math.abs(av - bv) <= realEpsilon;
+      }
+      return false;
+    }
     case "text":
       return a.value === (b as Extract<NormalizedValue, { kind: "text" }>).value;
     case "blob": {
@@ -228,7 +235,7 @@ function uniqueNamesCompatible(a: string[], b: string[]): boolean {
   return ua.every((name, index) => name === ub[index]);
 }
 
-function positionalRowsEqual(a: NormalizedResult, b: NormalizedResult): boolean {
+function positionalRowsEqual(a: NormalizedResult, b: NormalizedResult, realEpsilon?: number): boolean {
   if (a.rows.length !== b.rows.length) return false;
   for (let r = 0; r < a.rows.length; r++) {
     const rowA = a.rows[r]!;
@@ -237,15 +244,28 @@ function positionalRowsEqual(a: NormalizedResult, b: NormalizedResult): boolean 
     for (let c = 0; c < rowA.length; c++) {
       const colName = a.columns[c] ?? b.columns[c] ?? "";
       const isRowid = colName.toLowerCase().includes("rowid") || colName.toLowerCase() === "oid";
-      if (!normalizedValuesEqual(rowA[c]!, rowB[c]!, isRowid)) return false;
+      if (!normalizedValuesEqual(rowA[c]!, rowB[c]!, isRowid, realEpsilon)) return false;
     }
   }
   return true;
 }
 
-export function deepCompareResults(a: QueryResult, b: QueryResult): { equal: boolean; reason?: string } {
+export interface CompareOptions {
+  /**
+   * Absolute epsilon for REAL comparisons (FTS bm25/rank ULP noise only).
+   * Default: exact Object.is. Do not enable for general SQL parity.
+   */
+  realEpsilon?: number;
+}
+
+export function deepCompareResults(
+  a: QueryResult,
+  b: QueryResult,
+  options?: CompareOptions,
+): { equal: boolean; reason?: string } {
   const na = normalizeQueryResult(a);
   const nb = normalizeQueryResult(b);
+  const realEpsilon = options?.realEpsilon;
 
   if (na.ok !== nb.ok) {
     return { equal: false, reason: `ok mismatch: ${na.ok} vs ${nb.ok}` };
@@ -277,7 +297,7 @@ export function deepCompareResults(a: QueryResult, b: QueryResult): { equal: boo
   if (na.columns.length !== nb.columns.length) {
     // bun:sqlite collapses duplicate column headers in columnNames while values() retains
     // full width. Accept unique-preserving name lists when positional values still match.
-    if (!uniqueNamesCompatible(na.columns, nb.columns) || !positionalRowsEqual(na, nb)) {
+    if (!uniqueNamesCompatible(na.columns, nb.columns) || !positionalRowsEqual(na, nb, realEpsilon)) {
       return { equal: false, reason: "column count mismatch" };
     }
   } else {
@@ -305,7 +325,7 @@ export function deepCompareResults(a: QueryResult, b: QueryResult): { equal: boo
     for (let c = 0; c < width; c++) {
       const colName = na.columns[c] ?? nb.columns[c] ?? `column ${c}`;
       const isRowid = colName.toLowerCase().includes("rowid") || colName.toLowerCase() === "oid";
-      if (!normalizedValuesEqual(rowA[c]!, rowB[c]!, isRowid)) {
+      if (!normalizedValuesEqual(rowA[c]!, rowB[c]!, isRowid, realEpsilon)) {
         return {
           equal: false,
           reason: `value mismatch at row ${r}, column ${colName}`,

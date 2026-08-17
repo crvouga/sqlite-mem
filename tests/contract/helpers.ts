@@ -20,6 +20,14 @@ export function parity(name: string, setup: string[], sql: string, params?: SqlV
   });
 }
 
+/** Like parity, but allows 1e-15 absolute epsilon on REAL (FTS bm25/rank ULP noise). */
+export function ftsRankParity(name: string, setup: string[], sql: string, params?: SqlValue[]): void {
+  matrixBoth(name, (memory, sqlite) => {
+    setupBoth(memory, sqlite, setup);
+    expectParity(memory.query(sql, params), sqlite.query(sql, params), { realEpsilon: 1e-15 });
+  });
+}
+
 export function execParity(name: string, setup: string[], sql: string, params?: SqlValue[]): void {
   matrixBoth(name, (memory, sqlite) => {
     setupBoth(memory, sqlite, setup);
@@ -38,16 +46,24 @@ function shouldNeutralizeCounters(sql: string): boolean {
 export function sequenceParity(
   name: string,
   setup: string[],
-  steps: Array<{ sql: string; query?: boolean; params?: SqlValue[] }>,
-  options?: { compareFinalState?: boolean },
+  steps: Array<{ sql: string; query?: boolean; params?: SqlValue[]; neutralizeCounters?: boolean }>,
+  options?: { compareFinalState?: boolean; neutralizeAllWrites?: boolean },
 ): void {
   matrixBoth(name, (memory, sqlite) => {
     setupBoth(memory, sqlite, setup);
     for (const step of steps) {
       const a = step.query ? memory.query(step.sql, step.params) : memory.exec(step.sql, step.params);
       const b = step.query ? sqlite.query(step.sql, step.params) : sqlite.exec(step.sql, step.params);
-      if (step.query || !a.ok || !b.ok || !shouldNeutralizeCounters(step.sql)) {
-        expectParity(a, b);
+      const neutralize =
+        step.neutralizeCounters ||
+        options?.neutralizeAllWrites ||
+        (!step.query && a.ok && b.ok && shouldNeutralizeCounters(step.sql));
+      if (step.query || !a.ok || !b.ok || !neutralize) {
+        if (neutralize && !step.query && a.ok && b.ok) {
+          expectParity({ ...a, changes: 0, lastInsertRowid: 0 }, { ...b, changes: 0, lastInsertRowid: 0 });
+        } else {
+          expectParity(a, b);
+        }
       } else {
         // DDL / transaction / pragma counters are not consistently defined across drivers.
         expectParity({ ...a, changes: 0, lastInsertRowid: 0 }, { ...b, changes: 0, lastInsertRowid: 0 });

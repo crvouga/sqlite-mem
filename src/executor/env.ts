@@ -25,6 +25,8 @@ export interface ScopeRow {
   /** Output name of the rowid pseudo-column (INTEGER PRIMARY KEY alias when present). */
   rowidName?: string;
   sourceTable?: string;
+  /** Set when WHERE MATCH succeeds for this row. */
+  ftsMatch?: import("../vtable/fts5.ts").FtsMatchCursor | null;
 }
 
 export type SelectRunner = (stmt: SelectStmt, env: ExecutionEnv, parent?: EvalContext) => ResultSet;
@@ -75,6 +77,7 @@ export class ExecutionEnv {
     const cells = scope?.cells ?? [];
     const context: EvalContext = {
       parent,
+      ftsMatch: scope?.ftsMatch ?? null,
       functions: this.functions,
       functionContext: {
         changes: () => this.state.changes,
@@ -83,6 +86,13 @@ export class ExecutionEnv {
         now: this.hooks.now,
         random: this.hooks.random,
         randomU64: this.hooks.randomU64,
+        ftsMatch: scope?.ftsMatch ?? null,
+        ftsRowid: scope?.rowid,
+        ftsSourceTable: scope?.sourceTable,
+        getFtsTable: (name: string) => {
+          if (!this.state.isFtsTable(name)) return null;
+          return this.state.getVirtualTable(name);
+        },
       },
       raise: this.triggerScope
         ? (action, message) => {
@@ -94,6 +104,20 @@ export class ExecutionEnv {
         const tableMatches = table === null || cells.some((cell) => cell.table?.toLowerCase() === table.toLowerCase());
         if (tableMatches && (key === "rowid" || key === "_rowid_" || key === "oid") && scope?.rowid !== undefined) {
           return scope.rowid;
+        }
+        if (key === "rank" && scope?.sourceTable && this.state.isFtsTable(scope.sourceTable)) {
+          const fts = this.state.getVirtualTable(scope.sourceTable);
+          if (scope.ftsMatch) return fts.bm25(scope.ftsMatch);
+          return null;
+        }
+        // FTS table-name reference used by aux functions (bm25(docs), …)
+        if (
+          scope?.sourceTable &&
+          key === scope.sourceTable.toLowerCase() &&
+          this.state.isFtsTable(scope.sourceTable) &&
+          !cells.some((cell) => cell.name.toLowerCase() === key)
+        ) {
+          return scope.sourceTable;
         }
         const matches = cells.filter(
           (cell) =>
@@ -108,6 +132,7 @@ export class ExecutionEnv {
       },
       resolveStorageClass: (table, name) => {
         const key = name.toLowerCase();
+        if (key === "rank") return "real";
         const matches = cells.filter(
           (cell) =>
             cell.name.toLowerCase() === key &&
@@ -162,7 +187,10 @@ export class ExecutionEnv {
           throw new SqliteError("unable to use function MATCH in the requested context", "unsupported");
         }
         const fts = this.state.getVirtualTable(row.sourceTable);
-        return fts.matches(row.rowid, table, column, query);
+        const cursor = fts.matchCursor(row.rowid, table, column, query);
+        if (cursor) row.ftsMatch = cursor;
+        else row.ftsMatch = null;
+        return cursor !== null;
       },
     };
     return context;

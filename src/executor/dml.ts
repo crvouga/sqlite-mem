@@ -714,8 +714,11 @@ function executeVirtualInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
   const table = any;
   const columnNames = stmt.columns ?? table.columns;
   for (const name of columnNames) {
-    if (!table.columns.some((column) => column.toLowerCase() === name.toLowerCase())) {
-      throw new SqliteError(`no such column: ${name}`, "no_such_column");
+    const lower = name.toLowerCase();
+    if (lower === table.name.toLowerCase()) continue; // FTS special-command column
+    if (lower === "rowid" || lower === "_rowid_" || lower === "oid") continue;
+    if (!table.columns.some((column) => column.toLowerCase() === lower)) {
+      throw new SqliteError(`table ${table.name} has no column named ${name}`, "no_such_column");
     }
   }
   const sourceRows = stmt.values

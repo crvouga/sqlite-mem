@@ -30,6 +30,7 @@
     "test:browser": "bun run tests/browser/run.ts",
     "test:sqlite-compat": "bun run scripts/sqlite-requirements.ts && bun run scripts/sqlite-compat-gate.ts && bun test tests/contract tests/fuzz tests/harness",
     "inventory": "bun run scripts/sqlite-inventory.ts",
+    "fts-surface": "bun run scripts/fts-oracle-surface.ts",
     "requirements": "bun run scripts/sqlite-requirements.ts",
     "typecheck": "tsc --noEmit",
     "format": "biome format --write .",

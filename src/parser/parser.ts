@@ -958,17 +958,82 @@ export class Parser {
     const module = this.parseIdent();
     const moduleArgs: string[] = [];
     if (this.match("LPAREN")) {
-      do {
-        if (this.at("STRING")) {
-          moduleArgs.push(String(this.current().literal));
-          this.advance();
-        } else {
-          moduleArgs.push(this.parseIdent());
-        }
-      } while (this.match("COMMA"));
+      if (!this.at("RPAREN")) {
+        do {
+          moduleArgs.push(this.parseVirtualTableArg());
+        } while (this.match("COMMA"));
+      }
       this.expect("RPAREN");
     }
     return { type: "create_virtual_table", ifNotExists, name, module, moduleArgs };
+  }
+
+  /** One comma-separated CREATE VIRTUAL TABLE module argument (FTS options, columns, …). */
+  private parseVirtualTableArg(): string {
+    // STRING alone
+    if (this.at("STRING")) {
+      const value = String(this.current().literal);
+      this.advance();
+      return value;
+    }
+
+    // IDENT [UNINDEXED|NOTINDEXED] | IDENT = value
+    const start = this.parseIdentOrQuoted();
+    if (this.match("EQ") || this.match("EQEQ")) {
+      const value = this.parseVirtualTableOptionValue();
+      return `${start}=${value}`;
+    }
+    // Optional UNINDEXED / NOTINDEXED / type names
+    const extras: string[] = [];
+    while (this.at("IDENT") || this.at("STRING")) {
+      // Stop before next comma-separated arg would need peek of COMMA/RPAREN — only consume trailing idents
+      if (this.at("IDENT")) {
+        const upper = this.current().value.toUpperCase();
+        if (
+          upper === "UNINDEXED" ||
+          upper === "NOTINDEXED" ||
+          upper === "TEXT" ||
+          upper === "INTEGER" ||
+          upper === "REAL" ||
+          upper === "BLOB" ||
+          upper === "NUMERIC"
+        ) {
+          extras.push(this.current().value);
+          this.advance();
+          continue;
+        }
+      }
+      break;
+    }
+    return extras.length ? `${start} ${extras.join(" ")}` : start;
+  }
+
+  private parseIdentOrQuoted(): string {
+    if (this.at("STRING")) {
+      // quoted identifier written as string in some dialects
+      const value = String(this.current().literal);
+      this.advance();
+      return `"${value.replaceAll('"', '""')}"`;
+    }
+    return this.parseIdent();
+  }
+
+  private parseVirtualTableOptionValue(): string {
+    if (this.at("STRING")) {
+      const value = String(this.current().literal);
+      this.advance();
+      return `'${value.replaceAll("'", "''")}'`;
+    }
+    if (this.at("NUMBER")) {
+      const value = this.current().value;
+      this.advance();
+      return value;
+    }
+    if (this.at("IDENT")) {
+      return this.parseIdent();
+    }
+    // Empty string after content=
+    return "''";
   }
 
   private parseIfNotExists(): boolean {

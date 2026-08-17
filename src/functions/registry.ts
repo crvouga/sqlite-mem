@@ -16,6 +16,14 @@ export interface FunctionContext {
   random?: () => bigint;
   /** Raw unsigned 64-bit PRNG draws for `randomblob`. */
   randomU64?: () => bigint;
+  /** Active FTS MATCH cursor when evaluating projections with MATCH in WHERE. */
+  ftsMatch?: import("../vtable/fts5.ts").FtsMatchCursor | null;
+  /** Current rowid for FTS aux defaults when MATCH is absent. */
+  ftsRowid?: import("../storage/row.ts").Rowid;
+  /** Source FTS table name for the current scan row. */
+  ftsSourceTable?: string;
+  /** Resolve FTS table by name for aux functions. */
+  getFtsTable?: (name: string) => import("../vtable/fts5.ts").Fts5VirtualTable | null;
 }
 
 export type ScalarFunction = (args: SqlValue[], context: FunctionContext) => SqlValue;

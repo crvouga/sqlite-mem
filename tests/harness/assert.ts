@@ -1,12 +1,17 @@
 import { expect } from "bun:test";
-import { deepCompareResults, normalizeError } from "./normalize.ts";
+import { type CompareOptions, deepCompareResults, normalizeError } from "./normalize.ts";
 import type { QueryResult, SqlValue } from "./types.ts";
 
-export function expectParity(a: QueryResult, b: QueryResult): void {
-  const comparison = deepCompareResults(a, b);
+export function expectParity(a: QueryResult, b: QueryResult, options?: CompareOptions): void {
+  const comparison = deepCompareResults(a, b, options);
   if (!comparison.equal) {
     expect(comparison.reason ?? "results differ").toBe(undefined);
   }
+}
+
+/** FTS bm25/rank: order-sensitive compare with ULP-scale real tolerance (1e-15). */
+export function expectFtsRankParity(a: QueryResult, b: QueryResult): void {
+  expectParity(a, b, { realEpsilon: 1e-15 });
 }
 
 function errorFromUnknown(error: unknown): QueryResult {
