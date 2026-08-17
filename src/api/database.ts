@@ -82,7 +82,7 @@ export class Database {
     this.assertOpen();
     if (this.transactions.inTransaction) throw new SqliteError("cannot restore during a transaction", "transaction");
     const decoded = decodeDatabaseState(snapshot);
-    this.state.replaceWith(decoded.state);
+    this.state.replaceWith(decoded.state, { adopt: true });
     if (decoded.runtime) {
       this.prng.setState(decoded.runtime.prngState);
       this.now = fixedClock(new Date(decoded.runtime.nowMs));

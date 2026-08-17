@@ -1,0 +1,990 @@
+{
+  "generatedAt": "2026-08-17T20:00:42.426Z",
+  "tier": "ci",
+  "environment": {
+    "runtime": "bun",
+    "runtimeVersion": "1.3.14",
+    "platform": "darwin",
+    "userAgent": "Bun/1.3.14"
+  },
+  "results": [
+    {
+      "name": "startup/new-database",
+      "datasetSize": null,
+      "operation": "new Database()",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.001271,
+      "p95": 0.0035,
+      "p99": 0.003934,
+      "mean": 0.001806,
+      "min": 0.001167,
+      "max": 0.004042,
+      "opsPerSec": 553760.959852,
+      "memoryBefore": {
+        "heapUsed": 519811,
+        "heapTotal": 2116608,
+        "rss": 47677440
+      },
+      "memoryAfter": {
+        "heapUsed": 519811,
+        "heapTotal": 2116608,
+        "rss": 47693824
+      }
+    },
+    {
+      "name": "startup/schema-plus-first-query",
+      "datasetSize": null,
+      "operation": "schema + first query",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.146792,
+      "p95": 0.376781,
+      "p99": 0.386056,
+      "mean": 0.210896,
+      "min": 0.111417,
+      "max": 0.388375,
+      "opsPerSec": 4741.673621,
+      "memoryBefore": {
+        "heapUsed": 519811,
+        "heapTotal": 2374656,
+        "rss": 52264960
+      },
+      "memoryAfter": {
+        "heapUsed": 519811,
+        "heapTotal": 2882560,
+        "rss": 54804480
+      }
+    },
+    {
+      "name": "parser/parse-select",
+      "datasetSize": null,
+      "operation": "parse(sql)",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 5,
+      "p50": 0.143,
+      "p95": 0.195427,
+      "p99": 0.205085,
+      "mean": 0.147923,
+      "min": 0.115834,
+      "max": 0.2075,
+      "opsPerSec": 33801.255379,
+      "memoryBefore": {
+        "heapUsed": 519811,
+        "heapTotal": 2997248,
+        "rss": 55246848
+      },
+      "memoryAfter": {
+        "heapUsed": 519811,
+        "heapTotal": 3636224,
+        "rss": 56983552
+      }
+    },
+    {
+      "name": "parser/prepare",
+      "datasetSize": 100,
+      "operation": "prepare(sql)",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.019708,
+      "p95": 0.03627,
+      "p99": 0.03922,
+      "mean": 0.023187,
+      "min": 0.016542,
+      "max": 0.039958,
+      "opsPerSec": 43126.994624,
+      "memoryBefore": {
+        "heapUsed": 519811,
+        "heapTotal": 9061376,
+        "rss": 73711616
+      },
+      "memoryAfter": {
+        "heapUsed": 519811,
+        "heapTotal": 9143296,
+        "rss": 74203136
+      }
+    },
+    {
+      "name": "parser/execute-prepared",
+      "datasetSize": 100,
+      "operation": "execute prepared",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 20,
+      "p50": 0.257563,
+      "p95": 0.481937,
+      "p99": 0.519987,
+      "mean": 0.28441,
+      "min": 0.154666,
+      "max": 0.5295,
+      "opsPerSec": 70321.056644,
+      "memoryBefore": {
+        "heapUsed": 519811,
+        "heapTotal": 14795776,
+        "rss": 83132416
+      },
+      "memoryAfter": {
+        "heapUsed": 519811,
+        "heapTotal": 15860736,
+        "rss": 85606400
+      }
+    },
+    {
+      "name": "micro/trivial-select/100",
+      "datasetSize": 100,
+      "operation": "SELECT 1",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 20,
+      "p50": 0.200458,
+      "p95": 0.428605,
+      "p99": 0.434455,
+      "mean": 0.272299,
+      "min": 0.193958,
+      "max": 0.435917,
+      "opsPerSec": 73448.762144,
+      "memoryBefore": {
+        "heapUsed": 519811,
+        "heapTotal": 21545984,
+        "rss": 97779712
+      },
+      "memoryAfter": {
+        "heapUsed": 519811,
+        "heapTotal": 23053312,
+        "rss": 99876864
+      }
+    },
+    {
+      "name": "micro/pk-lookup/100",
+      "datasetSize": 100,
+      "operation": "pk lookup",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 10,
+      "p50": 0.064355,
+      "p95": 0.0715,
+      "p99": 0.0715,
+      "mean": 0.06409,
+      "min": 0.055583,
+      "max": 0.0715,
+      "opsPerSec": 156029.77048,
+      "memoryBefore": {
+        "heapUsed": 519811,
+        "heapTotal": 28623872,
+        "rss": 107102208
+      },
+      "memoryAfter": {
+        "heapUsed": 519811,
+        "heapTotal": 29131776,
+        "rss": 107872256
+      }
+    },
+    {
+      "name": "micro/indexed-lookup/100",
+      "datasetSize": 100,
+      "operation": "indexed email lookup",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 10,
+      "p50": 0.062021,
+      "p95": 0.069447,
+      "p99": 0.070222,
+      "mean": 0.060861,
+      "min": 0.050792,
+      "max": 0.070416,
+      "opsPerSec": 164308.384931,
+      "memoryBefore": {
+        "heapUsed": 3474935,
+        "heapTotal": 33980416,
+        "rss": 113065984
+      },
+      "memoryAfter": {
+        "heapUsed": 3474935,
+        "heapTotal": 33980416,
+        "rss": 113672192
+      }
+    },
+    {
+      "name": "micro/unindexed-filter/100",
+      "datasetSize": 100,
+      "operation": "unindexed filter",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.11002,
+      "p95": 0.122698,
+      "p99": 0.12514,
+      "mean": 0.111465,
+      "min": 0.102583,
+      "max": 0.12575,
+      "opsPerSec": 8971.426008,
+      "memoryBefore": {
+        "heapUsed": 3474935,
+        "heapTotal": 33996800,
+        "rss": 116162560
+      },
+      "memoryAfter": {
+        "heapUsed": 3474935,
+        "heapTotal": 33996800,
+        "rss": 116703232
+      }
+    },
+    {
+      "name": "micro/insert/100",
+      "datasetSize": 100,
+      "operation": "single insert",
+      "engine": "sqlite-mem",
+      "iterations": 1,
+      "warmup": 0,
+      "opsPerSample": 200,
+      "p50": 12.104375,
+      "p95": 12.104375,
+      "p99": 12.104375,
+      "mean": 12.104375,
+      "min": 12.104375,
+      "max": 12.104375,
+      "opsPerSec": 16522.951412,
+      "memoryBefore": {
+        "heapUsed": 3474935,
+        "heapTotal": 33996800,
+        "rss": 117014528
+      },
+      "memoryAfter": {
+        "heapUsed": 3932317,
+        "heapTotal": 38109184,
+        "rss": 122617856
+      }
+    },
+    {
+      "name": "micro/update/100",
+      "datasetSize": 100,
+      "operation": "pk update",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 10,
+      "p50": 0.248854,
+      "p95": 0.322542,
+      "p99": 0.325508,
+      "mean": 0.248715,
+      "min": 0.169792,
+      "max": 0.32625,
+      "opsPerSec": 40206.608358,
+      "memoryBefore": {
+        "heapUsed": 3932317,
+        "heapTotal": 38126592,
+        "rss": 125796352
+      },
+      "memoryAfter": {
+        "heapUsed": 3932317,
+        "heapTotal": 38142976,
+        "rss": 126205952
+      }
+    },
+    {
+      "name": "micro/delete-reinsert/100",
+      "datasetSize": 100,
+      "operation": "delete+insert",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.032125,
+      "p95": 0.040354,
+      "p99": 0.042338,
+      "mean": 0.033479,
+      "min": 0.029875,
+      "max": 0.042834,
+      "opsPerSec": 29869.321717,
+      "memoryBefore": {
+        "heapUsed": 3932317,
+        "heapTotal": 38142976,
+        "rss": 126500864
+      },
+      "memoryAfter": {
+        "heapUsed": 3932317,
+        "heapTotal": 38142976,
+        "rss": 126500864
+      }
+    },
+    {
+      "name": "micro/filter-select/100",
+      "datasetSize": 100,
+      "operation": "SELECT with filter",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.117209,
+      "p95": 0.197886,
+      "p99": 0.217944,
+      "mean": 0.132959,
+      "min": 0.108792,
+      "max": 0.222959,
+      "opsPerSec": 7521.134388,
+      "memoryBefore": {
+        "heapUsed": 3932317,
+        "heapTotal": 38142976,
+        "rss": 126582784
+      },
+      "memoryAfter": {
+        "heapUsed": 3932317,
+        "heapTotal": 38142976,
+        "rss": 126877696
+      }
+    },
+    {
+      "name": "micro/order-by/100",
+      "datasetSize": 100,
+      "operation": "ORDER BY",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.166208,
+      "p95": 0.195261,
+      "p99": 0.201719,
+      "mean": 0.167917,
+      "min": 0.13825,
+      "max": 0.203334,
+      "opsPerSec": 5955.334988,
+      "memoryBefore": {
+        "heapUsed": 4555359,
+        "heapTotal": 38175744,
+        "rss": 127123456
+      },
+      "memoryAfter": {
+        "heapUsed": 4555359,
+        "heapTotal": 38175744,
+        "rss": 127188992
+      }
+    },
+    {
+      "name": "micro/group-by/100",
+      "datasetSize": 100,
+      "operation": "GROUP BY",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.169646,
+      "p95": 0.213865,
+      "p99": 0.215607,
+      "mean": 0.177868,
+      "min": 0.14625,
+      "max": 0.216042,
+      "opsPerSec": 5622.146761,
+      "memoryBefore": {
+        "heapUsed": 4555359,
+        "heapTotal": 38176768,
+        "rss": 127385600
+      },
+      "memoryAfter": {
+        "heapUsed": 4555359,
+        "heapTotal": 38209536,
+        "rss": 127533056
+      }
+    },
+    {
+      "name": "micro/join/100",
+      "datasetSize": 100,
+      "operation": "JOIN",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.320291,
+      "p95": 0.385354,
+      "p99": 0.398637,
+      "mean": 0.329034,
+      "min": 0.290333,
+      "max": 0.401958,
+      "opsPerSec": 3039.196517,
+      "memoryBefore": {
+        "heapUsed": 4555359,
+        "heapTotal": 38225920,
+        "rss": 127926272
+      },
+      "memoryAfter": {
+        "heapUsed": 4555359,
+        "heapTotal": 38225920,
+        "rss": 129089536
+      }
+    },
+    {
+      "name": "micro/aggregate/100",
+      "datasetSize": 100,
+      "operation": "aggregate",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.10875,
+      "p95": 0.133844,
+      "p99": 0.137836,
+      "mean": 0.112549,
+      "min": 0.096542,
+      "max": 0.138834,
+      "opsPerSec": 8885.032127,
+      "memoryBefore": {
+        "heapUsed": 4555359,
+        "heapTotal": 38225920,
+        "rss": 129302528
+      },
+      "memoryAfter": {
+        "heapUsed": 4555359,
+        "heapTotal": 38832128,
+        "rss": 129810432
+      }
+    },
+    {
+      "name": "micro/subquery/100",
+      "datasetSize": 100,
+      "operation": "subquery",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.140145,
+      "p95": 0.167906,
+      "p99": 0.174281,
+      "mean": 0.145118,
+      "min": 0.133125,
+      "max": 0.175875,
+      "opsPerSec": 6890.951836,
+      "memoryBefore": {
+        "heapUsed": 5014498,
+        "heapTotal": 38864896,
+        "rss": 129957888
+      },
+      "memoryAfter": {
+        "heapUsed": 5014498,
+        "heapTotal": 38864896,
+        "rss": 129957888
+      }
+    },
+    {
+      "name": "micro/cte/100",
+      "datasetSize": 100,
+      "operation": "CTE",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.121063,
+      "p95": 0.150948,
+      "p99": 0.154256,
+      "mean": 0.124195,
+      "min": 0.102084,
+      "max": 0.155083,
+      "opsPerSec": 8051.87555,
+      "memoryBefore": {
+        "heapUsed": 5014498,
+        "heapTotal": 38864896,
+        "rss": 130138112
+      },
+      "memoryAfter": {
+        "heapUsed": 5014498,
+        "heapTotal": 38864896,
+        "rss": 130154496
+      }
+    },
+    {
+      "name": "micro/prepared-execute/1000",
+      "datasetSize": 1000,
+      "operation": "prepared execute",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1000,
+      "p50": 2.373209,
+      "p95": 2.987771,
+      "p99": 2.990421,
+      "mean": 2.500375,
+      "min": 2.106042,
+      "max": 2.991083,
+      "opsPerSec": 399939.98234,
+      "memoryBefore": {
+        "heapUsed": 6137073,
+        "heapTotal": 41699328,
+        "rss": 137838592
+      },
+      "memoryAfter": {
+        "heapUsed": 6255546,
+        "heapTotal": 47040512,
+        "rss": 143245312
+      }
+    },
+    {
+      "name": "workload-a/crud-loop/100",
+      "datasetSize": 100,
+      "operation": "local-first CRUD loop",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 50,
+      "p50": 7.346437,
+      "p95": 8.387834,
+      "p99": 8.4842,
+      "mean": 7.405917,
+      "min": 6.548167,
+      "max": 8.508292,
+      "opsPerSec": 6751.358711,
+      "memoryBefore": {
+        "heapUsed": 6320727,
+        "heapTotal": 47138816,
+        "rss": 144982016
+      },
+      "memoryAfter": {
+        "heapUsed": 7508354,
+        "heapTotal": 47564800,
+        "rss": 153878528
+      }
+    },
+    {
+      "name": "workload-b/sync-batch/1000",
+      "datasetSize": 1000,
+      "operation": "sync batch apply",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 5.173417,
+      "p95": 5.70027,
+      "p99": 5.72462,
+      "mean": 5.121542,
+      "min": 4.092375,
+      "max": 5.730708,
+      "opsPerSec": 195.253708,
+      "memoryBefore": {
+        "heapUsed": 8498276,
+        "heapTotal": 47564800,
+        "rss": 162660352
+      },
+      "memoryAfter": {
+        "heapUsed": 10230495,
+        "heapTotal": 47584256,
+        "rss": 163315712
+      }
+    },
+    {
+      "name": "workload-c/app-queries/200",
+      "datasetSize": 200,
+      "operation": "indexed app queries",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 2.214896,
+      "p95": 3.164188,
+      "p99": 3.190038,
+      "mean": 2.443674,
+      "min": 1.964417,
+      "max": 3.1965,
+      "opsPerSec": 409.219944,
+      "memoryBefore": {
+        "heapUsed": 12657071,
+        "heapTotal": 48714752,
+        "rss": 165117952
+      },
+      "memoryAfter": {
+        "heapUsed": 13569309,
+        "heapTotal": 53269504,
+        "rss": 170229760
+      }
+    },
+    {
+      "name": "json/extract/500",
+      "datasetSize": 500,
+      "operation": "json_extract",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.027813,
+      "p95": 0.063698,
+      "p99": 0.07044,
+      "mean": 0.036521,
+      "min": 0.026417,
+      "max": 0.072125,
+      "opsPerSec": 27381.50653,
+      "memoryBefore": {
+        "heapUsed": 13950070,
+        "heapTotal": 53318656,
+        "rss": 170524672
+      },
+      "memoryAfter": {
+        "heapUsed": 13950070,
+        "heapTotal": 53318656,
+        "rss": 170524672
+      }
+    },
+    {
+      "name": "fts/match/200",
+      "datasetSize": 200,
+      "operation": "FTS MATCH",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.581208,
+      "p95": 0.819843,
+      "p99": 0.833935,
+      "mean": 0.628896,
+      "min": 0.462209,
+      "max": 0.837458,
+      "opsPerSec": 1590.088027,
+      "memoryBefore": {
+        "heapUsed": 13950070,
+        "heapTotal": 54984704,
+        "rss": 172769280
+      },
+      "memoryAfter": {
+        "heapUsed": 13950070,
+        "heapTotal": 56375296,
+        "rss": 174587904
+      }
+    },
+    {
+      "name": "tx/individual-inserts/1000",
+      "datasetSize": 1000,
+      "operation": "1000 inserts autocommit",
+      "engine": "sqlite-mem",
+      "iterations": 3,
+      "warmup": 0,
+      "opsPerSample": 1000,
+      "p50": 331.550917,
+      "p95": 493.72893,
+      "p99": 508.144753,
+      "mean": 315.462348,
+      "min": 103.087417,
+      "max": 511.748709,
+      "opsPerSec": 3169.950415,
+      "memoryBefore": {
+        "heapUsed": 13950070,
+        "heapTotal": 56375296,
+        "rss": 174604288
+      },
+      "memoryAfter": {
+        "heapUsed": 21651493,
+        "heapTotal": 56514560,
+        "rss": 202244096
+      }
+    },
+    {
+      "name": "tx/batched-inserts/1000",
+      "datasetSize": 1000,
+      "operation": "1000 inserts in transaction",
+      "engine": "sqlite-mem",
+      "iterations": 3,
+      "warmup": 0,
+      "opsPerSample": 1000,
+      "p50": 315.442792,
+      "p95": 498.485654,
+      "p99": 514.756131,
+      "mean": 313.750875,
+      "min": 106.986083,
+      "max": 518.82375,
+      "opsPerSec": 3187.242107,
+      "memoryBefore": {
+        "heapUsed": 21651493,
+        "heapTotal": 56514560,
+        "rss": 202244096
+      },
+      "memoryAfter": {
+        "heapUsed": 30198956,
+        "heapTotal": 58660864,
+        "rss": 210092032
+      }
+    },
+    {
+      "name": "index/pk-lookup/1000",
+      "datasetSize": 1000,
+      "operation": "primary key lookup",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 20,
+      "p50": 0.046604,
+      "p95": 0.057781,
+      "p99": 0.058089,
+      "mean": 0.047569,
+      "min": 0.037083,
+      "max": 0.058166,
+      "opsPerSec": 420440.41133,
+      "memoryBefore": {
+        "heapUsed": 30978397,
+        "heapTotal": 60561408,
+        "rss": 210108416
+      },
+      "memoryAfter": {
+        "heapUsed": 30978397,
+        "heapTotal": 60577792,
+        "rss": 210108416
+      }
+    },
+    {
+      "name": "index/unique-email/1000",
+      "datasetSize": 1000,
+      "operation": "unique index lookup",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 20,
+      "p50": 0.075208,
+      "p95": 0.096896,
+      "p99": 0.097279,
+      "mean": 0.078555,
+      "min": 0.061459,
+      "max": 0.097375,
+      "opsPerSec": 254597.068315,
+      "memoryBefore": {
+        "heapUsed": 31959989,
+        "heapTotal": 61151232,
+        "rss": 210485248
+      },
+      "memoryAfter": {
+        "heapUsed": 31959989,
+        "heapTotal": 61167616,
+        "rss": 210501632
+      }
+    },
+    {
+      "name": "join/small-large/1000",
+      "datasetSize": 1000,
+      "operation": "join small to large",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.062396,
+      "p95": 0.080937,
+      "p99": 0.084587,
+      "mean": 0.064743,
+      "min": 0.055291,
+      "max": 0.0855,
+      "opsPerSec": 15445.685248,
+      "memoryBefore": {
+        "heapUsed": 33009223,
+        "heapTotal": 62692352,
+        "rss": 212041728
+      },
+      "memoryAfter": {
+        "heapUsed": 33009223,
+        "heapTotal": 62692352,
+        "rss": 212041728
+      }
+    },
+    {
+      "name": "snapshot/export/small",
+      "datasetSize": 200,
+      "operation": "snapshot export",
+      "engine": "sqlite-mem",
+      "iterations": 3,
+      "warmup": 0,
+      "opsPerSample": 1,
+      "p50": 0.319125,
+      "p95": 1.533112,
+      "p99": 1.641022,
+      "mean": 0.766181,
+      "min": 0.311417,
+      "max": 1.668,
+      "opsPerSec": 1305.175194,
+      "memoryBefore": {
+        "heapUsed": 33123369,
+        "heapTotal": 62708736,
+        "rss": 212074496
+      },
+      "memoryAfter": {
+        "heapUsed": 33123369,
+        "heapTotal": 62887936,
+        "rss": 212795392
+      },
+      "extra": {
+        "snapshotBytes": 18707,
+        "mbPerSec": 24.415912
+      }
+    },
+    {
+      "name": "snapshot/hydrate/small",
+      "datasetSize": 200,
+      "operation": "snapshot hydrate",
+      "engine": "sqlite-mem",
+      "iterations": 3,
+      "warmup": 0,
+      "opsPerSample": 1,
+      "p50": 0.281041,
+      "p95": 0.984504,
+      "p99": 1.047034,
+      "mean": 0.53618,
+      "min": 0.264833,
+      "max": 1.062667,
+      "opsPerSec": 1865.044161,
+      "memoryBefore": {
+        "heapUsed": 33123369,
+        "heapTotal": 62983168,
+        "rss": 212942848
+      },
+      "memoryAfter": {
+        "heapUsed": 33123369,
+        "heapTotal": 63310848,
+        "rss": 213499904
+      },
+      "extra": {
+        "snapshotBytes": 18707,
+        "mbPerSec": 34.889381
+      }
+    },
+    {
+      "name": "snapshot/roundtrip/small",
+      "datasetSize": 200,
+      "operation": "export+hydrate+query",
+      "engine": "sqlite-mem",
+      "iterations": 1,
+      "warmup": 0,
+      "opsPerSample": 1,
+      "p50": 0.796125,
+      "p95": 0.796125,
+      "p99": 0.796125,
+      "mean": 0.796125,
+      "min": 0.796125,
+      "max": 0.796125,
+      "opsPerSec": 1256.084158,
+      "memoryBefore": {
+        "heapUsed": 33947383,
+        "heapTotal": 63319040,
+        "rss": 213516288
+      },
+      "memoryAfter": {
+        "heapUsed": 33947383,
+        "heapTotal": 63319040,
+        "rss": 213565440
+      }
+    },
+    {
+      "name": "snapshot/export/1mb",
+      "datasetSize": 1000,
+      "operation": "snapshot export",
+      "engine": "sqlite-mem",
+      "iterations": 3,
+      "warmup": 0,
+      "opsPerSample": 1,
+      "p50": 1.785792,
+      "p95": 2.563616,
+      "p99": 2.632756,
+      "mean": 1.931916,
+      "min": 1.359916,
+      "max": 2.650041,
+      "opsPerSec": 517.62076,
+      "memoryBefore": {
+        "heapUsed": 35005004,
+        "heapTotal": 65563648,
+        "rss": 215859200
+      },
+      "memoryAfter": {
+        "heapUsed": 43112743,
+        "heapTotal": 66051072,
+        "rss": 230703104
+      },
+      "extra": {
+        "snapshotBytes": 1051507,
+        "mbPerSec": 544.281852
+      }
+    },
+    {
+      "name": "snapshot/hydrate/1mb",
+      "datasetSize": 1000,
+      "operation": "snapshot hydrate",
+      "engine": "sqlite-mem",
+      "iterations": 3,
+      "warmup": 0,
+      "opsPerSample": 1,
+      "p50": 1.40275,
+      "p95": 1.413626,
+      "p99": 1.414592,
+      "mean": 1.399834,
+      "min": 1.381917,
+      "max": 1.414834,
+      "opsPerSec": 714.370588,
+      "memoryBefore": {
+        "heapUsed": 50314057,
+        "heapTotal": 66608128,
+        "rss": 233570304
+      },
+      "memoryAfter": {
+        "heapUsed": 50314057,
+        "heapTotal": 67386368,
+        "rss": 238108672
+      },
+      "extra": {
+        "snapshotBytes": 1051507,
+        "mbPerSec": 751.165674
+      }
+    },
+    {
+      "name": "snapshot/roundtrip/1mb",
+      "datasetSize": 1000,
+      "operation": "export+hydrate+query",
+      "engine": "sqlite-mem",
+      "iterations": 1,
+      "warmup": 0,
+      "opsPerSample": 1,
+      "p50": 3.746916,
+      "p95": 3.746916,
+      "p99": 3.746916,
+      "mean": 3.746916,
+      "min": 3.746916,
+      "max": 3.746916,
+      "opsPerSec": 266.886154,
+      "memoryBefore": {
+        "heapUsed": 6630793,
+        "heapTotal": 67568640,
+        "rss": 238321664
+      },
+      "memoryAfter": {
+        "heapUsed": 10903234,
+        "heapTotal": 67568640,
+        "rss": 239386624
+      }
+    },
+    {
+      "name": "snapshot/fidelity/200",
+      "datasetSize": 200,
+      "operation": "roundtrip fidelity",
+      "engine": "sqlite-mem",
+      "iterations": 1,
+      "warmup": 0,
+      "opsPerSample": 1,
+      "p50": 1.556458,
+      "p95": 1.556458,
+      "p99": 1.556458,
+      "mean": 1.556458,
+      "min": 1.556458,
+      "max": 1.556458,
+      "opsPerSec": 642.48441,
+      "memoryBefore": {
+        "heapUsed": 10903234,
+        "heapTotal": 67568640,
+        "rss": 239386624
+      },
+      "memoryAfter": {
+        "heapUsed": 10903234,
+        "heapTotal": 67568640,
+        "rss": 239419392
+      }
+    }
+  ]
+}

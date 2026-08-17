@@ -1,0 +1,27 @@
+{
+  "generatedAt": "example",
+  "tier": "ci",
+  "environment": {
+    "runtime": "bun",
+    "runtimeVersion": "1.x",
+    "platform": "darwin"
+  },
+  "results": [
+    {
+      "name": "micro/pk-lookup/100",
+      "datasetSize": 100,
+      "operation": "pk lookup",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 10,
+      "p50": 0.12,
+      "p95": 0.2,
+      "p99": 0.3,
+      "mean": 0.13,
+      "min": 0.1,
+      "max": 0.4,
+      "opsPerSec": 80000
+    }
+  ]
+}

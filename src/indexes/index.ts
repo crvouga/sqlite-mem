@@ -4,37 +4,65 @@ import { isSqlJsonText, isSqlReal, type SqlValue } from "../types/value.ts";
 
 export class IndexStore {
   readonly name: string;
-  private entries: Map<string, Rowid>;
+  private entries: Map<string, Rowid[]>;
 
-  constructor(name = "index", entries?: ReadonlyMap<string, Rowid>) {
+  constructor(name = "index", entries?: ReadonlyMap<string, readonly Rowid[]>) {
     this.name = name;
-    this.entries = new Map(entries);
+    this.entries = new Map();
+    if (entries) {
+      for (const [key, rowids] of entries) this.entries.set(key, [...rowids]);
+    }
   }
 
   checkUnique(values: readonly SqlValue[], rowid?: Rowid): void {
     const key = serializeIndexKey(values);
     if (key === null) return;
     const existing = this.entries.get(key);
-    if (existing !== undefined && (rowid === undefined || !sameRowid(existing, rowid))) {
-      throw new SqliteError(`UNIQUE constraint failed: ${this.name}`, "constraint_unique", "SQLITE_CONSTRAINT_UNIQUE");
+    if (!existing) return;
+    for (const id of existing) {
+      if (rowid === undefined || !sameRowid(id, rowid)) {
+        throw new SqliteError(
+          `UNIQUE constraint failed: ${this.name}`,
+          "constraint_unique",
+          "SQLITE_CONSTRAINT_UNIQUE",
+        );
+      }
     }
   }
 
-  insert(values: readonly SqlValue[], rowid: Rowid): void {
+  insert(values: readonly SqlValue[], rowid: Rowid, unique = true): void {
     const key = serializeIndexKey(values);
     if (key === null) return;
-    this.checkUnique(values, rowid);
-    this.entries.set(key, rowid);
+    if (unique) this.checkUnique(values, rowid);
+    const existing = this.entries.get(key);
+    if (!existing) {
+      this.entries.set(key, [rowid]);
+      return;
+    }
+    for (const id of existing) if (sameRowid(id, rowid)) return;
+    existing.push(rowid);
+  }
+
+  lookup(values: readonly SqlValue[]): readonly Rowid[] {
+    const key = serializeIndexKey(values);
+    if (key === null) return [];
+    return this.entries.get(key) ?? [];
   }
 
   remove(values: readonly SqlValue[], rowid?: Rowid): boolean {
     const key = serializeIndexKey(values);
     if (key === null) return false;
-    if (rowid !== undefined) {
-      const existing = this.entries.get(key);
-      if (existing === undefined || !sameRowid(existing, rowid)) return false;
+    const existing = this.entries.get(key);
+    if (!existing) return false;
+    if (rowid === undefined) {
+      this.entries.delete(key);
+      return true;
     }
-    return this.entries.delete(key);
+    const index = existing.findIndex((id) => sameRowid(id, rowid));
+    if (index < 0) return false;
+    existing.splice(index, 1);
+    if (existing.length === 0) this.entries.delete(key);
+    return true;
   }
 
   clear(): void {

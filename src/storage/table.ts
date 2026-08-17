@@ -44,6 +44,7 @@ export class Table {
   withoutRowid: boolean;
   /** Clustered PK key string → row for WITHOUT ROWID tables. */
   clusteredRows: Map<string, Row>;
+  private scanCache: Row[] | null = null;
 
   constructor(name: string, columns: ColumnInfo[], options: TableOptions = {}) {
     this.name = name;
@@ -55,6 +56,32 @@ export class Table {
     this.originalSql = options.originalSql ?? null;
     this.withoutRowid = options.withoutRowid ?? false;
     this.clusteredRows = new Map();
+    this.scanCache = null;
+  }
+
+  integerPkColumn(): ColumnInfo | undefined {
+    return this.integerPrimaryKeyAlias();
+  }
+
+  get(rowid: Rowid): Row | undefined {
+    try {
+      return this.rows.get(canonicalRowid(rowid));
+    } catch {
+      return undefined;
+    }
+  }
+
+  getByKey(value: SqlValue): Row | undefined {
+    if (value === null || this.withoutRowid) return undefined;
+    try {
+      return this.get(asRowid(value, "rowid"));
+    } catch {
+      return undefined;
+    }
+  }
+
+  private invalidateScan(): void {
+    this.scanCache = null;
   }
 
   insert(input: InsertRow | RowValues): Rowid {
@@ -75,6 +102,7 @@ export class Table {
       this.clusteredRows.set(clusterKey, candidate);
       this.rows.set(rowid, candidate);
       this.advanceNextRowid(rowid);
+      this.invalidateScan();
       return rowid;
     }
 
@@ -100,6 +128,7 @@ export class Table {
     this.validate(candidate);
     this.rows.set(rowid, candidate);
     this.advanceNextRowid(rowid);
+    this.invalidateScan();
     return rowid;
   }
 
@@ -126,6 +155,7 @@ export class Table {
       if (newClusterKey !== oldClusterKey) this.clusteredRows.delete(oldClusterKey);
       this.clusteredRows.set(newClusterKey, candidate);
       this.rows.set(key, candidate);
+      this.invalidateScan();
       return candidate;
     }
 
@@ -144,6 +174,7 @@ export class Table {
     if (targetKey !== key) this.rows.delete(key);
     this.rows.set(targetKey, candidate);
     this.advanceNextRowid(targetKey);
+    this.invalidateScan();
     return candidate;
   }
 
@@ -152,17 +183,19 @@ export class Table {
     const existing = this.rows.get(key);
     if (!existing) return false;
     if (this.withoutRowid) this.clusteredRows.delete(this.makeClusterKey(existing.values));
+    this.invalidateScan();
     return this.rows.delete(key);
   }
 
   *scan(): Iterable<Row> {
-    if (this.withoutRowid) {
-      const rows = [...this.clusteredRows.values()].sort((a, b) => this.comparePrimaryKeys(a, b));
-      yield* rows;
-      return;
+    if (!this.scanCache) {
+      if (this.withoutRowid) {
+        this.scanCache = [...this.clusteredRows.values()].sort((a, b) => this.comparePrimaryKeys(a, b));
+      } else {
+        this.scanCache = [...this.rows.values()].sort((a, b) => compareRowids(a.rowid, b.rowid));
+      }
     }
-    const rows = [...this.rows.values()].sort((a, b) => compareRowids(a.rowid, b.rowid));
-    yield* rows;
+    yield* this.scanCache;
   }
 
   clone(): Table {
@@ -185,6 +218,7 @@ export class Table {
     for (const row of this.rows.values()) {
       this.clusteredRows.set(this.makeClusterKey(row.values), row);
     }
+    this.invalidateScan();
   }
 
   private prepareValues(input: RowValues): Map<string, SqlValue> {

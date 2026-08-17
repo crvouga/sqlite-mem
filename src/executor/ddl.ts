@@ -54,6 +54,7 @@ export function executeCreateIndex(stmt: CreateIndexStmt, env: ExecutionEnv): Re
           normalizeForCollation(row.values.get(normalizeColumnName(column.name)) ?? null, column.collate ?? "BINARY"),
         ),
         row.rowid,
+        stmt.unique,
       );
     }
   } catch (error) {

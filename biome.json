@@ -59,12 +59,12 @@
   },
   "overrides": [
     {
-      "includes": ["compat/**", "dist/**", "node_modules/**"],
+      "includes": ["compat/**", "dist/**", "node_modules/**", "benchmarks/results/**"],
       "formatter": { "enabled": false },
       "linter": { "enabled": false }
     },
     {
-      "includes": ["**/*.test.ts", "tests/**"],
+      "includes": ["**/*.test.ts", "tests/**", "benchmarks/**"],
       "linter": {
         "rules": {
           "suspicious": {

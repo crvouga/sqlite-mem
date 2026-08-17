@@ -9,3 +9,7 @@ test-results/
 .turbo/
 .env
 .env.*
+benchmarks/results/*.json
+!benchmarks/results/schema.example.json
+!benchmarks/results/ci-baseline.json
+benchmarks/browser/dist/

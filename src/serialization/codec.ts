@@ -25,12 +25,28 @@ export interface DecodedSnapshot {
 }
 
 class Writer {
-  private bytes: number[] = [];
+  private buf = new Uint8Array(1024);
+  private len = 0;
+
+  private ensure(needed: number): void {
+    if (this.len + needed <= this.buf.length) return;
+    let cap = this.buf.length;
+    while (cap < this.len + needed) cap *= 2;
+    const next = new Uint8Array(cap);
+    next.set(this.buf.subarray(0, this.len));
+    this.buf = next;
+  }
+
   u8(value: number): void {
-    this.bytes.push(value & 0xff);
+    this.ensure(1);
+    this.buf[this.len++] = value & 0xff;
   }
   u32(value: number): void {
-    this.bytes.push(value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff);
+    this.ensure(4);
+    this.buf[this.len++] = value & 0xff;
+    this.buf[this.len++] = (value >>> 8) & 0xff;
+    this.buf[this.len++] = (value >>> 16) & 0xff;
+    this.buf[this.len++] = (value >>> 24) & 0xff;
   }
   u64(value: bigint): void {
     const bytes = new Uint8Array(8);
@@ -43,7 +59,9 @@ class Writer {
     this.raw(bytes);
   }
   raw(value: Uint8Array): void {
-    this.bytes.push(...value);
+    this.ensure(value.length);
+    this.buf.set(value, this.len);
+    this.len += value.length;
   }
   text(value: string): void {
     const bytes = utf8Encode(value);
@@ -94,7 +112,7 @@ class Writer {
     this.raw(value);
   }
   finish(): Uint8Array {
-    return Uint8Array.from(this.bytes);
+    return this.buf.slice(0, this.len);
   }
 }
 
@@ -303,6 +321,7 @@ export function decodeDatabaseState(snapshot: Uint8Array): DecodedSnapshot {
           normalizeForCollation(row.values.get(column.name.toLowerCase()) ?? null, column.collate ?? "BINARY"),
         ),
         row.rowid,
+        info.unique,
       );
     }
   }

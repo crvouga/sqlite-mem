@@ -503,8 +503,8 @@ export class DatabaseState {
     return copy;
   }
 
-  replaceWith(state: DatabaseState): void {
-    const copy = state.clone();
+  replaceWith(state: DatabaseState, options?: { adopt?: boolean }): void {
+    const copy = options?.adopt ? state : state.clone();
     this.tables = copy.tables;
     this.virtualTables = copy.virtualTables;
     this.views = copy.views;

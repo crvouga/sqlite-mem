@@ -4,6 +4,7 @@ import { SqliteError } from "../errors/index.ts";
 import { evalExpr } from "../expressions/eval.ts";
 import type { Row, Rowid } from "../storage/row.ts";
 import { normalizeColumnName } from "../storage/row.ts";
+import { tryIndexedTableRows } from "../planner/access.ts";
 import type { Table } from "../storage/table.ts";
 import { normalizeForCollation } from "../types/collation.ts";
 import { applyAffinity, compareSql, isTruthySql, type SqlValue } from "../types/value.ts";
@@ -182,7 +183,12 @@ export function executeUpdate(stmt: UpdateStmt, env: ExecutionEnv): ResultSet {
       if (matchedScope) candidates.push({ row, scope: matchedScope });
     }
   } else {
-    for (const row of table.scan()) {
+    const indexed =
+      stmt.where === null
+        ? null
+        : tryIndexedTableRows({ type: "table", schema: null, name: stmt.table, alias: stmt.alias }, stmt.where, env);
+    const scanRows = indexed ? indexed.rows : table.scan();
+    for (const row of scanRows) {
       const scope = scopeFor(table, row, alias, env);
       if (stmt.where && isTruthySql(evalExpr(stmt.where, env.createEvalContext(scope))) !== true) continue;
       candidates.push({ row, scope });
@@ -222,7 +228,11 @@ export function executeDelete(stmt: DeleteStmt, env: ExecutionEnv): ResultSet {
     return executeVirtualDelete(stmt, env);
   }
   const table = env.state.getTable(stmt.table);
-  const selected = [...table.scan()].filter((row) => {
+  const selectedSource =
+    stmt.where === null
+      ? null
+      : tryIndexedTableRows({ type: "table", schema: null, name: stmt.table, alias: stmt.alias }, stmt.where, env);
+  const selected = [...(selectedSource ? selectedSource.rows : table.scan())].filter((row) => {
     if (!stmt.where) return true;
     return (
       isTruthySql(evalExpr(stmt.where, env.createEvalContext(scopeFor(table, row, stmt.alias ?? stmt.table, env)))) ===
@@ -353,7 +363,7 @@ function addIndexes(table: Table, row: Row, env: ExecutionEnv): void {
       isTruthySql(evalExpr(index.where, env.createEvalContext(scopeFor(table, row, table.name, env)))) !== true
     )
       continue;
-    index.store.insert(indexValues(index.columns, row), row.rowid);
+    index.store.insert(indexValues(index.columns, row), row.rowid, index.unique);
   }
 }
 

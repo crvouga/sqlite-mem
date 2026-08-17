@@ -14,6 +14,8 @@ import { evalExpr } from "../expressions/eval.ts";
 import { evaluateTableFunction } from "../functions/table-valued.ts";
 import { buildSqliteMaster, buildSqliteSchema } from "../schema/catalog.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
+import { tryIndexedTableRows, tryJoinProbe } from "../planner/access.ts";
+import type { Row } from "../storage/row.ts";
 import type { Table } from "../storage/table.ts";
 import { compareWithCollation } from "../types/collation.ts";
 import {
@@ -126,7 +128,15 @@ function executeWith(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalContext):
 }
 
 function executeSelectCore(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalContext): ResultSet {
-  let scopes = stmt.from ? scanFrom(stmt.from, env, parent) : [{ cells: [] }];
+  let scopes: ScopeRow[];
+  if (stmt.from && stmt.where) {
+    const indexed = tryIndexedTableRows(stmt.from, stmt.where, env);
+    scopes = indexed
+      ? scopesFromTableRows(indexed.table, indexed.rows, indexed.alias, env, parent)
+      : scanFrom(stmt.from, env, parent);
+  } else {
+    scopes = stmt.from ? scanFrom(stmt.from, env, parent) : [{ cells: [] }];
+  }
   if (stmt.where) {
     scopes = scopes.filter(
       (scope) => isTruthySql(evalExpr(stmt.where!, env.createEvalContext(scope, parent))) === true,
@@ -186,9 +196,13 @@ function executeSelectCore(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalCon
   }
 
   if (stmt.distinct) {
-    output = output.filter(
-      (row, index, all) => all.findIndex((other) => rowsEqual(row.values, other.values)) === index,
-    );
+    const seen = new Set<string>();
+    output = output.filter((row) => {
+      const key = valueKey(row.values);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
   if (stmt.orderBy.length > 0) {
     output.sort((left, right) => compareOutput(left, right, stmt.orderBy, columns, env, parent));
@@ -233,6 +247,39 @@ export function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext
             if (isTruthySql(evalExpr(item.on, env.createEvalContext(joined, parent))) !== true) continue;
           }
           result.push(joined);
+        }
+      }
+      return result;
+    }
+
+    const probe =
+      !item.using && item.joinType !== "RIGHT" && item.joinType !== "FULL"
+        ? tryJoinProbe(item.right, item.on, env)
+        : null;
+    if (probe) {
+      const rightShape = shapeOf(item.right, env);
+      const nullRight = rightShape.map((cell) => ({ ...cell, value: null as SqlValue }));
+      const result: ScopeRow[] = [];
+      for (const lhs of left) {
+        const raw = probe.lookup((tableName, name) => {
+          const key = name.toLowerCase();
+          const match = lhs.cells.find(
+            (cell) =>
+              cell.name.toLowerCase() === key &&
+              (tableName === null || cell.table?.toLowerCase() === tableName.toLowerCase()),
+          );
+          return match?.value ?? null;
+        });
+        const rhsScopes = scopesFromTableRows(probe.table, raw, probe.alias, env, parent);
+        let matched = false;
+        for (const rhs of rhsScopes) {
+          const joined = { cells: [...lhs.cells, ...rhs.cells] };
+          if (item.on && isTruthySql(evalExpr(item.on, env.createEvalContext(joined, parent))) !== true) continue;
+          matched = true;
+          result.push(joined);
+        }
+        if (!matched && (item.joinType === "LEFT" || item.joinType === "FULL")) {
+          result.push({ cells: [...lhs.cells, ...nullRight] });
         }
       }
       return result;
@@ -364,10 +411,19 @@ export function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext
   if (item.name.toLowerCase() === "sqlite_schema") table = buildSqliteSchema(db);
   else if (item.name.toLowerCase() === "sqlite_master") table = buildSqliteMaster(db);
   else table = db.getTable(item.name);
-  const integerPkAlias = table.withoutRowid
-    ? undefined
-    : table.columns.find((column) => column.primaryKey && column.typeName?.trim().toUpperCase() === "INTEGER")?.name;
-  return [...table.scan()].map((row) => {
+  return scopesFromTableRows(table, table.scan(), alias, env, parent);
+}
+
+function scopesFromTableRows(
+  table: Table,
+  rows: Iterable<Row>,
+  alias: string,
+  env: ExecutionEnv,
+  parent?: EvalContext,
+): ScopeRow[] {
+  const integerPkAlias = table.integerPkColumn()?.name;
+  const result: ScopeRow[] = [];
+  for (const row of rows) {
     const baseCells = table.columns
       .filter((c) => !c.generated || c.generated.stored)
       .map((column) => ({
@@ -396,13 +452,14 @@ export function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext
         collate: column.collate,
       };
     });
-    return {
+    result.push({
       ...(table.withoutRowid ? {} : { rowid: row.rowid }),
       rowidName: integerPkAlias ?? (table.withoutRowid ? undefined : "rowid"),
       sourceTable: table.name,
       cells,
-    };
-  });
+    });
+  }
+  return result;
 }
 
 function shapeOf(item: FromItem, env: ExecutionEnv): ScopeRow["cells"] {
@@ -490,12 +547,13 @@ function resolveUsingFromShapes(
 function groupRows(rows: ScopeRow[], expressions: Expr[], env: ExecutionEnv, parent?: EvalContext): ScopeRow[][] {
   if (expressions.length === 0) return [rows];
   const groups: ScopeRow[][] = [];
-  const keys: SqlValue[][] = [];
+  const indexByKey = new Map<string, number>();
   for (const row of rows) {
-    const key = expressions.map((expr) => evalExpr(expr, env.createEvalContext(row, parent)));
-    const index = keys.findIndex((other) => rowsEqual(key, other));
-    if (index < 0) {
-      keys.push(key);
+    const keyValues = expressions.map((expr) => evalExpr(expr, env.createEvalContext(row, parent)));
+    const key = valueKey(keyValues);
+    const index = indexByKey.get(key);
+    if (index === undefined) {
+      indexByKey.set(key, groups.length);
       groups.push([row]);
     } else groups[index]!.push(row);
   }
@@ -937,7 +995,42 @@ function rowsEqual(left: SqlValue[], right: SqlValue[]): boolean {
 }
 
 function uniqueRows(rows: SqlValue[][]): SqlValue[][] {
-  return rows.filter((row, index) => rows.findIndex((other) => rowsEqual(row, other)) === index);
+  const seen = new Set<string>();
+  const result: SqlValue[][] = [];
+  for (const row of rows) {
+    const key = valueKey(row);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(row);
+  }
+  return result;
+}
+
+function valueKey(values: SqlValue[]): string {
+  return values.map(valueKeyPart).join("\0");
+}
+
+function valueKeyPart(value: SqlValue): string {
+  if (value === null) return "N";
+  if (typeof value === "bigint") return `I:${value.toString()}`;
+  if (typeof value === "number") {
+    if (Number.isInteger(value)) return `I:${value.toString()}`;
+    if (Number.isNaN(value)) return "F:nan";
+    return `F:${Object.is(value, -0) ? "0" : value.toString()}`;
+  }
+  if (typeof value === "string") return `T:${value}`;
+  if (value instanceof Uint8Array) {
+    let hex = "B:";
+    for (const byte of value) hex += byte.toString(16).padStart(2, "0");
+    return hex;
+  }
+  if ("value" in value && typeof value.value === "number") {
+    const n = value.value;
+    if (Number.isInteger(n)) return `I:${n.toString()}`;
+    return `F:${n.toString()}`;
+  }
+  if ("value" in value && typeof value.value === "string") return `T:${value.value}`;
+  return `T:${String(value)}`;
 }
 
 function scanDbStat(db: DatabaseState, alias: string, _schemaArg: string | null): ScopeRow[] {

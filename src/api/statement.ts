@@ -8,6 +8,7 @@ import type { Database } from "./database.ts";
 
 export class Statement {
   private bound: unknown[] = [];
+  private namedPlan: ReturnType<typeof planNamedParameters> | null = null;
 
   constructor(
     private readonly database: Database,
@@ -46,7 +47,7 @@ export class Statement {
       random: () => this.database.prng.nextSqliteRandom(),
       randomU64: () => this.database.prng.nextU64(),
     });
-    bindNamedParameters(env, this.sql, params);
+    this.bindNamed(env, params);
     let result: ResultSet | undefined;
     let lastQuery: ResultSet | undefined;
     for (const statement of this.statements) {
@@ -55,12 +56,24 @@ export class Statement {
     }
     return lastQuery ?? result!;
   }
+
+  private bindNamed(env: ExecutionEnv, params: readonly unknown[]): void {
+    this.namedPlan ??= planNamedParameters(this.sql);
+    for (const item of this.namedPlan.named) {
+      if (item.slot <= params.length) env.setNamed(item.name, params[item.slot - 1]);
+    }
+  }
 }
 
-export function bindNamedParameters(env: ExecutionEnv, sql: string, params: readonly unknown[]): void {
+interface NamedPlan {
+  named: { name: string; slot: number }[];
+}
+
+function planNamedParameters(sql: string): NamedPlan {
   const tokens = tokenize(sql);
   let nextSlot = 1;
   const namedSlots = new Map<string, number>();
+  const named: { name: string; slot: number }[] = [];
   for (const token of tokens) {
     if (token.kind === "PARAM_POS") {
       if (token.index !== undefined) nextSlot = Math.max(nextSlot, token.index + 1);
@@ -71,8 +84,16 @@ export function bindNamedParameters(env: ExecutionEnv, sql: string, params: read
       if (slot === undefined) {
         slot = nextSlot++;
         namedSlots.set(name, slot);
+        named.push({ name, slot });
       }
-      if (slot <= params.length) env.setNamed(name, params[slot - 1]);
     }
+  }
+  return { named };
+}
+
+export function bindNamedParameters(env: ExecutionEnv, sql: string, params: readonly unknown[]): void {
+  const plan = planNamedParameters(sql);
+  for (const item of plan.named) {
+    if (item.slot <= params.length) env.setNamed(item.name, params[item.slot - 1]);
   }
 }

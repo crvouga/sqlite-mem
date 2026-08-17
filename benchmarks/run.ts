@@ -1,0 +1,61 @@
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
+import { memFactory } from "./compare/mem.ts";
+import { printReport, runSuite } from "./harness/run-suite.ts";
+import { toJson } from "./harness/report.ts";
+import type { NamedFactory, SuiteTier } from "./harness/types.ts";
+import { allSpecs } from "./workloads/index.ts";
+
+function arg(name: string): string | undefined {
+  const index = process.argv.indexOf(name);
+  if (index === -1) return undefined;
+  return process.argv[index + 1];
+}
+
+function hasFlag(name: string): boolean {
+  return process.argv.includes(name);
+}
+
+const tier = (arg("--tier") ?? "default") as SuiteTier;
+if (!["ci", "default", "full"].includes(tier)) {
+  console.error("unknown --tier; expected ci | default | full");
+  process.exit(1);
+}
+
+const engineArg = arg("--engine") ?? (tier === "full" || hasFlag("--compare") ? "both" : "mem");
+const grep = arg("--grep");
+const out = arg("--out");
+
+const factories: NamedFactory[] = [];
+if (engineArg === "mem" || engineArg === "both") factories.push(memFactory);
+if (engineArg === "sqlite" || engineArg === "both") {
+  const { sqliteFactory } = await import("./compare/sqlite.ts");
+  factories.push(sqliteFactory);
+}
+
+let specs = allSpecs();
+if (grep) specs = specs.filter((spec) => spec.name.includes(grep));
+
+console.log(
+  `Running ${specs.filter((s) => s.tiers.includes(tier)).length} specs  tier=${tier}  engines=${factories.map((f) => f.name).join(",")}`,
+);
+
+const report = runSuite({
+  factories,
+  specs,
+  tier,
+  onResult: (result) => {
+    const extra = result.extra?.snapshotBytes ? `  snap=${result.extra.snapshotBytes}B` : "";
+    console.log(
+      `  ${result.engine.padEnd(12)} ${result.name}  p95=${result.p95.toFixed(3)}ms  ops=${result.opsPerSec.toFixed(0)}${extra}`,
+    );
+  },
+});
+
+printReport(report);
+
+const resultsDir = path.join(import.meta.dir, "results");
+await mkdir(resultsDir, { recursive: true });
+const outPath = out ?? path.join(resultsDir, `${tier}-${report.environment.runtime}.json`);
+await Bun.write(outPath, toJson(report));
+console.log(`Wrote ${outPath}`);
