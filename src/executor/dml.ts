@@ -10,7 +10,7 @@ import { normalizeForCollation } from "../types/collation.ts";
 import { applyAffinity, compareSql, isTruthySql, type SqlValue } from "../types/value.ts";
 import type { Fts5Row, Fts5VirtualTable } from "../vtable/fts5.ts";
 import type { ExecutionEnv, ScopeRow } from "./env.ts";
-import { type ResultSet, resultValues, valuesToResult } from "./result.ts";
+import { emptyResult, type ResultSet, resultValues, valuesToResult } from "./result.ts";
 import { executeSelect, scanFrom } from "./select.ts";
 import { fireDeleteTriggers, fireInsertTriggers, fireUpdateTriggers } from "./triggers.ts";
 import { executeFtsDelete, executeFtsInsert, executeFtsUpdate } from "./vtable.ts";
@@ -19,6 +19,8 @@ export function executeInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
   if (env.state.isVirtualTable(stmt.table)) {
     return executeVirtualInsert(stmt, env);
   }
+  const fast = tryFastInsert(stmt, env);
+  if (fast) return fast;
   const table = env.state.getTable(stmt.table);
   const columnNames = stmt.columns ?? table.columns.map((column) => column.name);
   const rowidIndexes = columnNames.map((name, index) => (isRowidName(name) ? index : -1)).filter((index) => index >= 0);
@@ -27,14 +29,37 @@ export function executeInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
     throw new SqliteError(`table ${table.name} has no column named rowid`, "other");
   }
   for (const name of columnNames) if (!isRowidName(name)) columnOf(table, name);
-  const sourceRows = stmt.values
-    ? stmt.values.map((items) => items.map((expr) => evalExpr(expr, env.createEvalContext())))
-    : stmt.select
-      ? resultValues(executeSelect({ ...stmt.select, with: stmt.with ?? stmt.select.with }, env))
-      : [[]];
+  const sourceRows = evaluateInsertSource(stmt, env);
   const returningRows: SqlValue[][] = [];
   let changes = 0;
   let last = env.state.lastInsertRowid;
+  const suppliedIndexes = table.columns.map((column) =>
+    columnNames.findIndex((name) => name.toLowerCase() === (column.nameLower ?? column.name.toLowerCase())),
+  );
+  const unconstrained =
+    table.isUnconstrained() &&
+    !stmt.upsert &&
+    stmt.mode === "insert" &&
+    stmt.returning.length === 0 &&
+    rowidIndexes.length === 0;
+
+  if (unconstrained) {
+    for (const source of sourceRows) {
+      if (source.length !== columnNames.length)
+        throw new SqliteError(`${source.length} values for ${columnNames.length} columns`, "other");
+      const values = new Map<string, SqlValue>();
+      for (let index = 0; index < table.columns.length; index++) {
+        const column = table.columns[index]!;
+        const suppliedIndex = suppliedIndexes[index]!;
+        const value = suppliedIndex >= 0 ? (source[suppliedIndex] ?? null) : null;
+        values.set(column.nameLower ?? column.name.toLowerCase(), applyAffinity(value, column.affinity));
+      }
+      last = table.insert({ values }, { prepared: true, skipValidate: true });
+      changes++;
+    }
+    env.state.recordChange(changes, last);
+    return emptyResult(changes, last);
+  }
 
   for (const source of sourceRows) {
     if (source.length !== columnNames.length)
@@ -42,14 +67,14 @@ export function executeInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
     const values = new Map<string, SqlValue>();
     for (const column of table.columns) {
       if (column.generated) continue;
-      const suppliedIndex = columnNames.findIndex((name) => name.toLowerCase() === column.name.toLowerCase());
+      const suppliedIndex = suppliedIndexes[table.columns.indexOf(column)] ?? -1;
       const value =
         suppliedIndex >= 0
           ? (source[suppliedIndex] ?? null)
           : column.defaultExpr
             ? evalExpr(column.defaultExpr, env.createEvalContext())
             : null;
-      values.set(normalizeColumnName(column.name), applyAffinity(value, column.affinity));
+      values.set(column.nameLower ?? column.name.toLowerCase(), applyAffinity(value, column.affinity));
     }
     for (const column of table.columns) {
       if (!column.generated) continue;
@@ -133,12 +158,12 @@ export function executeInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
     let insertedRowid: Rowid | undefined;
     try {
       const suppliedRowid = rowidIndexes.length ? asExplicitRowid(source[rowidIndexes[0]!] ?? null) : undefined;
-      const rowid = table.insert({ values, rowid: suppliedRowid });
+      const rowid = table.insert({ values, rowid: suppliedRowid }, { prepared: true });
       insertedRowid = rowid;
       const row = table.rows.get(rowid)!;
       validateRow(table, row, env);
-      addIndexes(table, row, env);
-      checkForeignKeys(table, row, env);
+      if (table.indexes.length > 0) addIndexes(table, row, env);
+      if (env.state.foreignKeysEnabled) checkForeignKeys(table, row, env);
       fireInsertTriggers("AFTER", table, row.values, null, env);
       changes++;
       last = table.withoutRowid ? 0 : rowid;
@@ -155,7 +180,96 @@ export function executeInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
     }
   }
   env.state.recordChange(changes, last);
+  if (stmt.returning.length === 0) return emptyResult(changes, last);
   return valuesToResult(returningNames(stmt.returning, table), returningRows, changes, last);
+}
+
+function evaluateInsertSource(stmt: InsertStmt, env: ExecutionEnv): SqlValue[][] {
+  if (stmt.select) return resultValues(executeSelect({ ...stmt.select, with: stmt.with ?? stmt.select.with }, env));
+  if (!stmt.values) return [[]];
+  const ctx = env.createEvalContext();
+  return stmt.values.map((items) =>
+    items.map((expr) => {
+      if (expr.type === "parameter") return env.getBoundParameter(expr.name);
+      if (expr.type === "literal") return expr.value;
+      if (expr.type === "null") return null;
+      return evalExpr(expr, ctx);
+    }),
+  );
+}
+
+interface FastInsertSlot {
+  key: string;
+  affinity: import("../types/value.ts").Affinity;
+  read: (env: ExecutionEnv) => SqlValue;
+}
+
+interface FastInsertPlan {
+  tableName: string;
+  slots: FastInsertSlot[];
+}
+
+const fastInsertPlans = new WeakMap<InsertStmt, FastInsertPlan>();
+
+function tryFastInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet | null {
+  if (stmt.with || stmt.select || stmt.upsert || stmt.returning.length > 0 || stmt.mode !== "insert") return null;
+  if (stmt.values?.length !== 1) return null;
+  let plan = fastInsertPlans.get(stmt);
+  if (!plan) {
+    const built = buildFastInsertPlan(stmt, env);
+    if (!built) return null;
+    plan = built;
+    fastInsertPlans.set(stmt, plan);
+  }
+  let table: Table;
+  try {
+    table = env.state.getTable(plan.tableName);
+  } catch {
+    return null;
+  }
+  if (!table.isUnconstrained()) return null;
+  const values = new Map<string, SqlValue>();
+  for (const slot of plan.slots) values.set(slot.key, applyAffinity(slot.read(env), slot.affinity));
+  const last = table.insert({ values }, { prepared: true, skipValidate: true });
+  env.state.recordChange(1, last);
+  return emptyResult(1, last);
+}
+
+function buildFastInsertPlan(stmt: InsertStmt, env: ExecutionEnv): FastInsertPlan | null {
+  let table: Table;
+  try {
+    table = env.state.getTable(stmt.table);
+  } catch {
+    return null;
+  }
+  if (!table.isUnconstrained()) return null;
+  const tuple = stmt.values?.[0];
+  if (!tuple) return null;
+  const columnNames = stmt.columns ?? table.columns.map((column) => column.name);
+  if (tuple.length !== columnNames.length) return null;
+  if (columnNames.some((name) => isRowidName(name))) return null;
+  const slots: FastInsertSlot[] = [];
+  for (const column of table.columns) {
+    const key = column.nameLower ?? column.name.toLowerCase();
+    const suppliedIndex = columnNames.findIndex((name) => name.toLowerCase() === key);
+    if (suppliedIndex < 0) {
+      if (column.defaultExpr) return null;
+      slots.push({ key, affinity: column.affinity, read: () => null });
+      continue;
+    }
+    const expr = tuple[suppliedIndex];
+    if (!expr) return null;
+    if (expr.type === "parameter") {
+      const name = expr.name;
+      slots.push({ key, affinity: column.affinity, read: (exec) => exec.getBoundParameter(name) });
+    } else if (expr.type === "literal") {
+      const value = expr.value;
+      slots.push({ key, affinity: column.affinity, read: () => value });
+    } else if (expr.type === "null") {
+      slots.push({ key, affinity: column.affinity, read: () => null });
+    } else return null;
+  }
+  return { tableName: stmt.table, slots };
 }
 
 export function executeUpdate(stmt: UpdateStmt, env: ExecutionEnv): ResultSet {
@@ -454,7 +568,12 @@ function uniqueColumnSets(table: Table, env: ExecutionEnv): IndexedColumn[][] {
   return sets;
 }
 
-function conflictsForSets(table: Table, values: Map<string, SqlValue>, sets: IndexedColumn[][], env: ExecutionEnv): Row[] {
+function conflictsForSets(
+  table: Table,
+  values: Map<string, SqlValue>,
+  sets: IndexedColumn[][],
+  env: ExecutionEnv,
+): Row[] {
   const found: Row[] = [];
   const seen = new Set<string>();
   const push = (row: Row): void => {
@@ -488,9 +607,7 @@ function conflictsForSets(table: Table, values: Map<string, SqlValue>, sets: Ind
       if (!index?.unique || index.where) continue;
       if (index.columns.length !== columns.length) continue;
       if (
-        !index.columns.every(
-          (column, i) => normalizeColumnName(column.name) === normalizeColumnName(columns[i]!.name),
-        )
+        !index.columns.every((column, i) => normalizeColumnName(column.name) === normalizeColumnName(columns[i]!.name))
       ) {
         continue;
       }

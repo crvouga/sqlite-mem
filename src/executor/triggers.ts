@@ -93,6 +93,7 @@ function runTriggers(
   env: ExecutionEnv,
 ): "ok" | "ignore" {
   const db = env.state.databaseForTable(table);
+  if (db.triggers.size === 0) return "ok";
   const triggers = [...db.triggers.values()].filter(
     (trigger) =>
       trigger.tableName.toLowerCase() === table.name.toLowerCase() &&

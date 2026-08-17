@@ -1,13 +1,19 @@
 import type { Expr, TableConstraint } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
+import { serializeIndexKey } from "../indexes/index.ts";
 import { compareWithCollation, normalizeForCollation } from "../types/collation.ts";
 import type { Affinity, SqlValue } from "../types/value.ts";
 import { affinityFromTypeName, applyAffinity, cloneSqlValue, compareSql } from "../types/value.ts";
 import type { Row, Rowid, RowValues } from "./row.ts";
 import { cloneRow, normalizeColumnName, rowValues } from "./row.ts";
 
+/** Build a covering equality hash once a table is large enough that scans dominate. */
+const EQUALITY_HASH_MIN_ROWS = 16;
+
 export interface ColumnInfo {
   name: string;
+  /** Cached `name.toLowerCase()` for hot-path lookups. */
+  nameLower?: string;
   typeName: string | null;
   affinity: Affinity;
   notNull: boolean;
@@ -19,6 +25,13 @@ export interface ColumnInfo {
   collate: string | null;
   /** GENERATED ALWAYS AS (...) — VIRTUAL computed on read, STORED materialized. */
   generated: { expr: Expr; stored: boolean } | null;
+}
+
+export interface InsertOptions {
+  /** Values are already affinity-applied Maps with lowercase keys; skip prepareValues. */
+  prepared?: boolean;
+  /** Skip NOT NULL / UNIQUE / PK scans (caller already enforced, or table is unconstrained). */
+  skipValidate?: boolean;
 }
 
 export interface InsertRow {
@@ -45,6 +58,8 @@ export class Table {
   /** Clustered PK key string → row for WITHOUT ROWID tables. */
   clusteredRows: Map<string, Row>;
   private scanCache: Row[] | null = null;
+  /** Lazy covering hashes: column nameLower → serializeIndexKey → rowids. */
+  private equalityHashes: Map<string, Map<string, Rowid[]>> | null = null;
 
   constructor(name: string, columns: ColumnInfo[], options: TableOptions = {}) {
     this.name = name;
@@ -84,9 +99,108 @@ export class Table {
     this.scanCache = null;
   }
 
-  insert(input: InsertRow | RowValues): Rowid {
+  private commitRow(row: Row): void {
+    this.indexEquality(row);
+    this.invalidateScan();
+  }
+
+  private reindexEquality(before: Row, after: Row): void {
+    this.unindexEquality(before);
+    this.indexEquality(after);
+    this.invalidateScan();
+  }
+
+  /** True when the table has no user constraints that DML must enforce beyond hidden rowid. */
+  isUnconstrained(): boolean {
+    if (this.withoutRowid || this.indexes.length > 0 || this.constraints.length > 0) return false;
+    for (const column of this.columns) {
+      if (column.notNull || column.primaryKey || column.unique || column.generated || column.defaultExpr) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Point lookup via a write-maintained covering hash (not a schema index).
+   * Returns null when the table is too small or the column does not exist.
+   */
+  lookupEquality(columnLower: string, value: SqlValue): Row[] | null {
+    if (!this.ensureEqualityHash(columnLower)) return null;
+    const map = this.equalityHashes!.get(columnLower);
+    if (!map) return null;
+    const column = this.columns.find((item) => item.nameLower === columnLower);
+    const key = serializeIndexKey([normalizeForCollation(value, column?.collate ?? "BINARY")]);
+    if (key === null) return [];
+    const rowids = map.get(key);
+    if (!rowids || rowids.length === 0) return [];
+    const rows: Row[] = [];
+    for (const rowid of rowids) {
+      const row = this.rows.get(rowid);
+      if (row) rows.push(row);
+    }
+    return rows;
+  }
+
+  ensureEqualityHash(columnLower: string): boolean {
+    if (this.rows.size < EQUALITY_HASH_MIN_ROWS) return false;
+    const column = this.columns.find((item) => item.nameLower === columnLower);
+    if (!column) return false;
+    this.equalityHashes ??= new Map();
+    if (this.equalityHashes.has(columnLower)) return true;
+    const map = new Map<string, Rowid[]>();
+    const collate = column.collate ?? "BINARY";
+    for (const row of this.rows.values()) {
+      const key = serializeIndexKey([normalizeForCollation(row.values.get(columnLower) ?? null, collate)]);
+      if (key === null) continue;
+      const bucket = map.get(key);
+      if (bucket) bucket.push(row.rowid);
+      else map.set(key, [row.rowid]);
+    }
+    this.equalityHashes.set(columnLower, map);
+    return true;
+  }
+
+  clearEqualityHashes(): void {
+    this.equalityHashes = null;
+  }
+
+  private indexEquality(row: Row): void {
+    if (!this.equalityHashes) return;
+    for (const [columnLower, map] of this.equalityHashes) {
+      const column = this.columns.find((item) => item.nameLower === columnLower);
+      const key = serializeIndexKey([
+        normalizeForCollation(row.values.get(columnLower) ?? null, column?.collate ?? "BINARY"),
+      ]);
+      if (key === null) continue;
+      const bucket = map.get(key);
+      if (bucket) {
+        if (!bucket.some((id) => sameRowid(id, row.rowid))) bucket.push(row.rowid);
+      } else map.set(key, [row.rowid]);
+    }
+  }
+
+  private unindexEquality(row: Row): void {
+    if (!this.equalityHashes) return;
+    for (const [columnLower, map] of this.equalityHashes) {
+      const column = this.columns.find((item) => item.nameLower === columnLower);
+      const key = serializeIndexKey([
+        normalizeForCollation(row.values.get(columnLower) ?? null, column?.collate ?? "BINARY"),
+      ]);
+      if (key === null) continue;
+      const bucket = map.get(key);
+      if (!bucket) continue;
+      const index = bucket.findIndex((id) => sameRowid(id, row.rowid));
+      if (index >= 0) bucket.splice(index, 1);
+      if (bucket.length === 0) map.delete(key);
+    }
+  }
+
+  insert(input: InsertRow | RowValues, options?: InsertOptions): Rowid {
     const supplied = isInsertRow(input) ? input : { values: input };
-    const values = this.prepareValues(supplied.values);
+    const values = options?.prepared
+      ? supplied.values instanceof Map
+        ? supplied.values
+        : rowValues(supplied.values)
+      : this.prepareValues(supplied.values);
 
     if (this.withoutRowid) {
       if (supplied.rowid !== undefined) {
@@ -94,7 +208,7 @@ export class Table {
       }
       const rowid = canonicalRowid(this.allocateRowid());
       const candidate: Row = { rowid, values };
-      this.validate(candidate);
+      if (!options?.skipValidate) this.validate(candidate);
       const clusterKey = this.makeClusterKey(values);
       if (this.clusteredRows.has(clusterKey)) {
         throw primaryKeyConflict(this.name, this.primaryKeyColumns());
@@ -102,7 +216,7 @@ export class Table {
       this.clusteredRows.set(clusterKey, candidate);
       this.rows.set(rowid, candidate);
       this.advanceNextRowid(rowid);
-      this.invalidateScan();
+      this.commitRow(candidate);
       return rowid;
     }
 
@@ -125,10 +239,10 @@ export class Table {
     if (alias) values.set(normalizeColumnName(alias.name), rowid);
 
     const candidate: Row = { rowid, values };
-    this.validate(candidate);
+    if (!options?.skipValidate) this.validate(candidate);
     this.rows.set(rowid, candidate);
     this.advanceNextRowid(rowid);
-    this.invalidateScan();
+    this.commitRow(candidate);
     return rowid;
   }
 
@@ -155,7 +269,7 @@ export class Table {
       if (newClusterKey !== oldClusterKey) this.clusteredRows.delete(oldClusterKey);
       this.clusteredRows.set(newClusterKey, candidate);
       this.rows.set(key, candidate);
-      this.invalidateScan();
+      this.reindexEquality(existing, candidate);
       return candidate;
     }
 
@@ -174,7 +288,7 @@ export class Table {
     if (targetKey !== key) this.rows.delete(key);
     this.rows.set(targetKey, candidate);
     this.advanceNextRowid(targetKey);
-    this.invalidateScan();
+    this.reindexEquality(existing, candidate);
     return candidate;
   }
 
@@ -183,6 +297,7 @@ export class Table {
     const existing = this.rows.get(key);
     if (!existing) return false;
     if (this.withoutRowid) this.clusteredRows.delete(this.makeClusterKey(existing.values));
+    this.unindexEquality(existing);
     this.invalidateScan();
     return this.rows.delete(key);
   }
@@ -219,6 +334,7 @@ export class Table {
       this.clusteredRows.set(this.makeClusterKey(row.values), row);
     }
     this.invalidateScan();
+    this.clearEqualityHashes();
   }
 
   private prepareValues(input: RowValues): Map<string, SqlValue> {
@@ -351,10 +467,11 @@ export class Table {
 export function makeColumnInfo(
   name: string,
   typeName: string | null,
-  options: Partial<Omit<ColumnInfo, "name" | "typeName" | "affinity">> = {},
+  options: Partial<Omit<ColumnInfo, "name" | "nameLower" | "typeName" | "affinity">> = {},
 ): ColumnInfo {
   return {
     name,
+    nameLower: name.toLowerCase(),
     typeName,
     affinity: affinityFromTypeName(typeName),
     notNull: options.notNull ?? false,
@@ -370,6 +487,7 @@ export function makeColumnInfo(
 function cloneColumn(column: ColumnInfo): ColumnInfo {
   return {
     ...column,
+    nameLower: column.nameLower ?? column.name.toLowerCase(),
     defaultExpr: column.defaultExpr === null ? null : cloneAst(column.defaultExpr),
     generated:
       column.generated === null ? null : { expr: cloneAst(column.generated.expr), stored: column.generated.stored },
@@ -414,6 +532,10 @@ function compareRowids(left: Rowid, right: Rowid): number {
   const a = typeof left === "bigint" ? left : BigInt(left);
   const b = typeof right === "bigint" ? right : BigInt(right);
   return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function sameRowid(left: Rowid, right: Rowid): boolean {
+  return typeof left === "bigint" || typeof right === "bigint" ? BigInt(left) === BigInt(right) : left === right;
 }
 
 function serializePkComponent(value: SqlValue): string {

@@ -9,6 +9,7 @@ import type { Database } from "./database.ts";
 export class Statement {
   private bound: unknown[] = [];
   private namedPlan: ReturnType<typeof planNamedParameters> | null = null;
+  private env: ExecutionEnv | null = null;
 
   constructor(
     private readonly database: Database,
@@ -22,31 +23,30 @@ export class Statement {
   }
 
   run(...params: unknown[]): { changes: number; lastInsertRowid: number | bigint } {
-    const result = this.execute(params.length > 0 ? params : this.bound);
+    const result = this.execute(params.length > 0 ? params : this.bound, { named: false });
     return { changes: result.changes, lastInsertRowid: result.lastInsertRowid };
   }
 
   all<T>(...params: unknown[]): T[] {
-    return this.execute(params.length > 0 ? params : this.bound).rows as T[];
+    return this.execute(params.length > 0 ? params : this.bound, { named: true }).rows as T[];
   }
 
   /** Full result including column names (needed for empty result-set metadata). */
   result(...params: unknown[]): ResultSet {
-    return this.execute(params.length > 0 ? params : this.bound);
+    return this.execute(params.length > 0 ? params : this.bound, { named: true });
   }
 
   get<T>(...params: unknown[]): T | undefined {
-    return this.all<T>(...(params.length > 0 ? params : this.bound))[0];
+    return this.execute(params.length > 0 ? params : this.bound, { named: true, maxRows: 1 }).rows[0] as T | undefined;
   }
 
-  private execute(params: unknown[]): ResultSet {
+  private execute(params: unknown[], options?: { named?: boolean; maxRows?: number }): ResultSet {
     this.database.assertOpen();
     if (this.statements.length === 0) throw new SqliteError("empty statement", "misuse");
-    const env = new ExecutionEnv(this.database.state, this.database.transactions, params, undefined, {
-      now: this.database.now,
-      random: () => this.database.prng.nextSqliteRandom(),
-      randomU64: () => this.database.prng.nextU64(),
-    });
+    const env = this.obtainEnv(params);
+    env.maxRows = options?.maxRows ?? Number.POSITIVE_INFINITY;
+    env.includeNamedRows = options?.named !== false;
+    env.includeValues = true;
     this.bindNamed(env, params);
     let result: ResultSet | undefined;
     let lastQuery: ResultSet | undefined;
@@ -55,6 +55,22 @@ export class Statement {
       if (result.columns.length > 0) lastQuery = result;
     }
     return lastQuery ?? result!;
+  }
+
+  private obtainEnv(params: unknown[]): ExecutionEnv {
+    if (this.env) {
+      this.env.reset(params);
+      this.env.hooks.now = this.database.now;
+      this.env.hooks.random = () => this.database.prng.nextSqliteRandom();
+      this.env.hooks.randomU64 = () => this.database.prng.nextU64();
+      return this.env;
+    }
+    this.env = new ExecutionEnv(this.database.state, this.database.transactions, params, undefined, {
+      now: this.database.now,
+      random: () => this.database.prng.nextSqliteRandom(),
+      randomU64: () => this.database.prng.nextU64(),
+    });
+    return this.env;
   }
 
   private bindNamed(env: ExecutionEnv, params: readonly unknown[]): void {

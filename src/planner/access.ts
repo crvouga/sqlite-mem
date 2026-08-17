@@ -35,6 +35,17 @@ export function equalityAgainstConst(expr: Expr): ConstEquality | null {
   return null;
 }
 
+export function whereFullyCovered(where: Expr, coveredColumns: Set<string>, alias: string, tableName: string): boolean {
+  for (const part of conjunctions(where)) {
+    const eq = equalityAgainstConst(part);
+    if (!eq) return false;
+    if (!matchesTable(eq.table, alias, tableName)) return false;
+    const col = eq.column.toLowerCase();
+    if (!coveredColumns.has(col) && !isRowidName(eq.column)) return false;
+  }
+  return true;
+}
+
 function matchesTable(table: string | null, alias: string, tableName: string): boolean {
   if (table === null) return true;
   const key = table.toLowerCase();
@@ -46,21 +57,21 @@ function isRowidName(name: string): boolean {
   return key === "rowid" || key === "_rowid_" || key === "oid";
 }
 
-/** Look up rows for a simple `FROM table WHERE ...` using PK or a covering equality index. */
-export function tryIndexedTableRows(
-  from: FromItem,
-  where: Expr,
-  env: ExecutionEnv,
-): { table: Table; alias: string; rows: Row[] } | null {
+export interface TableRowLookup {
+  table: Table;
+  alias: string;
+  rows: Row[];
+  /** Lowercased columns whose equality predicates were applied by the access path. */
+  coveredColumns: Set<string>;
+}
+
+/** Look up rows for a simple `FROM table WHERE ...` using PK, a covering equality index, or an automatic hash. */
+export function tryIndexedTableRows(from: FromItem, where: Expr, env: ExecutionEnv): TableRowLookup | null {
   if (from.type !== "table") return null;
   return lookupTableRows(from, where, env);
 }
 
-export function lookupTableRows(
-  from: TableRef,
-  where: Expr,
-  env: ExecutionEnv,
-): { table: Table; alias: string; rows: Row[] } | null {
+export function lookupTableRows(from: TableRef, where: Expr, env: ExecutionEnv): TableRowLookup | null {
   const alias = from.alias ?? from.name;
   const qualified = from.schema ? `${from.schema}.${from.name}` : from.name;
   const db = env.state.databaseForSchema(from.schema, qualified);
@@ -102,9 +113,11 @@ export function lookupTableRows(
     const col = eq.column.toLowerCase();
     if (isRowidName(eq.column) || (pk && col === pk.name.toLowerCase())) {
       const row = table.getByKey(eq.value);
-      if (row) return { table, alias, rows: [row] };
+      const coveredColumns = new Set<string>([col, "rowid", "_rowid_", "oid"]);
+      if (pk) coveredColumns.add(pk.nameLower ?? pk.name.toLowerCase());
+      if (row) return { table, alias, rows: [row], coveredColumns };
       if (eq.value === null || typeof eq.value === "number" || typeof eq.value === "bigint") {
-        return { table, alias, rows: [] };
+        return { table, alias, rows: [], coveredColumns };
       }
       return null;
     }
@@ -113,7 +126,7 @@ export function lookupTableRows(
   const byColumn = new Map<string, SqlValue>();
   for (const eq of resolved) byColumn.set(eq.column.toLowerCase(), eq.value);
 
-  let best: { rowids: readonly Rowid[] } | null = null;
+  let best: { rowids: readonly Rowid[]; columns: string[] } | null = null;
   for (const indexName of table.indexes) {
     const index = db.indexes.get(indexName.toLowerCase());
     if (!index || index.where) continue;
@@ -125,18 +138,30 @@ export function lookupTableRows(
     }
     if (prefix.length !== index.columns.length) continue;
     const rowids = index.store.lookup(prefix);
-    best = { rowids };
+    best = { rowids, columns: index.columns.map((column) => column.name.toLowerCase()) };
     if (index.unique || rowids.length <= 1) break;
   }
 
-  if (!best) return null;
-  const rows: Row[] = [];
-  for (const rowid of best.rowids) {
-    const row = table.get(rowid);
-    if (row) rows.push(row);
+  if (best) {
+    const rows: Row[] = [];
+    for (const rowid of best.rowids) {
+      const row = table.get(rowid);
+      if (row) rows.push(row);
+    }
+    rows.sort((a, b) => compareRowids(a.rowid, b.rowid));
+    return { table, alias, rows, coveredColumns: new Set(best.columns) };
   }
-  rows.sort((a, b) => compareRowids(a.rowid, b.rowid));
-  return { table, alias, rows };
+
+  for (const eq of resolved) {
+    const col = eq.column.toLowerCase();
+    if (isRowidName(eq.column)) continue;
+    const hashed = table.lookupEquality(col, eq.value);
+    if (!hashed) continue;
+    hashed.sort((a, b) => compareRowids(a.rowid, b.rowid));
+    return { table, alias, rows: hashed, coveredColumns: new Set([col]) };
+  }
+
+  return null;
 }
 
 function compareRowids(left: Rowid, right: Rowid): number {
@@ -148,6 +173,8 @@ function compareRowids(left: Rowid, right: Rowid): number {
 export interface JoinProbe {
   table: Table;
   alias: string;
+  /** When true, ON is fully applied by the probe (skip re-eval). */
+  covering: boolean;
   lookup: (leftCellsValue: (table: string | null, name: string) => SqlValue) => Row[];
 }
 
@@ -230,6 +257,7 @@ export function tryJoinProbe(right: FromItem, on: Expr | null, env: ExecutionEnv
     return {
       table,
       alias,
+      covering: pairs.length === 1,
       lookup: (getLeft) => {
         const value = getLeft(pkPair.leftTable, pkPair.leftColumn);
         const row = table.getByKey(value);
@@ -251,6 +279,7 @@ export function tryJoinProbe(right: FromItem, on: Expr | null, env: ExecutionEnv
     return {
       table,
       alias,
+      covering: prefixPairs.length === pairs.length,
       lookup: (getLeft) => {
         const values = prefixPairs.map((pair, i) =>
           normalizeForCollation(getLeft(pair.leftTable, pair.leftColumn), index.columns[i]?.collate ?? "BINARY"),
@@ -264,6 +293,22 @@ export function tryJoinProbe(right: FromItem, on: Expr | null, env: ExecutionEnv
         return rows;
       },
     };
+  }
+
+  if (pairs.length === 1) {
+    const pair = pairs[0]!;
+    const col = pair.rightColumn.toLowerCase();
+    if (!isRowidName(pair.rightColumn) && table.ensureEqualityHash(col)) {
+      return {
+        table,
+        alias,
+        covering: true,
+        lookup: (getLeft) => {
+          const rows = table.lookupEquality(col, getLeft(pair.leftTable, pair.leftColumn));
+          return rows ?? [];
+        },
+      };
+    }
   }
   return null;
 }

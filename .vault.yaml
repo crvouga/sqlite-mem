@@ -1,0 +1,4 @@
+addr: https://vault.chrisvouga.dev
+mount: secret
+project: personal
+config: prd

@@ -14,7 +14,7 @@ import { evalExpr } from "../expressions/eval.ts";
 import { evaluateTableFunction } from "../functions/table-valued.ts";
 import { buildSqliteMaster, buildSqliteSchema } from "../schema/catalog.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
-import { tryIndexedTableRows, tryJoinEqualityKeys, tryJoinProbe } from "../planner/access.ts";
+import { tryIndexedTableRows, tryJoinEqualityKeys, tryJoinProbe, whereFullyCovered } from "../planner/access.ts";
 import { serializeIndexKey } from "../indexes/index.ts";
 import type { Row } from "../storage/row.ts";
 import type { Table } from "../storage/table.ts";
@@ -30,7 +30,9 @@ import {
 } from "../types/value.ts";
 import type { FtsVocabVirtualTable } from "../vtable/modules.ts";
 import type { ExecutionEnv, ScopeRow } from "./env.ts";
+import { makeCell } from "./env.ts";
 import { type ResultSet, resultValues, valuesToResult } from "./result.ts";
+import { tryExecuteSimpleJoin, tryExecuteSimpleSelect } from "./simple-select.ts";
 
 function applyAffinityLocal(value: SqlValue, affinity: Affinity): SqlValue {
   return applyAffinity(value, affinity);
@@ -43,6 +45,10 @@ interface OutputRow {
 
 export function executeSelect(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalContext): ResultSet {
   env.selectRunner = executeSelect;
+  if (!parent && !stmt.with && !stmt.compound) {
+    const simple = tryExecuteSimpleSelect(stmt, env) ?? tryExecuteSimpleJoin(stmt, env);
+    if (simple) return simple;
+  }
   const savedCtes = new Map(env.ctes);
   try {
     if (stmt.with) executeWith(stmt, env, parent);
@@ -92,7 +98,10 @@ export function executeSelect(stmt: SelectStmt, env: ExecutionEnv, parent?: Eval
       const limit = Number(limitValue);
       rows = rows.slice(offset, limit < 0 ? undefined : offset + limit);
     }
-    return valuesToResult(base.columns, rows, 0, env.state.lastInsertRowid);
+    return valuesToResult(base.columns, rows, 0, env.state.lastInsertRowid, {
+      named: env.includeNamedRows,
+      keepValues: true,
+    });
   } finally {
     env.ctes.clear();
     for (const [name, result] of savedCtes) env.ctes.set(name, result);
@@ -130,24 +139,43 @@ function executeWith(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalContext):
 
 function executeSelectCore(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalContext): ResultSet {
   let scopes: ScopeRow[];
+  let skipWhere = false;
   if (stmt.from && stmt.where) {
     const indexed = tryIndexedTableRows(stmt.from, stmt.where, env);
-    scopes = indexed
-      ? scopesFromTableRows(indexed.table, indexed.rows, indexed.alias, env, parent)
-      : scanFrom(stmt.from, env, parent);
+    if (indexed) {
+      scopes = scopesFromTableRows(indexed.table, indexed.rows, indexed.alias, env, parent);
+      skipWhere = whereFullyCovered(stmt.where, indexed.coveredColumns, indexed.alias, indexed.table.name);
+    } else {
+      scopes = scanFrom(stmt.from, env, parent);
+    }
   } else {
     scopes = stmt.from ? scanFrom(stmt.from, env, parent) : [{ cells: [] }];
   }
-  if (stmt.where) {
-    scopes = scopes.filter(
-      (scope) => isTruthySql(evalExpr(stmt.where!, env.createEvalContext(scope, parent))) === true,
-    );
-  }
-
+  const canStopEarly =
+    stmt.orderBy.length === 0 &&
+    !stmt.distinct &&
+    stmt.groupBy.length === 0 &&
+    stmt.having === null &&
+    Number.isFinite(env.maxRows);
   const aggregate =
     stmt.groupBy.length > 0 ||
     stmt.columns.some((column) => column.type === "expr" && containsAggregate(column.expr)) ||
     (stmt.having !== null && containsAggregate(stmt.having));
+  if (stmt.where && !skipWhere) {
+    if (canStopEarly && !aggregate) {
+      const filtered: ScopeRow[] = [];
+      for (const scope of scopes) {
+        if (isTruthySql(evalExpr(stmt.where, env.createEvalContext(scope, parent))) !== true) continue;
+        filtered.push(scope);
+        if (filtered.length >= env.maxRows) break;
+      }
+      scopes = filtered;
+    } else {
+      scopes = scopes.filter(
+        (scope) => isTruthySql(evalExpr(stmt.where!, env.createEvalContext(scope, parent))) === true,
+      );
+    }
+  }
   const groupBy = stmt.groupBy.map((expr) => {
     if (expr.type !== "literal" || typeof expr.value !== "number" || !Number.isInteger(expr.value)) return expr;
     const column = stmt.columns[expr.value - 1];
@@ -194,6 +222,7 @@ function executeSelectCore(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalCon
         continue;
     }
     output.push({ values, scope });
+    if (canStopEarly && !aggregate && !stmt.limit && output.length >= env.maxRows) break;
   }
 
   if (stmt.distinct) {
@@ -217,11 +246,16 @@ function executeSelectCore(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalCon
     const limit = Number(limitValue);
     output = output.slice(offset, limit < 0 ? undefined : offset + limit);
   }
+  if (Number.isFinite(env.maxRows) && output.length > env.maxRows) output = output.slice(0, env.maxRows);
   return valuesToResult(
     columns,
     output.map((row) => row.values),
     0,
     env.state.lastInsertRowid,
+    {
+      named: env.includeNamedRows,
+      keepValues: true,
+    },
   );
 }
 
@@ -266,8 +300,8 @@ export function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext
           const key = name.toLowerCase();
           const match = lhs.cells.find(
             (cell) =>
-              cell.name.toLowerCase() === key &&
-              (tableName === null || cell.table?.toLowerCase() === tableName.toLowerCase()),
+              (cell.nameLower ?? cell.name.toLowerCase()) === key &&
+              (tableName === null || (cell.tableLower ?? cell.table?.toLowerCase()) === tableName.toLowerCase()),
           );
           return match?.value ?? null;
         });
@@ -275,7 +309,12 @@ export function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext
         let matched = false;
         for (const rhs of rhsScopes) {
           const joined = { cells: [...lhs.cells, ...rhs.cells] };
-          if (item.on && isTruthySql(evalExpr(item.on, env.createEvalContext(joined, parent))) !== true) continue;
+          if (
+            item.on &&
+            !probe.covering &&
+            isTruthySql(evalExpr(item.on, env.createEvalContext(joined, parent))) !== true
+          )
+            continue;
           matched = true;
           result.push(joined);
         }
@@ -292,28 +331,33 @@ export function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext
         ? tryJoinEqualityKeys(item.right, item.on, env)
         : null;
     if (hashKeys) {
+      const rawRight = rawJoinTable(item.right, env);
+      if (rawRight) {
+        return hashJoinRaw(left, rawRight, hashKeys, item);
+      }
       const right = scanFrom(item.right, env, parent);
       const rightShape = (right[0]?.cells ?? shapeOf(item.right, env)).map((cell) => cell);
       const nullRight = rightShape.map((cell) => ({ ...cell, value: null as SqlValue }));
       const buckets = new Map<string, ScopeRow[]>();
       for (const rhs of right) {
         const values = hashKeys.rightColumns.map((name) => {
-          const cell = rhs.cells.find((c) => c.name.toLowerCase() === name.toLowerCase());
+          const key = name.toLowerCase();
+          const cell = rhs.cells.find((c) => (c.nameLower ?? c.name.toLowerCase()) === key);
           return normalizeForCollation(cell?.value ?? null, "BINARY");
         });
-        const key = serializeIndexKey(values);
-        if (key === null) continue; // NULL join key → never matches via =
-        const bucket = buckets.get(key);
+        const mapKey = serializeIndexKey(values);
+        if (mapKey === null) continue; // NULL join key → never matches via =
+        const bucket = buckets.get(mapKey);
         if (bucket) bucket.push(rhs);
-        else buckets.set(key, [rhs]);
+        else buckets.set(mapKey, [rhs]);
       }
       const result: ScopeRow[] = [];
       for (const lhs of left) {
         const values = hashKeys.leftKeys.map((key) => {
           const cell = lhs.cells.find(
             (c) =>
-              c.name.toLowerCase() === key.column.toLowerCase() &&
-              (key.table === null || c.table?.toLowerCase() === key.table.toLowerCase()),
+              (c.nameLower ?? c.name.toLowerCase()) === key.column.toLowerCase() &&
+              (key.table === null || (c.tableLower ?? c.table?.toLowerCase()) === key.table.toLowerCase()),
           );
           return normalizeForCollation(cell?.value ?? null, "BINARY");
         });
@@ -324,7 +368,6 @@ export function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext
           if (matches) {
             for (const rhs of matches) {
               const joined = { cells: [...lhs.cells, ...rhs.cells] };
-              if (item.on && isTruthySql(evalExpr(item.on, env.createEvalContext(joined, parent))) !== true) continue;
               matched = true;
               result.push(joined);
             }
@@ -466,6 +509,76 @@ export function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext
   return scopesFromTableRows(table, table.scan(), alias, env, parent);
 }
 
+function rawJoinTable(item: FromItem, env: ExecutionEnv): { table: Table; alias: string } | null {
+  if (item.type !== "table") return null;
+  const nameKey = item.name.toLowerCase();
+  if (nameKey === "sqlite_schema" || nameKey === "sqlite_master") return null;
+  if (env.ctes.has(nameKey)) return null;
+  const db = env.state.databaseForSchema(item.schema, item.schema ? `${item.schema}.${item.name}` : item.name);
+  if (db.virtualTables.has(nameKey) || db.views.has(nameKey)) return null;
+  try {
+    return { table: db.getTable(item.name), alias: item.alias ?? item.name };
+  } catch {
+    return null;
+  }
+}
+
+function hashJoinRaw(
+  left: ScopeRow[],
+  right: { table: Table; alias: string },
+  hashKeys: { rightColumns: string[]; leftKeys: { table: string | null; column: string }[] },
+  item: Extract<FromItem, { type: "join" }>,
+): ScopeRow[] {
+  const rightKeys = hashKeys.rightColumns.map((name) => name.toLowerCase());
+  const buckets = new Map<string, Row[]>();
+  const source = right.table.withoutRowid ? right.table.clusteredRows.values() : right.table.rows.values();
+  for (const row of source) {
+    const values = rightKeys.map((key) => normalizeForCollation(row.values.get(key) ?? null, "BINARY"));
+    const mapKey = serializeIndexKey(values);
+    if (mapKey === null) continue;
+    const bucket = buckets.get(mapKey);
+    if (bucket) bucket.push(row);
+    else buckets.set(mapKey, [row]);
+  }
+  const nullRight = right.table.columns.map((column) =>
+    makeCell(right.alias, column.name, null, { affinity: column.affinity, collate: column.collate }),
+  );
+  const result: ScopeRow[] = [];
+  for (const lhs of left) {
+    const values = hashKeys.leftKeys.map((key) => {
+      const want = key.column.toLowerCase();
+      const tableKey = key.table?.toLowerCase();
+      const cell = lhs.cells.find(
+        (c) =>
+          (c.nameLower ?? c.name.toLowerCase()) === want &&
+          (tableKey === undefined || (c.tableLower ?? c.table?.toLowerCase()) === tableKey),
+      );
+      return normalizeForCollation(cell?.value ?? null, "BINARY");
+    });
+    const mapKey = serializeIndexKey(values);
+    let matched = false;
+    if (mapKey !== null) {
+      const matches = buckets.get(mapKey);
+      if (matches) {
+        for (const row of matches) {
+          const rhsCells = right.table.columns.map((column) =>
+            makeCell(right.alias, column.name, row.values.get(column.nameLower ?? column.name.toLowerCase()) ?? null, {
+              affinity: column.affinity,
+              collate: column.collate,
+            }),
+          );
+          result.push({ cells: [...lhs.cells, ...rhsCells] });
+          matched = true;
+        }
+      }
+    }
+    if (!matched && (item.joinType === "LEFT" || item.joinType === "FULL")) {
+      result.push({ cells: [...lhs.cells, ...nullRight] });
+    }
+  }
+  return result;
+}
+
 function scopesFromTableRows(
   table: Table,
   rows: Iterable<Row>,
@@ -478,31 +591,24 @@ function scopesFromTableRows(
   for (const row of rows) {
     const baseCells = table.columns
       .filter((c) => !c.generated || c.generated.stored)
-      .map((column) => ({
-        table: alias,
-        name: column.name,
-        value: row.values.get(column.name.toLowerCase()) ?? null,
-        affinity: column.affinity,
-        collate: column.collate,
-      }));
+      .map((column) =>
+        makeCell(alias, column.name, row.values.get(column.nameLower ?? column.name.toLowerCase()) ?? null, {
+          affinity: column.affinity,
+          collate: column.collate,
+        }),
+      );
     const cells = table.columns.map((column) => {
       if (column.generated && !column.generated.stored) {
         const ctx = env.createEvalContext({ cells: baseCells, sourceTable: table.name }, parent);
-        return {
-          table: alias,
-          name: column.name,
-          value: applyAffinityLocal(evalExpr(column.generated.expr, ctx), column.affinity),
+        return makeCell(alias, column.name, applyAffinityLocal(evalExpr(column.generated.expr, ctx), column.affinity), {
           affinity: column.affinity,
           collate: column.collate,
-        };
+        });
       }
-      return {
-        table: alias,
-        name: column.name,
-        value: row.values.get(column.name.toLowerCase()) ?? null,
+      return makeCell(alias, column.name, row.values.get(column.nameLower ?? column.name.toLowerCase()) ?? null, {
         affinity: column.affinity,
         collate: column.collate,
-      };
+      });
     });
     result.push({
       ...(table.withoutRowid ? {} : { rowid: row.rowid }),

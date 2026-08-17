@@ -92,6 +92,7 @@ export function executeAlterTable(stmt: AlterTableStmt, env: ExecutionEnv): Resu
       throw new SqliteError(`duplicate column name: ${action.newName}`, "other");
     const oldKey = normalizeColumnName(column.name);
     column.name = action.newName;
+    column.nameLower = action.newName.toLowerCase();
     for (const row of table.rows.values()) {
       const value = row.values.get(oldKey) ?? null;
       row.values.delete(oldKey);
@@ -104,6 +105,7 @@ export function executeAlterTable(stmt: AlterTableStmt, env: ExecutionEnv): Resu
         for (const indexed of index.columns)
           if (indexed.name.toLowerCase() === action.oldName.toLowerCase()) indexed.name = action.newName;
     }
+    table.clearEqualityHashes();
     env.state.schemaVersion++;
   } else if (action.kind === "add_column") {
     if (table.columns.some((item) => item.name.toLowerCase() === action.column.name.toLowerCase()))
@@ -128,6 +130,7 @@ export function executeAlterTable(stmt: AlterTableStmt, env: ExecutionEnv): Resu
       throw new SqliteError("Cannot add a NOT NULL column with default value NULL", "other");
     table.columns.push(column);
     for (const row of table.rows.values()) row.values.set(normalizeColumnName(column.name), defaultValue);
+    table.clearEqualityHashes();
     env.state.schemaVersion++;
   } else {
     const index = table.columns.findIndex((item) => item.name.toLowerCase() === action.name.toLowerCase());
@@ -164,6 +167,7 @@ export function executeAlterTable(stmt: AlterTableStmt, env: ExecutionEnv): Resu
     }
     table.columns.splice(index, 1);
     for (const row of table.rows.values()) row.values.delete(normalizeColumnName(action.name));
+    table.clearEqualityHashes();
     env.state.schemaVersion++;
   }
   return emptyResult(0, env.state.lastInsertRowid);

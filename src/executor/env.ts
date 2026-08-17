@@ -11,12 +11,30 @@ import type { ResultSet } from "./result.ts";
 
 export interface Cell {
   table: string | null;
+  tableLower?: string | null;
   name: string;
+  nameLower?: string;
   value: SqlValue;
   affinity?: Affinity;
   collate?: string | null;
   /** Right-hand duplicate of a column merged by JOIN ... USING. */
   hiddenByUsing?: boolean;
+}
+
+export function makeCell(
+  table: string | null,
+  name: string,
+  value: SqlValue,
+  extra?: Omit<Partial<Cell>, "table" | "name" | "value" | "tableLower" | "nameLower">,
+): Cell {
+  return {
+    table,
+    tableLower: table?.toLowerCase() ?? null,
+    name,
+    nameLower: name.toLowerCase(),
+    value,
+    ...extra,
+  };
 }
 
 export interface ScopeRow {
@@ -53,6 +71,11 @@ export class ExecutionEnv {
   /** OLD/NEW column scope for the active trigger program. */
   triggerScope: ScopeRow | null = null;
 
+  /** Cap SELECT output rows (used by Statement.get). */
+  maxRows = Number.POSITIVE_INFINITY;
+  includeNamedRows = true;
+  includeValues = true;
+
   constructor(
     state: DatabaseState,
     transactions: TransactionManager,
@@ -66,6 +89,32 @@ export class ExecutionEnv {
     this.hooks = hooks;
     this.positional = params.map(toSqlValue);
     this.named = new Map();
+  }
+
+  reset(params: readonly unknown[]): void {
+    this.positional.length = 0;
+    for (const value of params) this.positional.push(toSqlValue(value));
+    this.named.clear();
+    this.ctes.clear();
+    this.triggerDepth = 0;
+    this.triggerScope = null;
+    this.maxRows = Number.POSITIVE_INFINITY;
+    this.includeNamedRows = true;
+    this.includeValues = true;
+  }
+
+  getBoundParameter(name: string | number): SqlValue {
+    if (typeof name === "number") {
+      if (name < 1 || name > this.positional.length)
+        throw new SqliteError(`binding parameter ${name} is not supplied`, "misuse");
+      return this.positional[name - 1]!;
+    }
+    const key = name.toLowerCase();
+    const value = this.named.get(key);
+    if (value === undefined && !this.named.has(key)) {
+      throw new SqliteError(`binding parameter :${name} is not supplied`, "misuse");
+    }
+    return value ?? null;
   }
 
   setNamed(name: string, value: unknown): void {
@@ -101,7 +150,9 @@ export class ExecutionEnv {
         : undefined,
       resolveColumn: (table, name) => {
         const key = name.toLowerCase();
-        const tableMatches = table === null || cells.some((cell) => cell.table?.toLowerCase() === table.toLowerCase());
+        const tableKey = table?.toLowerCase();
+        const tableMatches =
+          table === null || cells.some((cell) => (cell.tableLower ?? cell.table?.toLowerCase()) === tableKey);
         if (tableMatches && (key === "rowid" || key === "_rowid_" || key === "oid") && scope?.rowid !== undefined) {
           return scope.rowid;
         }
@@ -115,16 +166,15 @@ export class ExecutionEnv {
           scope?.sourceTable &&
           key === scope.sourceTable.toLowerCase() &&
           this.state.isFtsTable(scope.sourceTable) &&
-          !cells.some((cell) => cell.name.toLowerCase() === key)
+          !cells.some((cell) => (cell.nameLower ?? cell.name.toLowerCase()) === key)
         ) {
           return scope.sourceTable;
         }
-        const matches = cells.filter(
-          (cell) =>
-            cell.name.toLowerCase() === key &&
-            (table !== null || !cell.hiddenByUsing) &&
-            (table === null || cell.table?.toLowerCase() === table.toLowerCase()),
-        );
+        const matches = cells.filter((cell) => {
+          if ((cell.nameLower ?? cell.name.toLowerCase()) !== key) return false;
+          if (table === null) return !cell.hiddenByUsing;
+          return (cell.tableLower ?? cell.table?.toLowerCase()) === tableKey;
+        });
         if (matches.length === 0)
           throw new SqliteError(`no such column: ${table ? `${table}.` : ""}${name}`, "no_such_column");
         if (matches.length > 1 && table === null) throw new SqliteError(`ambiguous column name: ${name}`, "other");
@@ -133,12 +183,12 @@ export class ExecutionEnv {
       resolveStorageClass: (table, name) => {
         const key = name.toLowerCase();
         if (key === "rank") return "real";
-        const matches = cells.filter(
-          (cell) =>
-            cell.name.toLowerCase() === key &&
-            (table !== null || !cell.hiddenByUsing) &&
-            (table === null || cell.table?.toLowerCase() === table.toLowerCase()),
-        );
+        const tableKey = table?.toLowerCase();
+        const matches = cells.filter((cell) => {
+          if ((cell.nameLower ?? cell.name.toLowerCase()) !== key) return false;
+          if (table === null) return !cell.hiddenByUsing;
+          return (cell.tableLower ?? cell.table?.toLowerCase()) === tableKey;
+        });
         if (matches.length === 0)
           throw new SqliteError(`no such column: ${table ? `${table}.` : ""}${name}`, "no_such_column");
         if (matches.length > 1 && table === null) throw new SqliteError(`ambiguous column name: ${name}`, "other");
@@ -147,28 +197,17 @@ export class ExecutionEnv {
       },
       resolveCollation: (table, name) => {
         const key = name.toLowerCase();
-        const matches = cells.filter(
-          (cell) =>
-            cell.name.toLowerCase() === key &&
-            (table !== null || !cell.hiddenByUsing) &&
-            (table === null || cell.table?.toLowerCase() === table.toLowerCase()),
-        );
+        const tableKey = table?.toLowerCase();
+        const matches = cells.filter((cell) => {
+          if ((cell.nameLower ?? cell.name.toLowerCase()) !== key) return false;
+          if (table === null) return !cell.hiddenByUsing;
+          return (cell.tableLower ?? cell.table?.toLowerCase()) === tableKey;
+        });
         if (matches.length === 0) return null;
         if (matches.length > 1 && table === null) return null;
         return matches[0]!.collate ?? null;
       },
-      getParameter: (name) => {
-        if (typeof name === "number") {
-          if (name < 1 || name > this.positional.length)
-            throw new SqliteError(`binding parameter ${name} is not supplied`, "misuse");
-          return this.positional[name - 1]!;
-        }
-        const value = this.named.get(name.toLowerCase());
-        if (value === undefined && !this.named.has(name.toLowerCase())) {
-          throw new SqliteError(`binding parameter :${name} is not supplied`, "misuse");
-        }
-        return value ?? null;
-      },
+      getParameter: (name) => this.getBoundParameter(name),
       executeSelect: (select) => {
         if (!this.selectRunner) throw new SqliteError("select executor is not configured", "misuse");
         const result = this.selectRunner(select, this, context);

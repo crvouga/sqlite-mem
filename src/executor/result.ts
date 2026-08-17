@@ -25,17 +25,22 @@ export function valuesToResult(
   values: SqlValue[][],
   changes = 0,
   lastInsertRowid: number | bigint = 0,
+  options?: { named?: boolean; keepValues?: boolean },
 ): ResultSet {
+  const named = options?.named !== false;
+  const keepValues = options?.keepValues !== false;
   return {
     columns,
-    values: values.map((row) => row.map(exportSqlValue)),
-    rows: values.map((row) => {
-      const object: Record<string, SqlValue> = {};
-      columns.forEach((name, index) => {
-        object[name] = exportSqlValue(row[index] ?? null);
-      });
-      return object;
-    }),
+    values: keepValues ? values.map((row) => row.map(exportSqlValue)) : undefined,
+    rows: named
+      ? values.map((row) => {
+          const object: Record<string, SqlValue> = {};
+          for (let index = 0; index < columns.length; index++) {
+            object[columns[index]!] = exportSqlValue(row[index] ?? null);
+          }
+          return object;
+        })
+      : [],
     changes,
     lastInsertRowid,
   };
