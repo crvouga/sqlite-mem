@@ -27,23 +27,54 @@ function htmlPage(): string {
       const out = document.getElementById("out");
       try {
         const db = new Database();
-        db.exec(\`CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)\`);
-        db.exec(\`INSERT INTO users (name) VALUES (?)\`, ["Alice"]);
-        const users = db.query(\`SELECT * FROM users\`);
+        db.exec(\`
+          CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+          CREATE TABLE posts (id INTEGER PRIMARY KEY, user_id INTEGER, title TEXT);
+        \`);
+        const insertUser = db.prepare("INSERT INTO users(name) VALUES (?)");
+        insertUser.run("Alice");
+        insertUser.run("Bob");
+        db.exec("INSERT INTO posts(user_id, title) VALUES (?, ?)", [1, "Hello"]);
+        db.exec("INSERT INTO posts(user_id, title) VALUES (?, ?)", [1, "World"]);
+
+        let rolledBack = false;
+        try {
+          db.transaction(() => {
+            db.exec("INSERT INTO users(name) VALUES (?)", ["Zed"]);
+            throw new Error("boom");
+          });
+        } catch (error) {
+          rolledBack = error && error.message === "boom";
+        }
+
+        const users = db.query("SELECT id, name FROM users ORDER BY id");
+        const joined = db.query(\`
+          SELECT u.name, count(p.id) AS posts
+          FROM users u
+          LEFT JOIN posts p ON p.user_id = u.id
+          GROUP BY u.id, u.name
+          ORDER BY u.id
+        \`);
         const snap = db.snapshot();
         const db2 = new Database();
         db2.restore(snap);
-        const users2 = db2.query(\`SELECT * FROM users\`);
+        const users2 = db2.query("SELECT id, name FROM users ORDER BY id");
         const ok =
+          rolledBack &&
           Array.isArray(users) &&
-          users.length === 1 &&
+          users.length === 2 &&
           users[0].name === "Alice" &&
-          users2.length === 1 &&
+          users[1].name === "Bob" &&
+          Array.isArray(joined) &&
+          joined.length === 2 &&
+          joined[0].posts === 2 &&
+          joined[1].posts === 0 &&
+          users2.length === 2 &&
           users2[0].name === "Alice" &&
           snap instanceof Uint8Array &&
           snap.byteLength > 0;
-        out.textContent = ok ? "OK:" + JSON.stringify(users) : "FAIL:" + JSON.stringify({ users, users2 });
-        window.__SMOKE__ = { ok, users, users2, snapLength: snap.byteLength };
+        out.textContent = ok ? "OK:" + JSON.stringify({ users, joined }) : "FAIL:" + JSON.stringify({ users, joined, users2, rolledBack });
+        window.__SMOKE__ = { ok, users, joined, users2, rolledBack, snapLength: snap.byteLength };
       } catch (error) {
         out.textContent = "ERROR:" + (error && error.message ? error.message : String(error));
         window.__SMOKE__ = { ok: false, error: String(error) };

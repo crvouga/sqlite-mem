@@ -172,8 +172,9 @@ function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext): Scop
     if (item.joinType === "RIGHT" || item.joinType === "FULL") unsupported(`${item.joinType} JOIN`);
     const left = scanFrom(item.left, env, parent);
     const right = scanFrom(item.right, env, parent);
+    const using = resolveUsingColumns(item, left, right, env);
     const rightShape = (right[0]?.cells ?? shapeOf(item.right, env)).map((cell) =>
-      item.using?.some((name) => name.toLowerCase() === cell.name.toLowerCase())
+      using?.some((name) => name.toLowerCase() === cell.name.toLowerCase())
         ? { ...cell, hiddenByUsing: true }
         : cell
     );
@@ -181,7 +182,6 @@ function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext): Scop
     for (const lhs of left) {
       let matched = false;
       for (const rhs of right) {
-        const using = item.using;
         const rightCells = using
           ? rhs.cells.map((cell) => using.some((name) => name.toLowerCase() === cell.name.toLowerCase())
             ? { ...cell, hiddenByUsing: true }
@@ -189,8 +189,8 @@ function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext): Scop
           : rhs.cells;
         const joined = { cells: [...lhs.cells, ...rightCells] };
         let ok = true;
-        if (item.using) {
-          ok = item.using.every((name) => {
+        if (using) {
+          ok = using.every((name) => {
             const l = lhs.cells.find((cell) => cell.name.toLowerCase() === name.toLowerCase())?.value ?? null;
             const r = rhs.cells.find((cell) => cell.name.toLowerCase() === name.toLowerCase())?.value ?? null;
             return l !== null && r !== null && sqlValueEquals(l, r);
@@ -253,10 +253,12 @@ function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext): Scop
 
 function shapeOf(item: FromItem, env: ExecutionEnv): ScopeRow["cells"] {
   if (item.type === "join") {
+    const left = shapeOf(item.left, env);
     const right = shapeOf(item.right, env);
+    const using = resolveUsingFromShapes(item.using, left, right);
     return [
-      ...shapeOf(item.left, env),
-      ...right.map((cell) => item.using?.some((name) => name.toLowerCase() === cell.name.toLowerCase())
+      ...left,
+      ...right.map((cell) => using?.some((name) => name.toLowerCase() === cell.name.toLowerCase())
         ? { ...cell, hiddenByUsing: true }
         : cell),
     ];
@@ -274,6 +276,38 @@ function shapeOf(item: FromItem, env: ExecutionEnv): ScopeRow["cells"] {
       ? buildSqliteMaster(env.state)
       : env.state.getTable(item.name);
   return table.columns.map((column) => ({ table: alias, name: column.name, value: null, affinity: column.affinity }));
+}
+
+/** NATURAL JOIN uses an empty USING list as a sentinel; resolve shared column names at runtime. */
+function resolveUsingColumns(
+  item: Extract<FromItem, { type: "join" }>,
+  left: ScopeRow[],
+  right: ScopeRow[],
+  env: ExecutionEnv,
+): string[] | null {
+  const leftCells = left[0]?.cells ?? shapeOf(item.left, env);
+  const rightCells = right[0]?.cells ?? shapeOf(item.right, env);
+  return resolveUsingFromShapes(item.using, leftCells, rightCells);
+}
+
+function resolveUsingFromShapes(
+  using: string[] | null,
+  leftCells: ScopeRow["cells"],
+  rightCells: ScopeRow["cells"],
+): string[] | null {
+  if (using === null) return null;
+  if (using.length > 0) return using;
+  const rightNames = new Set(rightCells.map((cell) => cell.name.toLowerCase()));
+  const common: string[] = [];
+  const seen = new Set<string>();
+  for (const cell of leftCells) {
+    const key = cell.name.toLowerCase();
+    if (rightNames.has(key) && !seen.has(key)) {
+      seen.add(key);
+      common.push(cell.name);
+    }
+  }
+  return common;
 }
 
 function groupRows(rows: ScopeRow[], expressions: Expr[], env: ExecutionEnv, parent?: EvalContext): ScopeRow[][] {

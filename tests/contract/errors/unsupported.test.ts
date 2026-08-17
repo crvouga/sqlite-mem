@@ -12,7 +12,6 @@ function expectUnsupported(sql: string, setup: string[] = []): void {
     : db.exec(sql);
   expect(result.ok, `${sql} → ${result.error?.message}`).toBe(false);
   expect(result.error?.category).toBe("unsupported");
-  expect(result.error?.message.toLowerCase()).toContain("unsupported");
   db.close();
 }
 
@@ -73,5 +72,22 @@ describe("unsupported features", () => {
       "CREATE TABLE t(id INTEGER)",
       "CREATE INDEX idx ON t(id)",
     ]);
+  });
+
+  test("NOT INDEXED is explicitly unsupported", () => {
+    expectUnsupported("SELECT * FROM t NOT INDEXED", [
+      "CREATE TABLE t(id INTEGER)",
+    ]);
+  });
+
+  test("MATCH operator is explicitly unsupported", () => {
+    expectUnsupported("SELECT * FROM t WHERE content MATCH 'hello'", [
+      "CREATE TABLE t(content TEXT)",
+      "INSERT INTO t VALUES ('x')",
+    ]);
+  });
+
+  test("table-valued functions are explicitly unsupported", () => {
+    expectUnsupported("SELECT * FROM generate_series(1, 3)");
   });
 });

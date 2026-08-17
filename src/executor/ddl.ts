@@ -101,15 +101,34 @@ export function executeAlterTable(stmt: AlterTableStmt, env: ExecutionEnv): Resu
     if (index < 0) throw new SqliteError(`no such column: ${action.name}`, "no_such_column");
     if (table.columns.length === 1) throw new SqliteError("cannot drop column: table must have at least one column", "other");
     const column = table.columns[index]!;
-    if (column.primaryKey || table.constraints.some((item) =>
-      (item.type === "primary_key" || item.type === "unique") && item.columns.some((part) => part.name.toLowerCase() === action.name.toLowerCase()),
-    )) throw new SqliteError(`cannot drop PRIMARY KEY or UNIQUE column: ${action.name}`, "other");
+    if (column.primaryKey) {
+      throw new SqliteError(`cannot drop PRIMARY KEY or UNIQUE column: ${action.name}`, "other");
+    }
+    if (column.unique) {
+      throw new SqliteError(`cannot drop UNIQUE column: "${action.name}"`, "other");
+    }
+    if (
+      table.constraints.some((item) =>
+        (item.type === "primary_key" || item.type === "unique") &&
+        item.columns.some((part) => part.name.toLowerCase() === action.name.toLowerCase()),
+      )
+    ) {
+      throw new SqliteError(
+        `error in table ${stmt.table} after drop column: no such column: ${action.name}`,
+        "no_such_column",
+      );
+    }
+    for (const name of table.indexes) {
+      const schemaIndex = env.state.indexes.get(name.toLowerCase());
+      if (schemaIndex?.columns.some((part) => part.name.toLowerCase() === action.name.toLowerCase())) {
+        throw new SqliteError(
+          `error in index ${name} after drop column: no such column: ${action.name}`,
+          "no_such_column",
+        );
+      }
+    }
     table.columns.splice(index, 1);
     for (const row of table.rows.values()) row.values.delete(normalizeColumnName(action.name));
-    for (const name of [...table.indexes]) {
-      const schemaIndex = env.state.indexes.get(name.toLowerCase());
-      if (schemaIndex?.columns.some((part) => part.name.toLowerCase() === action.name.toLowerCase())) env.state.dropIndex(name);
-    }
     env.state.schemaVersion++;
   }
   return emptyResult(0, env.state.lastInsertRowid);

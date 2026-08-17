@@ -26,23 +26,23 @@ Statuses:
 | Recursive CTEs | yes | yes | `UNION`/`UNION ALL`; deep recursion |
 | Subqueries | yes | yes | Scalar, IN, EXISTS, FROM, correlated |
 | UNION / UNION ALL / INTERSECT / EXCEPT | yes | yes | |
-| CROSS / INNER / LEFT JOIN | yes | yes | USING; multi-join; fuzz |
+| CROSS / INNER / LEFT JOIN | yes | yes | USING; NATURAL; multi-join; fuzz |
 | RIGHT / FULL OUTER JOIN | no | no | Explicit unsupported |
 | ORDER BY / GROUP BY / HAVING | yes | yes | Expression GROUP BY; positional `GROUP BY 1` |
 | DISTINCT / LIMIT / OFFSET | yes | yes | |
-| CASE / CAST / expressions | yes | yes | Bitwise, LIKE ESCAPE, GLOB |
+| CASE / CAST / expressions | yes | yes | Bitwise, LIKE ESCAPE, GLOB; CAST type params |
 | COLLATE | yes | partial | Explicit BINARY/NOCASE/RTRIM on comparisons, ORDER BY, UNIQUE index columns; declared column collation is not inherited implicitly |
 | NULL semantics | yes | yes | |
 | Type affinity / storage classes | yes | yes | INTEGER/REAL/TEXT/BLOB/NUMERIC |
-| PRIMARY KEY (incl. composite) | yes | yes | |
+| PRIMARY KEY (incl. composite) | yes | yes | `AUTOINCREMENT` accepted; keys do not reuse deleted ids |
 | UNIQUE / NOT NULL / CHECK | yes | yes | Fuzzed |
-| FOREIGN KEY | yes | yes | Immediate checks; ON DELETE/UPDATE CASCADE, SET NULL, SET DEFAULT, RESTRICT/NO ACTION; composite FK; `PRAGMA foreign_keys` |
+| FOREIGN KEY | yes | yes | Immediate checks; ON DELETE/UPDATE CASCADE, SET NULL, SET DEFAULT, RESTRICT/NO ACTION; composite FK; `PRAGMA foreign_keys`; fuzz |
 | DEFAULT | yes | yes | |
-| Transactions / SAVEPOINT | yes | yes | Snapshot-based rollback |
-| Core scalar functions | yes | yes | Including printf/substr/replace/round edges |
-| Aggregate functions | yes | yes | `COUNT(DISTINCT)`, empty tables, TOTAL vs SUM |
+| Transactions / SAVEPOINT | yes | yes | Snapshot-based rollback; fuzz |
+| Core scalar functions | yes | yes | Including printf/substr/replace/round edges; scalar min/max; zeroblob; changes(); CURRENT_DATE/TIME/TIMESTAMP |
+| Aggregate functions | yes | yes | `COUNT(DISTINCT)`, empty tables, TOTAL vs SUM, group_concat |
 | Date/time functions | yes | yes | Fixed clock; modifiers |
-| Window functions | yes | yes | Ranking, lag/lead, first/last/nth_value, frames, named windows |
+| Window functions | yes | yes | Ranking, lag/lead, first/last/nth_value, frames, named windows; fuzz |
 | Parameters (`?`, `:name`, `@name`, `$name`) | yes | yes | Repeated `?` |
 | rowid / INTEGER PRIMARY KEY | yes | yes | |
 | sqlite_master / sqlite_schema | yes | yes | Ordered catalog queries |
@@ -56,6 +56,8 @@ Statuses:
 | GENERATED columns | no | no | Explicit unsupported |
 | WITHOUT ROWID | no | no | Explicit unsupported |
 | INDEXED BY / NOT INDEXED | no | no | Explicit unsupported |
+| MATCH operator | no | no | Explicit unsupported |
+| Table-valued functions | no | no | Explicit unsupported |
 
 ## Intentional incompatibilities
 

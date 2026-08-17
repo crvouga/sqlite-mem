@@ -8,4 +8,6 @@ sequenceParity("INSERT OR IGNORE skips conflicting row", data, [
 ]);
 parity("INSERT OR REPLACE replaces unique conflict", [...data, "INSERT OR REPLACE INTO t VALUES (3,'a')"], "SELECT * FROM t ORDER BY id");
 parity("OR REPLACE updates primary-key row", [...data, "INSERT OR REPLACE INTO t VALUES (1,'new')"], "SELECT * FROM t ORDER BY id");
+parity("REPLACE INTO is a synonym for INSERT OR REPLACE", [...data, "REPLACE INTO t VALUES (3,'a')"], "SELECT * FROM t ORDER BY id");
+parity("REPLACE INTO updates primary-key row", [...data, "REPLACE INTO t VALUES (1,'new')"], "SELECT * FROM t ORDER BY id");
 parity("multi-row OR IGNORE keeps nonconflicting rows", [...data, "INSERT OR IGNORE INTO t VALUES (3,'a'),(4,'d'),(2,'x')"], "SELECT * FROM t ORDER BY id");

@@ -115,8 +115,13 @@ export class RealSqliteAdapter implements ContractDb {
   exec(sql: string, params?: SqlValue[]): QueryResult {
     if (this.closed) return this.closedError();
     try {
+      if (!params || params.length === 0) {
+        this.db.exec(sql);
+        // bun:sqlite exec does not return changes; fall back to last known counters.
+        return okResult([], [], this.lastChanges, this.lastInsertRowid);
+      }
       const stmt = this.db.prepare(sql);
-      const result = params && params.length > 0 ? stmt.run(...params as never[]) : stmt.run();
+      const result = stmt.run(...params as never[]);
       this.recordRun(result.changes, result.lastInsertRowid);
       return okResult([], [], this.lastChanges, this.lastInsertRowid);
     } catch (error) {

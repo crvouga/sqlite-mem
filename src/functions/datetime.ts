@@ -127,4 +127,13 @@ export const dateTimeFunctions: Readonly<Record<string, ScalarFunction>> = {
     const value = resolveDate(args.slice(1), context);
     return value ? formatDate(value, args[0]) : null;
   },
+  current_date(args, context) {
+    return dateTimeFunctions.date!(args.length === 0 ? ["now"] : args, context);
+  },
+  current_time(args, context) {
+    return dateTimeFunctions.time!(args.length === 0 ? ["now"] : args, context);
+  },
+  current_timestamp(args, context) {
+    return dateTimeFunctions.datetime!(args.length === 0 ? ["now"] : args, context);
+  },
 };

@@ -466,10 +466,8 @@ export class Parser {
     }
 
     const qname = this.parseQualifiedTableName();
-    if (this.at("LPAREN")) {
-      this.pos--;
+    if (this.match("LPAREN")) {
       const name = qname.name;
-      this.advance();
       const args: Expr[] = [];
       if (!this.at("RPAREN")) {
         do {
@@ -805,7 +803,7 @@ export class Parser {
           !this.at("UNIQUE") && !this.at("CHECK") && !this.at("DEFAULT") &&
           !this.at("REFERENCES") && !this.at("COLLATE") && !this.at("GENERATED") &&
           !this.at("COMMA") && !this.at("RPAREN")) {
-        typeName = this.parseIdent();
+        typeName = this.parseTypeName();
       }
     }
     const constraints: ColumnConstraint[] = [];
@@ -813,6 +811,26 @@ export class Parser {
       constraints.push(this.parseColumnConstraint());
     }
     return { name, typeName, constraints };
+  }
+
+  /** Type names may include optional precision/scale: VARCHAR(10), DECIMAL(10,2). */
+  private parseTypeName(): string {
+    const base = this.parseIdent();
+    if (!this.match("LPAREN")) return base;
+    const parts: string[] = [];
+    do {
+      if (this.at("NUMBER") || this.at("PLUS") || this.at("MINUS")) {
+        let sign = "";
+        if (this.match("PLUS")) sign = "+";
+        else if (this.match("MINUS")) sign = "-";
+        const number = this.advance();
+        parts.push(`${sign}${number.value}`);
+      } else {
+        parts.push(this.parseIdent());
+      }
+    } while (this.match("COMMA"));
+    this.expect("RPAREN");
+    return `${base}(${parts.join(",")})`;
   }
 
   private isColumnConstraintStart(): boolean {
@@ -1354,7 +1372,7 @@ export class Parser {
       this.expect("LPAREN");
       const expr = this.parseExpr();
       this.expect("AS");
-      const typeName = this.parseIdent();
+      const typeName = this.parseTypeName();
       this.expect("RPAREN");
       return { type: "cast", expr, typeName };
     }
@@ -1460,7 +1478,10 @@ export class Parser {
     }
 
     const upper = name.toUpperCase();
-    const isAgg = AGGREGATE_FUNCTIONS.has(upper);
+    const argCount = args === "*" ? 1 : args.length;
+    // min()/max() with 2+ args are scalar; single-arg (or *) forms are aggregates.
+    const isAgg = AGGREGATE_FUNCTIONS.has(upper) &&
+      !(argCount >= 2 && (upper === "MIN" || upper === "MAX"));
 
     if (this.match("OVER")) {
       let window: WindowSpec;
