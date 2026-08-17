@@ -63,7 +63,8 @@
     "verify-package": "bun run scripts/verify-package.ts",
     "release:preflight": "bun run scripts/release-preflight.ts",
     "release": "semantic-release",
-    "release:dry-run": "semantic-release --dry-run"
+    "release:dry-run": "semantic-release --dry-run",
+    "gh": "open https://github.com/crvouga/sqlite-mem/actions"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.8",
