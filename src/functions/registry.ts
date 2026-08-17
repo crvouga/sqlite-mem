@@ -10,6 +10,8 @@ export interface FunctionContext {
   now?: () => Date;
   /** Injectable SQLite `random()` source — defaults to a seeded PRNG on Database. */
   random?: () => bigint;
+  /** Raw unsigned 64-bit PRNG draws for `randomblob`. */
+  randomU64?: () => bigint;
 }
 
 export type ScalarFunction = (args: SqlValue[], context: FunctionContext) => SqlValue;

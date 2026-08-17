@@ -6,7 +6,7 @@ import type {
   IndexedColumn,
   SelectStmt,
 } from "../ast/nodes.ts";
-import { SqliteError, unsupported } from "../errors/index.ts";
+import { SqliteError } from "../errors/index.ts";
 import { IndexStore } from "../indexes/index.ts";
 import { affinityFromTypeName } from "../types/value.ts";
 import type { Rowid } from "./row.ts";
@@ -51,7 +51,6 @@ export class DatabaseState {
     const existing = this.tables.get(key);
     if (existing && stmt.ifNotExists) return existing;
     this.assertSchemaNameAvailable(stmt.name);
-    if (stmt.asSelect) unsupported("CREATE TABLE AS SELECT");
 
     const seenColumns = new Set<string>();
     const tablePrimaryNames = new Set(

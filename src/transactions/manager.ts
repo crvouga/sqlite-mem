@@ -1,19 +1,24 @@
 import { SqliteError } from "../errors/index.ts";
+import type { Prng } from "../runtime/prng.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
 
 interface SavepointSnapshot {
   name: string;
   state: DatabaseState;
+  prngState: bigint;
 }
 
 export class TransactionManager {
   readonly state: DatabaseState;
+  readonly prng: Prng;
   private transactionSnapshot: DatabaseState | null = null;
+  private transactionPrngState: bigint | null = null;
   private savepoints: SavepointSnapshot[] = [];
   private startedBySavepoint = false;
 
-  constructor(state: DatabaseState) {
+  constructor(state: DatabaseState, prng: Prng) {
     this.state = state;
+    this.prng = prng;
   }
 
   get inTransaction(): boolean {
@@ -25,6 +30,7 @@ export class TransactionManager {
       throw new SqliteError("cannot start a transaction within a transaction", "transaction", "SQLITE_ERROR");
     }
     this.transactionSnapshot = this.state.clone();
+    this.transactionPrngState = this.prng.getState();
     this.savepoints = [];
     this.startedBySavepoint = false;
   }
@@ -32,6 +38,7 @@ export class TransactionManager {
   commit(): void {
     this.requireTransaction("cannot commit - no transaction is active");
     this.transactionSnapshot = null;
+    this.transactionPrngState = null;
     this.savepoints = [];
     this.startedBySavepoint = false;
   }
@@ -43,14 +50,20 @@ export class TransactionManager {
       const snapshot = this.savepoints[index];
       if (!snapshot) throw new SqliteError(`no such savepoint: ${savepoint}`, "transaction", "SQLITE_ERROR");
       this.state.replaceWith(snapshot.state);
+      this.prng.setState(snapshot.prngState);
       this.savepoints.splice(index + 1);
       return;
     }
 
     const snapshot = this.transactionSnapshot;
-    if (!snapshot) throw new SqliteError("cannot rollback - no transaction is active", "transaction", "SQLITE_ERROR");
+    const prngState = this.transactionPrngState;
+    if (!snapshot || prngState === null) {
+      throw new SqliteError("cannot rollback - no transaction is active", "transaction", "SQLITE_ERROR");
+    }
     this.state.replaceWith(snapshot);
+    this.prng.setState(prngState);
     this.transactionSnapshot = null;
+    this.transactionPrngState = null;
     this.savepoints = [];
     this.startedBySavepoint = false;
   }
@@ -58,9 +71,14 @@ export class TransactionManager {
   savepoint(name: string): void {
     if (!this.inTransaction) {
       this.transactionSnapshot = this.state.clone();
+      this.transactionPrngState = this.prng.getState();
       this.startedBySavepoint = true;
     }
-    this.savepoints.push({ name, state: this.state.clone() });
+    this.savepoints.push({
+      name,
+      state: this.state.clone(),
+      prngState: this.prng.getState(),
+    });
   }
 
   release(name: string): void {
@@ -69,6 +87,7 @@ export class TransactionManager {
     this.savepoints.splice(index);
     if (this.startedBySavepoint && this.savepoints.length === 0) {
       this.transactionSnapshot = null;
+      this.transactionPrngState = null;
       this.startedBySavepoint = false;
     }
   }

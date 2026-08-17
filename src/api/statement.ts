@@ -44,6 +44,7 @@ export class Statement {
       {
         now: this.database.now,
         random: () => this.database.prng.nextSqliteRandom(),
+        randomU64: () => this.database.prng.nextU64(),
       },
     );
     bindNamedParameters(env, this.sql, params);
@@ -66,7 +67,7 @@ export function bindNamedParameters(env: ExecutionEnv, sql: string, params: read
       if (token.index !== undefined) nextSlot = Math.max(nextSlot, token.index + 1);
       else nextSlot++;
     } else if (token.kind === "PARAM_NAMED") {
-      const name = token.value.slice(1).toLowerCase();
+      const name = token.value.toLowerCase();
       let slot = namedSlots.get(name);
       if (slot === undefined) {
         slot = nextSlot++;

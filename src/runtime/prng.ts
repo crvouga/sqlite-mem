@@ -40,6 +40,15 @@ export class Prng {
     return min + Number(this.nextU64() % BigInt(span));
   }
 
+  /** Current unsigned 64-bit engine state (for snapshot / transaction rollback). */
+  getState(): bigint {
+    return this.state;
+  }
+
+  setState(state: bigint): void {
+    this.state = BigInt.asUintN(64, state);
+  }
+
   clone(): Prng {
     const copy = new Prng(1);
     copy.state = this.state;

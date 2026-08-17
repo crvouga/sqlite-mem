@@ -50,8 +50,9 @@ export function schemaCatalogRows(state: DatabaseState): SchemaCatalogRow[] {
   return rows;
 }
 
+/** Locale-independent UTF-16 code-unit order for stable catalog/snapshot encoding. */
 function compareNames(a: string, b: string): number {
-  return a.localeCompare(b, "en", { sensitivity: "accent" });
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 export function buildSchemaCatalog(state: DatabaseState, name = "sqlite_schema"): Table {

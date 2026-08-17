@@ -13,6 +13,7 @@ import type { EvalContext } from "../expressions/context.ts";
 import { evalExpr } from "../expressions/eval.ts";
 import { buildSqliteMaster, buildSqliteSchema } from "../schema/catalog.ts";
 import type { Table } from "../storage/table.ts";
+import { compareWithCollation } from "../types/collation.ts";
 import { compareSql, isTruthySql, sqlValueEquals, toInteger, type SqlValue } from "../types/value.ts";
 import type { ExecutionEnv, ScopeRow } from "./env.ts";
 import { resultValues, valuesToResult, type ResultSet } from "./result.ts";
@@ -73,7 +74,7 @@ function executeWith(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalContext):
       const columns = cte.columns ?? anchor.columns;
       let accumulated = resultValues(anchor);
       let delta = accumulated;
-      for (let iteration = 0; iteration < 1000; iteration++) {
+      while (true) {
         env.ctes.set(key, valuesToResult(columns, delta));
         const nextResult = executeSelect(cte.select.compound.select, env, parent);
         const candidates = resultValues(nextResult);
@@ -83,7 +84,6 @@ function executeWith(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalContext):
         if (additions.length === 0) break;
         accumulated = [...accumulated, ...additions];
         delta = additions;
-        if (iteration === 999) throw new SqliteError("recursive CTE exceeded 1000 iterations", "other");
       }
       env.ctes.set(key, valuesToResult(columns, accumulated));
     } else {
@@ -103,7 +103,13 @@ function executeSelectCore(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalCon
   const aggregate = stmt.groupBy.length > 0 ||
     stmt.columns.some((column) => column.type === "expr" && containsAggregate(column.expr)) ||
     (stmt.having !== null && containsAggregate(stmt.having));
-  const groups = aggregate ? groupRows(scopes, stmt.groupBy, env, parent) : scopes.map((scope) => [scope]);
+  const groupBy = stmt.groupBy.map((expr) => {
+    if (expr.type !== "literal" || typeof expr.value !== "number" || !Number.isInteger(expr.value)) return expr;
+    const column = stmt.columns[expr.value - 1];
+    if (!column || column.type !== "expr") throw new SqliteError(`${expr.value}th GROUP BY term out of range`, "other");
+    return column.expr;
+  });
+  const groups = aggregate ? groupRows(scopes, groupBy, env, parent) : scopes.map((scope) => [scope]);
   const windowScopes = aggregate ? groups.map((group) => group[0] ?? { cells: [] }) : scopes;
   const sample = scopes[0] ?? (stmt.from ? { cells: shapeOf(stmt.from, env) } : undefined);
   if (scopes.length === 0 && sample) validateProjectedColumns(stmt, sample, env, parent);
@@ -117,7 +123,10 @@ function executeSelectCore(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalCon
     for (const column of stmt.columns) {
       if (column.type === "star") {
         for (const cell of scope.cells) {
-          if (column.table === null || cell.table?.toLowerCase() === column.table.toLowerCase()) values.push(cell.value);
+          if (
+            (column.table !== null || !cell.hiddenByUsing) &&
+            (column.table === null || cell.table?.toLowerCase() === column.table.toLowerCase())
+          ) values.push(cell.value);
         }
       } else {
         values.push(evalGrouped(column.expr, ctx, group, env, parent, stmt.windows, windowScopes));
@@ -163,12 +172,22 @@ function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext): Scop
     if (item.joinType === "RIGHT" || item.joinType === "FULL") unsupported(`${item.joinType} JOIN`);
     const left = scanFrom(item.left, env, parent);
     const right = scanFrom(item.right, env, parent);
-    const rightShape = right[0]?.cells ?? shapeOf(item.right, env);
+    const rightShape = (right[0]?.cells ?? shapeOf(item.right, env)).map((cell) =>
+      item.using?.some((name) => name.toLowerCase() === cell.name.toLowerCase())
+        ? { ...cell, hiddenByUsing: true }
+        : cell
+    );
     const result: ScopeRow[] = [];
     for (const lhs of left) {
       let matched = false;
       for (const rhs of right) {
-        const joined = { cells: [...lhs.cells, ...rhs.cells] };
+        const using = item.using;
+        const rightCells = using
+          ? rhs.cells.map((cell) => using.some((name) => name.toLowerCase() === cell.name.toLowerCase())
+            ? { ...cell, hiddenByUsing: true }
+            : cell)
+          : rhs.cells;
+        const joined = { cells: [...lhs.cells, ...rightCells] };
         let ok = true;
         if (item.using) {
           ok = item.using.every((name) => {
@@ -233,7 +252,15 @@ function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext): Scop
 }
 
 function shapeOf(item: FromItem, env: ExecutionEnv): ScopeRow["cells"] {
-  if (item.type === "join") return [...shapeOf(item.left, env), ...shapeOf(item.right, env)];
+  if (item.type === "join") {
+    const right = shapeOf(item.right, env);
+    return [
+      ...shapeOf(item.left, env),
+      ...right.map((cell) => item.using?.some((name) => name.toLowerCase() === cell.name.toLowerCase())
+        ? { ...cell, hiddenByUsing: true }
+        : cell),
+    ];
+  }
   if (item.type === "subquery") return resultColumnNames(item.select.columns).map((name) => ({ table: item.alias, name, value: null }));
   if (item.type === "table_func") return [];
   const alias = item.alias ?? item.name;
@@ -305,20 +332,28 @@ function windowValue(
   const spec = resolveWindow(expr.window, namedWindows);
   const currentCtx = env.createEvalContext(current, parent);
   const partitionKey = spec.partitionBy.map((item) => evalExpr(item, currentCtx));
-  let partition = rows.filter((row) => rowsEqual(
+  const partition = rows.filter((row) => rowsEqual(
     partitionKey,
     spec.partitionBy.map((item) => evalExpr(item, env.createEvalContext(row, parent))),
   ));
   partition.sort((a, b) => compareScopes(a, b, spec.orderBy, env, parent));
   const index = Math.max(0, partition.indexOf(current));
+  const orderKeys = partition.map((row) => spec.orderBy.map((item) => evalExpr(item.expr, env.createEvalContext(row, parent))));
+  let defaultFrameEnd = index;
+  if (spec.orderBy.length > 0) {
+    while (defaultFrameEnd + 1 < partition.length) {
+      const next = partition[defaultFrameEnd + 1];
+      if (!next || compareScopes(current, next, spec.orderBy, env, parent) !== 0) break;
+      defaultFrameEnd++;
+    }
+  }
   if (expr.func.type === "aggregate") {
-    const [start, end] = frameBounds(spec, index, partition.length, currentCtx);
+    const [start, end] = frameBounds(spec, index, partition.length, currentCtx, defaultFrameEnd);
     return aggregateValue(expr.func, partition.slice(start, end + 1), env, parent);
   }
   const name = expr.func.name.toLowerCase();
   const args = expr.func.args === "*" ? [] : expr.func.args;
   const values = partition.map((row) => args.map((arg) => evalExpr(arg, env.createEvalContext(row, parent))));
-  const orderKeys = partition.map((row) => spec.orderBy.map((item) => evalExpr(item.expr, env.createEvalContext(row, parent))));
   if (name === "row_number") return index + 1;
   if (name === "rank") {
     let first = index;
@@ -336,10 +371,13 @@ function windowValue(
     const target = name === "lag" ? index - offset : index + offset;
     return values[target]?.[0] ?? evaluated[2] ?? null;
   }
-  const [start, end] = frameBounds(spec, index, partition.length, currentCtx);
+  const [start, end] = frameBounds(spec, index, partition.length, currentCtx, defaultFrameEnd);
   if (name === "first_value") return values[start]?.[0] ?? null;
   if (name === "last_value") return values[end]?.[0] ?? null;
-  if (name === "nth_value") return values[start + Number(toInteger(evaluated[1] ?? null) ?? 0) - 1]?.[0] ?? null;
+  if (name === "nth_value") {
+    const target = start + Number(toInteger(evaluated[1] ?? null) ?? 0) - 1;
+    return target >= start && target <= end ? values[target]?.[0] ?? null : null;
+  }
   throw new SqliteError(`no such window function: ${expr.func.name}`, "other");
 }
 
@@ -359,8 +397,14 @@ function resolveWindow(spec: WindowSpec, namedWindows: SelectStmt["windows"], se
   };
 }
 
-function frameBounds(spec: WindowSpec, index: number, length: number, ctx: EvalContext): [number, number] {
-  if (!spec.frame) return [0, spec.orderBy.length > 0 ? index : Math.max(0, length - 1)];
+function frameBounds(
+  spec: WindowSpec,
+  index: number,
+  length: number,
+  ctx: EvalContext,
+  defaultFrameEnd: number,
+): [number, number] {
+  if (!spec.frame) return [0, spec.orderBy.length > 0 ? defaultFrameEnd : Math.max(0, length - 1)];
   const bound = (item: WindowSpec["frame"] extends infer _ ? NonNullable<WindowSpec["frame"]>["start"] : never, start: boolean): number => {
     switch (item.kind) {
       case "unbounded_preceding": return 0;
@@ -408,14 +452,22 @@ function compareNullable(left: SqlValue, right: SqlValue, item: OrderByItem): nu
     const nullFirst = item.nulls ? item.nulls === "FIRST" : item.dir === "ASC";
     return (left === null ? -1 : 1) * (nullFirst ? 1 : -1);
   }
-  return (compareSql(left, right) ?? 0) * (item.dir === "DESC" ? -1 : 1);
+  const comparison = item.expr.type === "collate"
+    ? compareWithCollation(left, right, item.expr.collation)
+    : compareSql(left, right);
+  return (comparison ?? 0) * (item.dir === "DESC" ? -1 : 1);
 }
 
 function resultColumnNames(columns: ResultColumn[], sample?: ScopeRow): string[] {
   const names: string[] = [];
   for (const column of columns) {
     if (column.type === "star") {
-      for (const cell of sample?.cells ?? []) if (column.table === null || cell.table?.toLowerCase() === column.table.toLowerCase()) names.push(cell.name);
+      for (const cell of sample?.cells ?? []) {
+        if (
+          (column.table !== null || !cell.hiddenByUsing) &&
+          (column.table === null || cell.table?.toLowerCase() === column.table.toLowerCase())
+        ) names.push(cell.name);
+      }
     } else if (
       !column.alias &&
       column.expr.type === "column" &&

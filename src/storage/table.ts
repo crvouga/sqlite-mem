@@ -70,10 +70,10 @@ export class Table {
     return rowid;
   }
 
-  update(rowid: Rowid, updates: RowValues): void {
+  update(rowid: Rowid, updates: RowValues): Row | undefined {
     const key = canonicalRowid(rowid);
     const existing = this.rows.get(key);
-    if (!existing) return;
+    if (!existing) return undefined;
 
     const values = new Map(existing.values);
     const incoming = rowValues(updates);
@@ -83,10 +83,17 @@ export class Table {
     }
 
     const alias = this.integerPrimaryKeyAlias();
-    if (alias) values.set(normalizeColumnName(alias.name), key);
-    const candidate: Row = { rowid: key, values };
+    const targetKey = alias ? asRowid(values.get(normalizeColumnName(alias.name)) ?? null, alias.name) : key;
+    if (targetKey !== key && this.rows.has(targetKey)) {
+      throw new SqliteError(`UNIQUE constraint failed: ${this.name}.${alias?.name ?? "rowid"}`, "constraint_unique", "SQLITE_CONSTRAINT_UNIQUE");
+    }
+    if (alias) values.set(normalizeColumnName(alias.name), targetKey);
+    const candidate: Row = { rowid: targetKey, values };
     this.validate(candidate, key);
-    this.rows.set(key, candidate);
+    if (targetKey !== key) this.rows.delete(key);
+    this.rows.set(targetKey, candidate);
+    this.advanceNextRowid(targetKey);
+    return candidate;
   }
 
   delete(rowid: Rowid): boolean {
@@ -94,7 +101,8 @@ export class Table {
   }
 
   *scan(): Iterable<Row> {
-    yield* this.rows.values();
+    const rows = [...this.rows.values()].sort((a, b) => compareRowids(a.rowid, b.rowid));
+    yield* rows;
   }
 
   clone(): Table {

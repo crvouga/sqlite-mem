@@ -1,5 +1,4 @@
 import type { Statement } from "../ast/nodes.ts";
-import { SqliteError } from "../errors/index.ts";
 import { evalExpr } from "../expressions/eval.ts";
 import { isTruthySql, type SqlValue } from "../types/value.ts";
 import type { ExecutionEnv } from "./env.ts";
@@ -57,7 +56,7 @@ export function executeStatement(stmt: Statement, env: ExecutionEnv): ResultSet 
 }
 
 function executePragma(name: string, expr: import("../ast/nodes.ts").Expr | null, env: ExecutionEnv): ResultSet {
-  if (name.toLowerCase() !== "foreign_keys") throw new SqliteError(`unknown pragma: ${name}`, "other");
+  if (name.toLowerCase() !== "foreign_keys") return emptyResult(0, env.state.lastInsertRowid);
   if (expr === null) {
     return valuesToResult(["foreign_keys"], [[env.state.foreignKeysEnabled ? 1 : 0]], 0, env.state.lastInsertRowid);
   }

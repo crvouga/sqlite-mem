@@ -6,16 +6,39 @@ import { IndexStore } from "../indexes/index.ts";
 import { DatabaseState, type IndexInfo, type ViewInfo } from "../storage/database-state.ts";
 import type { Rowid } from "../storage/row.ts";
 import { Table, type ColumnInfo } from "../storage/table.ts";
+import { normalizeForCollation } from "../types/collation.ts";
 import { isTruthySql, utf8Decode, utf8Encode, type SqlValue } from "../types/value.ts";
 
 const MAGIC = utf8Encode("SQLM");
-const VERSION = 1;
+/** Snapshot format: v1 = schema/rows only; v2 appends PRNG state + clock ms. */
+const VERSION = 2;
+const VERSION_V1 = 1;
+
+export interface SnapshotRuntime {
+  prngState: bigint;
+  nowMs: number;
+}
+
+export interface DecodedSnapshot {
+  state: DatabaseState;
+  runtime: SnapshotRuntime | null;
+}
 
 class Writer {
   private bytes: number[] = [];
   u8(value: number): void { this.bytes.push(value & 0xff); }
   u32(value: number): void {
     this.bytes.push(value & 0xff, value >>> 8 & 0xff, value >>> 16 & 0xff, value >>> 24 & 0xff);
+  }
+  u64(value: bigint): void {
+    const bytes = new Uint8Array(8);
+    new DataView(bytes.buffer).setBigUint64(0, BigInt.asUintN(64, value), true);
+    this.raw(bytes);
+  }
+  i64(value: bigint): void {
+    const bytes = new Uint8Array(8);
+    new DataView(bytes.buffer).setBigInt64(0, value, true);
+    this.raw(bytes);
   }
   raw(value: Uint8Array): void { this.bytes.push(...value); }
   text(value: string): void {
@@ -62,6 +85,14 @@ class Reader {
     this.offset += 4;
     return value;
   }
+  u64(): bigint {
+    const bytes = this.raw(8);
+    return new DataView(bytes.buffer, bytes.byteOffset, 8).getBigUint64(0, true);
+  }
+  i64(): bigint {
+    const bytes = this.raw(8);
+    return new DataView(bytes.buffer, bytes.byteOffset, 8).getBigInt64(0, true);
+  }
   raw(length: number): Uint8Array {
     if (length < 0 || this.offset + length > this.bytes.length) this.fail();
     const value = this.bytes.slice(this.offset, this.offset + length);
@@ -86,6 +117,7 @@ class Reader {
     if (tag === 4) return this.raw(this.u32());
     this.fail();
   }
+  remaining(): number { return this.bytes.length - this.offset; }
   done(): boolean { return this.offset === this.bytes.length; }
   private fail(): never { throw new SqliteError("invalid or truncated sqlite-mem snapshot", "other"); }
 }
@@ -107,7 +139,7 @@ interface IndexMeta {
   originalSql: string | null;
 }
 
-export function encodeDatabaseState(state: DatabaseState): Uint8Array {
+export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRuntime): Uint8Array {
   const writer = new Writer();
   writer.raw(MAGIC);
   writer.u32(VERSION);
@@ -149,15 +181,19 @@ export function encodeDatabaseState(state: DatabaseState): Uint8Array {
       originalSql: index.originalSql,
     });
   }
+  writer.u64(runtime.prngState);
+  writer.i64(BigInt(Math.trunc(runtime.nowMs)));
   return writer.finish();
 }
 
-export function decodeDatabaseState(snapshot: Uint8Array): DatabaseState {
+export function decodeDatabaseState(snapshot: Uint8Array): DecodedSnapshot {
   const reader = new Reader(snapshot);
   const magic = reader.raw(4);
   if (!magic.every((byte, index) => byte === MAGIC[index])) throw new SqliteError("invalid sqlite-mem snapshot magic", "other");
   const version = reader.u32();
-  if (version !== VERSION) throw new SqliteError(`unsupported sqlite-mem snapshot version: ${version}`, "unsupported");
+  if (version !== VERSION && version !== VERSION_V1) {
+    throw new SqliteError(`unsupported sqlite-mem snapshot version: ${version}`, "unsupported");
+  }
   const state = new DatabaseState();
   state.foreignKeysEnabled = reader.u8() !== 0;
   state.schemaVersion = reader.u32();
@@ -208,11 +244,25 @@ export function decodeDatabaseState(snapshot: Uint8Array): DatabaseState {
         },
         getParameter: () => { throw new SqliteError("parameters are not allowed in index predicates", "misuse"); },
       })) !== true) continue;
-      info.store.insert(info.columns.map((column) => row.values.get(column.name.toLowerCase()) ?? null), row.rowid);
+      info.store.insert(info.columns.map((column) =>
+        normalizeForCollation(
+          row.values.get(column.name.toLowerCase()) ?? null,
+          column.collate ?? "BINARY",
+        )
+      ), row.rowid);
     }
   }
+
+  let runtime: SnapshotRuntime | null = null;
+  if (version >= VERSION) {
+    if (reader.remaining() < 16) throw new SqliteError("invalid or truncated sqlite-mem snapshot", "other");
+    runtime = {
+      prngState: reader.u64(),
+      nowMs: Number(reader.i64()),
+    };
+  }
   if (!reader.done()) throw new SqliteError("snapshot has trailing data", "other");
-  return state;
+  return { state, runtime };
 }
 
 function asRowid(value: SqlValue): Rowid {
@@ -220,8 +270,9 @@ function asRowid(value: SqlValue): Rowid {
   throw new SqliteError("invalid rowid in snapshot", "other");
 }
 
+/** Locale-independent UTF-16 code-unit order for stable snapshot encoding. */
 function compareNames(a: string, b: string): number {
-  return a.localeCompare(b, "en", { sensitivity: "accent" });
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 function compareRowids(a: Rowid, b: Rowid): number {

@@ -53,7 +53,7 @@ export function globMatch(text: string, pattern: string): boolean {
         source += "\\[";
       } else {
         let content = pattern.slice(i + 1, end);
-        if (content.startsWith("^")) content = `\\${content}`;
+        // SQLite uses either ^ or ! as the first character to negate a class.
         if (content.startsWith("!")) content = `^${content.slice(1)}`;
         source += `[${content.replace(/\\/g, "\\\\")}]`;
         i = end;

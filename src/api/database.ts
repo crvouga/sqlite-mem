@@ -5,6 +5,7 @@ import { parse } from "../parser/index.ts";
 import { decodeDatabaseState, encodeDatabaseState } from "../serialization/codec.ts";
 import {
   DEFAULT_DATABASE_SEED,
+  fixedClock,
   resolveClock,
   Prng,
   type Clock,
@@ -14,10 +15,10 @@ import { Statement } from "./statement.ts";
 
 export class Database {
   readonly state = new DatabaseState();
-  readonly transactions = new TransactionManager(this.state);
   readonly seed: number | bigint;
   readonly prng: Prng;
-  readonly now: Clock;
+  now: Clock;
+  readonly transactions: TransactionManager;
   private closed = false;
   private transactionSequence = 0;
 
@@ -25,6 +26,7 @@ export class Database {
     this.seed = options.seed ?? DEFAULT_DATABASE_SEED;
     this.prng = options.prng ?? new Prng(this.seed);
     this.now = resolveClock(options.now);
+    this.transactions = new TransactionManager(this.state, this.prng);
   }
 
   exec(sql: string, params: unknown[] = []): void {
@@ -70,13 +72,21 @@ export class Database {
 
   snapshot(): Uint8Array {
     this.assertOpen();
-    return encodeDatabaseState(this.state);
+    return encodeDatabaseState(this.state, {
+      prngState: this.prng.getState(),
+      nowMs: this.now().getTime(),
+    });
   }
 
   restore(snapshot: Uint8Array): void {
     this.assertOpen();
     if (this.transactions.inTransaction) throw new SqliteError("cannot restore during a transaction", "transaction");
-    this.state.replaceWith(decodeDatabaseState(snapshot));
+    const decoded = decodeDatabaseState(snapshot);
+    this.state.replaceWith(decoded.state);
+    if (decoded.runtime) {
+      this.prng.setState(decoded.runtime.prngState);
+      this.now = fixedClock(new Date(decoded.runtime.nowMs));
+    }
   }
 
   close(): void {

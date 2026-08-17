@@ -485,10 +485,11 @@ export function tokenize(input: string): Token[] {
       let name = "";
       while (/[A-Za-z0-9_]/.test(peek())) name += advance();
       if (!name) throw new SqliteError("unrecognized token near parameter", "syntax");
-      if (!namedParameterIndexes.has(name.toLowerCase())) {
-        namedParameterIndexes.set(name.toLowerCase(), nextParameterIndex++);
+      const parameter = `${prefix}${name}`;
+      if (!namedParameterIndexes.has(parameter.toLowerCase())) {
+        namedParameterIndexes.set(parameter.toLowerCase(), nextParameterIndex++);
       }
-      push("PARAM_NAMED", start, startLine, startCol, `${prefix}${name}`);
+      push("PARAM_NAMED", start, startLine, startCol, parameter);
       continue;
     }
 

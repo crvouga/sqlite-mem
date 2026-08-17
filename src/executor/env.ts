@@ -6,7 +6,7 @@ import type { DatabaseState } from "../storage/database-state.ts";
 import type { Rowid } from "../storage/row.ts";
 import type { TransactionManager } from "../transactions/manager.ts";
 import type { SqlValue } from "../types/value.ts";
-import { storageClassOf, type Affinity } from "../types/value.ts";
+import { canonicalizeNumber, storageClassOf, type Affinity } from "../types/value.ts";
 import type { ResultSet } from "./result.ts";
 
 export interface Cell {
@@ -14,6 +14,8 @@ export interface Cell {
   name: string;
   value: SqlValue;
   affinity?: Affinity;
+  /** Right-hand duplicate of a column merged by JOIN ... USING. */
+  hiddenByUsing?: boolean;
 }
 
 export interface ScopeRow {
@@ -29,6 +31,8 @@ export type SelectRunner = (stmt: SelectStmt, env: ExecutionEnv, parent?: EvalCo
 export interface ExecutionHooks {
   now?: () => Date;
   random?: () => bigint;
+  /** Raw xorshift64* output for `randomblob`. */
+  randomU64?: () => bigint;
 }
 
 export class ExecutionEnv {
@@ -70,6 +74,7 @@ export class ExecutionEnv {
         lastInsertRowid: () => this.state.lastInsertRowid,
         now: this.hooks.now,
         random: this.hooks.random,
+        randomU64: this.hooks.randomU64,
       },
       resolveColumn: (table, name) => {
         const key = name.toLowerCase();
@@ -79,6 +84,7 @@ export class ExecutionEnv {
         }
         const matches = cells.filter((cell) =>
           cell.name.toLowerCase() === key &&
+          (table !== null || !cell.hiddenByUsing) &&
           (table === null || cell.table?.toLowerCase() === table.toLowerCase()),
         );
         if (matches.length === 0) throw new SqliteError(`no such column: ${table ? `${table}.` : ""}${name}`, "no_such_column");
@@ -89,6 +95,7 @@ export class ExecutionEnv {
         const key = name.toLowerCase();
         const matches = cells.filter((cell) =>
           cell.name.toLowerCase() === key &&
+          (table !== null || !cell.hiddenByUsing) &&
           (table === null || cell.table?.toLowerCase() === table.toLowerCase()),
         );
         if (matches.length === 0) throw new SqliteError(`no such column: ${table ? `${table}.` : ""}${name}`, "no_such_column");
@@ -127,8 +134,7 @@ export function toSqlValue(value: unknown): SqlValue {
   if (value === null || typeof value === "string" || typeof value === "bigint") return value;
   if (typeof value === "number") {
     if (!Number.isFinite(value)) throw new SqliteError("only finite numbers can be bound", "datatype_mismatch");
-    // Canonicalize -0 to +0 for cross-runtime determinism.
-    return Object.is(value, -0) ? 0 : value;
+    return canonicalizeNumber(value);
   }
   if (typeof value === "boolean") return value ? 1 : 0;
   if (value instanceof Uint8Array) return new Uint8Array(value);

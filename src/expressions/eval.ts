@@ -2,11 +2,12 @@ import type { BinaryOp, Expr, SelectStmt } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
 import { castSqlValue } from "../functions/scalar.ts";
 import { defaultFunctionRegistry } from "../functions/registry.ts";
+import { compareWithCollation } from "../types/collation.ts";
 import {
+  canonicalizeNumber,
   coerceToNumber,
   compareSql,
   isTruthySql,
-  sqlValueEquals,
   storageClassOf,
   toInteger,
   utf8Decode,
@@ -17,6 +18,10 @@ import { globMatch, likeMatch } from "./like.ts";
 
 function numberValue(value: SqlValue): number {
   return coerceToNumber(value) ?? 0;
+}
+
+function asNumber(value: number): number {
+  return canonicalizeNumber(value);
 }
 
 function integerValue(value: SqlValue): bigint {
@@ -66,12 +71,14 @@ function sqlOr(left: SqlValue, right: () => SqlValue): SqlValue {
   return 0;
 }
 
-function compareResult(op: BinaryOp, left: SqlValue, right: SqlValue): SqlValue {
+function compareResult(op: BinaryOp, left: SqlValue, right: SqlValue, collation?: string): SqlValue {
   if (op === "IS" || op === "IS NOT") {
-    const equal = left === null || right === null ? left === right : sqlValueEquals(left, right);
+    const equal = left === null || right === null
+      ? left === right
+      : (collation ? compareWithCollation(left, right, collation) : compareSql(left, right)) === 0;
     return booleanValue(op === "IS" ? equal : !equal);
   }
-  const comparison = compareSql(left, right);
+  const comparison = collation ? compareWithCollation(left, right, collation) : compareSql(left, right);
   if (comparison === null) return null;
   switch (op) {
     case "=":
@@ -93,7 +100,7 @@ function evalBinary(op: BinaryOp, leftExpr: Expr, rightExpr: Expr, ctx: EvalCont
   const right = evalExpr(rightExpr, ctx);
 
   if (["=", "==", "!=", "<>", "<", "<=", ">", ">=", "IS", "IS NOT"].includes(op)) {
-    return compareResult(op, left, right);
+    return compareResult(op, left, right, explicitCollation(leftExpr) ?? explicitCollation(rightExpr) ?? undefined);
   }
   if (op === "LIKE" || op === "NOT LIKE" || op === "GLOB" || op === "NOT GLOB") {
     if (left === null || right === null) return null;
@@ -104,9 +111,9 @@ function evalBinary(op: BinaryOp, leftExpr: Expr, rightExpr: Expr, ctx: EvalCont
   }
   if (left === null || right === null) return null;
   switch (op) {
-    case "+": return numberValue(left) + numberValue(right);
-    case "-": return numberValue(left) - numberValue(right);
-    case "*": return numberValue(left) * numberValue(right);
+    case "+": return asNumber(numberValue(left) + numberValue(right));
+    case "-": return asNumber(numberValue(left) - numberValue(right));
+    case "*": return asNumber(numberValue(left) * numberValue(right));
     case "/": {
       const divisor = numberValue(right);
       if (divisor === 0) return null;
@@ -116,7 +123,7 @@ function evalBinary(op: BinaryOp, leftExpr: Expr, rightExpr: Expr, ctx: EvalCont
           ? Number(quotient)
           : quotient;
       }
-      return numberValue(left) / divisor;
+      return asNumber(numberValue(left) / divisor);
     }
     case "%": {
       const divisor = integerValue(right);
@@ -127,10 +134,10 @@ function evalBinary(op: BinaryOp, leftExpr: Expr, rightExpr: Expr, ctx: EvalCont
         : remainder;
     }
     case "||": return textValue(left) + textValue(right);
-    case "&": return integerValue(left) & integerValue(right);
-    case "|": return integerValue(left) | integerValue(right);
-    case "<<": return integerValue(left) << integerValue(right);
-    case ">>": return integerValue(left) >> integerValue(right);
+    case "&": return safeIntegerResult(integerValue(left) & integerValue(right));
+    case "|": return safeIntegerResult(integerValue(left) | integerValue(right));
+    case "<<": return safeIntegerResult(integerValue(left) << integerValue(right));
+    case ">>": return safeIntegerResult(integerValue(left) >> integerValue(right));
     case "IN":
     case "NOT IN":
       throw new SqliteError(`${op} requires an IN expression node`, "misuse");
@@ -138,6 +145,33 @@ function evalBinary(op: BinaryOp, leftExpr: Expr, rightExpr: Expr, ctx: EvalCont
       throw new SqliteError("unable to use function MATCH in the requested context", "unsupported");
     default:
       throw new SqliteError(`unsupported binary operator: ${op}`, "unsupported");
+  }
+}
+
+function safeIntegerResult(value: bigint): number | bigint {
+  return value <= BigInt(Number.MAX_SAFE_INTEGER) && value >= BigInt(Number.MIN_SAFE_INTEGER)
+    ? Number(value)
+    : value;
+}
+
+function explicitCollation(expr: Expr): string | null {
+  switch (expr.type) {
+    case "collate": return expr.collation;
+    case "unary":
+    case "cast": return explicitCollation(expr.expr);
+    case "binary": return explicitCollation(expr.left) ?? explicitCollation(expr.right);
+    case "between": return explicitCollation(expr.expr) ?? explicitCollation(expr.lower) ?? explicitCollation(expr.upper);
+    case "in":
+      return explicitCollation(expr.expr) ??
+        (Array.isArray(expr.values) ? expr.values.map(explicitCollation).find((name) => name !== null) ?? null : null);
+    case "like": return explicitCollation(expr.expr) ?? explicitCollation(expr.pattern);
+    case "case":
+      return (expr.base && explicitCollation(expr.base)) ??
+        expr.whens.flatMap((branch) => [branch.when, branch.then]).map(explicitCollation).find((name) => name !== null) ??
+        (expr.else && explicitCollation(expr.else)) ??
+        null;
+    case "row": return expr.values.map(explicitCollation).find((name) => name !== null) ?? null;
+    default: return null;
   }
 }
 
@@ -170,8 +204,8 @@ export function evalExpr(expr: Expr, ctx: EvalContext): SqlValue {
         return truth === null ? null : booleanValue(!truth);
       }
       if (value === null) return null;
-      if (expr.op === "+") return numberValue(value);
-      if (expr.op === "-") return -numberValue(value);
+      if (expr.op === "+") return asNumber(numberValue(value));
+      if (expr.op === "-") return asNumber(-numberValue(value));
       return ~integerValue(value);
     }
     case "binary": return evalBinary(expr.op, expr.left, expr.right, ctx);

@@ -65,4 +65,80 @@ describe("determinism", () => {
     expect(result.rows[0]!.x).toBe(0);
     db.close();
   });
+
+  test("expression -0 is canonicalized like bind", () => {
+    const db = new Database();
+    db.exec("CREATE TABLE t(x)");
+    db.exec("INSERT INTO t(x) VALUES (-1.0 * 0.0)");
+    const before = db.query<{ x: number }>("SELECT x FROM t")[0]!.x;
+    expect(Object.is(before, -0)).toBe(false);
+    expect(before).toBe(0);
+    const snap = db.snapshot();
+    const restored = new Database();
+    restored.restore(snap);
+    const after = restored.query<{ x: number }>("SELECT x FROM t")[0]!.x;
+    expect(Object.is(after, -0)).toBe(false);
+    expect(after).toBe(0);
+  });
+
+  test("random() continues after snapshot restore on a fresh database", () => {
+    const source = new Database({ seed: 42 });
+    const first = String(source.query<{ v: bigint | number }>("SELECT random() AS v")[0]!.v);
+    const snap = source.snapshot();
+    const secondOnSource = String(source.query<{ v: bigint | number }>("SELECT random() AS v")[0]!.v);
+
+    const restored = new Database({ seed: 999 });
+    restored.restore(snap);
+    const secondOnRestored = String(restored.query<{ v: bigint | number }>("SELECT random() AS v")[0]!.v);
+    expect(secondOnRestored).toBe(secondOnSource);
+    expect(secondOnRestored).not.toBe(first);
+  });
+
+  test("ROLLBACK restores random() stream", () => {
+    const db = new Database({ seed: 11 });
+    const baseline = new Database({ seed: 11 });
+    const expectedFirst = String(baseline.query<{ v: bigint | number }>("SELECT random() AS v")[0]!.v);
+
+    db.exec("BEGIN");
+    db.query("SELECT random() AS v");
+    db.exec("ROLLBACK");
+
+    const afterRollback = String(db.query<{ v: bigint | number }>("SELECT random() AS v")[0]!.v);
+    expect(afterRollback).toBe(expectedFirst);
+  });
+
+  test("unordered SELECT and group_concat are stable across restore", () => {
+    const db = new Database();
+    db.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, v TEXT)");
+    db.exec("INSERT INTO t(id, v) VALUES (3, 'c')");
+    db.exec("INSERT INTO t(id, v) VALUES (1, 'a')");
+    db.exec("INSERT INTO t(id, v) VALUES (2, 'b')");
+
+    const idsBefore = db.query<{ id: number }>("SELECT id FROM t").map((row) => row.id);
+    const concatBefore = db.query<{ c: string }>("SELECT group_concat(v) AS c FROM t")[0]!.c;
+    expect(idsBefore).toEqual([1, 2, 3]);
+    expect(concatBefore).toBe("a,b,c");
+
+    const restored = new Database();
+    restored.restore(db.snapshot());
+    expect(restored.query<{ id: number }>("SELECT id FROM t").map((row) => row.id)).toEqual(idsBefore);
+    expect(restored.query<{ c: string }>("SELECT group_concat(v) AS c FROM t")[0]!.c).toBe(concatBefore);
+  });
+
+  test("identical seeds produce identical randomblob streams", () => {
+    const a = new Database({ seed: 55 });
+    const b = new Database({ seed: 55 });
+    const left = a.query<{ h: string }>("SELECT hex(randomblob(8)) AS h")[0]!.h;
+    const right = b.query<{ h: string }>("SELECT hex(randomblob(8)) AS h")[0]!.h;
+    expect(left).toBe(right);
+    expect(left.length).toBe(16);
+  });
+
+  test("snapshot restores clock instant", () => {
+    const source = new Database({ now: new Date("2019-04-01T00:00:00.000Z") });
+    const snap = source.snapshot();
+    const restored = new Database({ now: new Date("1999-01-01T00:00:00.000Z") });
+    restored.restore(snap);
+    expect(restored.query<{ d: string }>("SELECT date('now') AS d")[0]!.d).toBe("2019-04-01");
+  });
 });

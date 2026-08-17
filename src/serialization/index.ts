@@ -1,1 +1,6 @@
-export { decodeDatabaseState, encodeDatabaseState } from "./codec.ts";
+export {
+  decodeDatabaseState,
+  encodeDatabaseState,
+  type DecodedSnapshot,
+  type SnapshotRuntime,
+} from "./codec.ts";

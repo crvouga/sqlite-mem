@@ -64,13 +64,16 @@ interface Statement {
 
 ## Determinism
 
-The engine is fully deterministic by default:
+The engine is deterministic by default. Invariants:
 
-| Source | Default | Override |
+| Source | Default | Override / notes |
 | --- | --- | --- |
-| `random()` | Seeded PRNG (`seed: 1`) | `new Database({ seed })` |
+| `random()` / `randomblob()` | Seeded xorshift64* (`seed: 1`) | `new Database({ seed })` or `{ prng }` |
 | `date('now')` / friends | Fixed `2000-01-01T00:00:00.000Z` | `new Database({ now: Date \| (() => Date) })` |
-| Snapshots | Sorted schema/rows | — |
+| Table scans | Rowid order | Same order after `snapshot`/`restore` |
+| Snapshots | Sorted schema/rows + PRNG state + clock | Restored into PRNG and `now` |
+| Transactions | PRNG rolls back with `ROLLBACK`/`SAVEPOINT` | Matches data rollback |
+| Numbers | IEEE `-0` canonicalized to `+0` | Bind, affinity, and arithmetic |
 
 Fuzz / property tests use a fixed seed (`0x5a17e0e1`) and print it on failure:
 

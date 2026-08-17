@@ -157,7 +157,8 @@ const scalarFunctions: Record<string, ScalarFunction> = {
   replace(args) {
     requireArgs("replace", args, 3);
     if (args.some((value) => value === null)) return null;
-    return text(args[0]!).split(text(args[1]!)).join(text(args[2]!));
+    const search = text(args[1]!);
+    return search === "" ? text(args[0]!) : text(args[0]!).split(search).join(text(args[2]!));
   },
   round(args) {
     requireArgs("round", args, 1, 2);
@@ -182,6 +183,26 @@ const scalarFunctions: Record<string, ScalarFunction> = {
     if (context.random) return context.random();
     // Fallback deterministic stream when evaluated outside a Database (e.g. unit helpers).
     return 0n;
+  },
+  randomblob(args, context) {
+    requireArgs("randomblob", args, 1);
+    if (args[0] === null) return null;
+    const length = Math.max(0, Math.trunc(numeric(args[0]!)));
+    const out = new Uint8Array(length);
+    let offset = 0;
+    while (offset < length) {
+      const bits = context.randomU64?.() ?? 0n;
+      for (let shift = 0; shift < 64 && offset < length; shift += 8) {
+        out[offset++] = Number((bits >> BigInt(shift)) & 0xffn);
+      }
+    }
+    return out;
+  },
+  zeroblob(args) {
+    requireArgs("zeroblob", args, 1);
+    if (args[0] === null) return null;
+    const length = Math.max(0, Math.trunc(numeric(args[0]!)));
+    return new Uint8Array(length);
   },
   hex(args) {
     requireArgs("hex", args, 1);

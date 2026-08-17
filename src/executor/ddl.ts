@@ -11,6 +11,7 @@ import { SqliteError } from "../errors/index.ts";
 import { evalExpr } from "../expressions/eval.ts";
 import { makeColumnInfo } from "../storage/table.ts";
 import { normalizeColumnName } from "../storage/row.ts";
+import { normalizeForCollation } from "../types/collation.ts";
 import type { ExecutionEnv } from "./env.ts";
 import { emptyResult, resultValues, type ResultSet } from "./result.ts";
 import { executeSelect } from "./select.ts";
@@ -42,7 +43,12 @@ export function executeCreateIndex(stmt: CreateIndexStmt, env: ExecutionEnv): Re
         cells: table.columns.map((column) => ({ table: table.name, name: column.name, value: row.values.get(normalizeColumnName(column.name)) ?? null })),
       });
       if (stmt.where && !evalExpr(stmt.where, ctx)) continue;
-      index.store.insert(stmt.columns.map((column) => row.values.get(normalizeColumnName(column.name)) ?? null), row.rowid);
+      index.store.insert(stmt.columns.map((column) =>
+        normalizeForCollation(
+          row.values.get(normalizeColumnName(column.name)) ?? null,
+          column.collate ?? "BINARY",
+        )
+      ), row.rowid);
     }
   } catch (error) {
     env.state.dropIndex(stmt.name, true);

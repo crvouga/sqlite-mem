@@ -18,3 +18,81 @@ sequenceParity("ON DELETE CASCADE removes child rows", [
   "INSERT INTO p VALUES (1)",
   "INSERT INTO c VALUES (2,1)",
 ], [{ sql: "DELETE FROM p WHERE id=1" }, { sql: "SELECT * FROM c", query: true }]);
+
+sequenceParity("ON DELETE SET NULL clears child key", [
+  "PRAGMA foreign_keys=ON",
+  "CREATE TABLE p(id INTEGER PRIMARY KEY)",
+  "CREATE TABLE c(id INTEGER,parent_id INTEGER REFERENCES p(id) ON DELETE SET NULL)",
+  "INSERT INTO p VALUES (1)",
+  "INSERT INTO c VALUES (2,1)",
+], [{ sql: "DELETE FROM p WHERE id=1" }, { sql: "SELECT * FROM c", query: true }]);
+
+sequenceParity("ON DELETE SET DEFAULT applies child default", [
+  "PRAGMA foreign_keys=ON",
+  "CREATE TABLE p(id INTEGER PRIMARY KEY)",
+  "CREATE TABLE c(id INTEGER,parent_id INTEGER DEFAULT 0 REFERENCES p(id) ON DELETE SET DEFAULT)",
+  "INSERT INTO p VALUES (0),(1)",
+  "INSERT INTO c VALUES (2,1)",
+], [{ sql: "DELETE FROM p WHERE id=1" }, { sql: "SELECT * FROM c", query: true }]);
+
+errorParity("ON DELETE RESTRICT rejects referenced parent", [
+  "PRAGMA foreign_keys=ON",
+  "CREATE TABLE p(id INTEGER PRIMARY KEY)",
+  "CREATE TABLE c(parent_id INTEGER REFERENCES p(id) ON DELETE RESTRICT)",
+  "INSERT INTO p VALUES (1)",
+  "INSERT INTO c VALUES (1)",
+], "DELETE FROM p WHERE id=1", "constraint_foreign");
+
+sequenceParity("ON UPDATE CASCADE updates child key", [
+  "PRAGMA foreign_keys=ON",
+  "CREATE TABLE p(id TEXT PRIMARY KEY)",
+  "CREATE TABLE c(parent_id TEXT REFERENCES p(id) ON UPDATE CASCADE)",
+  "INSERT INTO p VALUES ('old')",
+  "INSERT INTO c VALUES ('old')",
+], [{ sql: "UPDATE p SET id='new' WHERE id='old'" }, { sql: "SELECT * FROM c", query: true }]);
+
+sequenceParity("ON UPDATE CASCADE updates integer primary key", [
+  "PRAGMA foreign_keys=ON",
+  "CREATE TABLE p(id INTEGER PRIMARY KEY)",
+  "CREATE TABLE c(parent_id INTEGER REFERENCES p(id) ON UPDATE CASCADE)",
+  "INSERT INTO p VALUES (1)",
+  "INSERT INTO c VALUES (1)",
+], [{ sql: "UPDATE p SET id=2 WHERE id=1" }, { sql: "SELECT * FROM c", query: true }]);
+
+sequenceParity("ON UPDATE SET NULL clears child key", [
+  "PRAGMA foreign_keys=ON",
+  "CREATE TABLE p(id TEXT PRIMARY KEY)",
+  "CREATE TABLE c(parent_id TEXT REFERENCES p(id) ON UPDATE SET NULL)",
+  "INSERT INTO p VALUES ('old')",
+  "INSERT INTO c VALUES ('old')",
+], [{ sql: "UPDATE p SET id='new' WHERE id='old'" }, { sql: "SELECT * FROM c", query: true }]);
+
+sequenceParity("ON UPDATE SET DEFAULT applies child default", [
+  "PRAGMA foreign_keys=ON",
+  "CREATE TABLE p(id TEXT PRIMARY KEY)",
+  "CREATE TABLE c(parent_id TEXT DEFAULT 'fallback' REFERENCES p(id) ON UPDATE SET DEFAULT)",
+  "INSERT INTO p VALUES ('fallback'),('old')",
+  "INSERT INTO c VALUES ('old')",
+], [{ sql: "UPDATE p SET id='new' WHERE id='old'" }, { sql: "SELECT * FROM c", query: true }]);
+
+errorParity("ON UPDATE RESTRICT rejects referenced key change", [
+  "PRAGMA foreign_keys=ON",
+  "CREATE TABLE p(id TEXT PRIMARY KEY)",
+  "CREATE TABLE c(parent_id TEXT REFERENCES p(id) ON UPDATE RESTRICT)",
+  "INSERT INTO p VALUES ('old')",
+  "INSERT INTO c VALUES ('old')",
+], "UPDATE p SET id='new' WHERE id='old'", "constraint_foreign");
+
+sequenceParity("composite foreign key cascades updates", [
+  "PRAGMA foreign_keys=ON",
+  "CREATE TABLE p(a TEXT,b TEXT,PRIMARY KEY(a,b))",
+  "CREATE TABLE c(a TEXT,b TEXT,FOREIGN KEY(a,b) REFERENCES p(a,b) ON UPDATE CASCADE)",
+  "INSERT INTO p VALUES ('x','y')",
+  "INSERT INTO c VALUES ('x','y')",
+], [{ sql: "UPDATE p SET a='z',b='w' WHERE a='x' AND b='y'" }, { sql: "SELECT * FROM c", query: true }]);
+
+sequenceParity("foreign_keys OFF allows orphan rows", [
+  "CREATE TABLE p(id INTEGER PRIMARY KEY)",
+  "CREATE TABLE c(parent_id INTEGER REFERENCES p(id))",
+  "PRAGMA foreign_keys=OFF",
+], [{ sql: "INSERT INTO c VALUES (99)" }, { sql: "SELECT * FROM c", query: true }]);

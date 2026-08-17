@@ -6,6 +6,11 @@ export type SqlValue = null | number | bigint | string | Uint8Array;
 
 export type Affinity = "TEXT" | "NUMERIC" | "INTEGER" | "REAL" | "BLOB";
 
+/** Canonicalize IEEE `-0` to `+0` for cross-runtime determinism. */
+export function canonicalizeNumber(value: number): number {
+  return Object.is(value, -0) ? 0 : value;
+}
+
 export function storageClassOf(value: SqlValue): StorageClass {
   if (value === null) return "null";
   if (typeof value === "bigint") return "integer";
@@ -48,33 +53,34 @@ export function applyAffinity(value: SqlValue, affinity: Affinity): SqlValue {
       const n = coerceToNumber(value);
       if (n === null) return value;
       if (typeof value === "bigint") return value;
-      return Number.isInteger(n) && Number.isSafeInteger(n) ? Math.trunc(n) : n;
+      return Number.isInteger(n) && Number.isSafeInteger(n) ? Math.trunc(n) : canonicalizeNumber(n);
     }
     case "REAL": {
       const n = coerceToNumber(value);
-      return n === null ? value : n;
+      return n === null ? value : canonicalizeNumber(n);
     }
     case "NUMERIC": {
       const n = coerceToNumber(value);
       if (n === null) return value;
       if (Number.isInteger(n) && Number.isSafeInteger(n)) return Math.trunc(n);
-      return n;
+      return canonicalizeNumber(n);
     }
     case "BLOB":
+      if (typeof value === "number") return canonicalizeNumber(value);
       return value;
   }
 }
 
 export function coerceToNumber(value: SqlValue): number | null {
   if (value === null) return null;
-  if (typeof value === "number") return value;
+  if (typeof value === "number") return canonicalizeNumber(value);
   if (typeof value === "bigint") return Number(value);
   if (typeof value === "string") {
     const s = value.trim();
     if (s === "") return null;
     const n = Number(s);
     if (!Number.isNaN(n) && /^-?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/.test(s)) {
-      return n;
+      return canonicalizeNumber(n);
     }
     return null;
   }
@@ -121,10 +127,11 @@ export function compareSql(a: SqlValue, b: SqlValue): number | null {
   if (ca !== cb) return ca < cb ? -1 : 1;
 
   if (ca === 1) {
-    // numbers
-    const na = typeof a === "bigint" ? a : BigInt(Math.trunc(a as number)) ;
-    const nb = typeof b === "bigint" ? b : (typeof b === "number" && Number.isInteger(b) ? BigInt(b) : null);
+    // numbers — compare floats before BigInt conversion (NaN/Inf must not reach BigInt)
     if (typeof a === "number" && typeof b === "number") {
+      if (Number.isNaN(a) && Number.isNaN(b)) return 0;
+      if (Number.isNaN(a)) return 1;
+      if (Number.isNaN(b)) return -1;
       if (a < b) return -1;
       if (a > b) return 1;
       return 0;
@@ -134,8 +141,11 @@ export function compareSql(a: SqlValue, b: SqlValue): number | null {
       if (a > b) return 1;
       return 0;
     }
-    const fa = Number(a);
-    const fb = Number(b);
+    const fa = typeof a === "number" ? a : Number(a);
+    const fb = typeof b === "number" ? b : Number(b);
+    if (Number.isNaN(fa) && Number.isNaN(fb)) return 0;
+    if (Number.isNaN(fa)) return 1;
+    if (Number.isNaN(fb)) return -1;
     if (fa < fb) return -1;
     if (fa > fb) return 1;
     return 0;

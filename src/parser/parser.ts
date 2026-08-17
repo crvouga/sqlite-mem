@@ -482,6 +482,12 @@ export class Parser {
     }
 
     const alias = this.optionalAlias();
+    if (this.match("INDEXED")) {
+      unsupported("INDEXED BY");
+    }
+    if (this.match("NOT") && this.at("INDEXED")) {
+      unsupported("NOT INDEXED");
+    }
     return {
       type: "table",
       schema: qname.schema,
@@ -781,6 +787,9 @@ export class Parser {
       }
     } while (this.match("COMMA"));
     this.expect("RPAREN");
+    if (this.match("WITHOUT")) {
+      unsupported("WITHOUT ROWID");
+    }
 
     return { type: "create_table", ifNotExists, temp, name, columns, constraints, asSelect: null };
   }
@@ -858,20 +867,7 @@ export class Parser {
       return this.parseReferencesConstraint();
     }
     if (this.match("GENERATED")) {
-      const always = this.parseIdent();
-      if (always.toUpperCase() !== "ALWAYS") this.syntaxError("expected ALWAYS after GENERATED");
-      this.expect("AS");
-      this.expect("LPAREN");
-      const expr = this.parseExpr();
-      this.expect("RPAREN");
-      let stored = true;
-      if (this.current().kind === "IDENT" || IDENT_KEYWORDS.has(this.current().kind)) {
-        const kind = this.parseIdent().toUpperCase();
-        if (kind === "STORED") stored = true;
-        else if (kind === "VIRTUAL") stored = false;
-        else this.syntaxError("expected STORED or VIRTUAL");
-      }
-      return { type: "generated", expr, stored };
+      unsupported("GENERATED ALWAYS AS columns");
     }
     this.syntaxError("expected column constraint");
   }
@@ -886,8 +882,7 @@ export class Parser {
       } while (this.match("COMMA"));
       this.expect("RPAREN");
     }
-    const onDelete = this.parseFkAction("DELETE");
-    const onUpdate = this.parseFkAction("UPDATE");
+    const { onDelete, onUpdate } = this.parseFkActions();
     return { type: "references", table, columns, onDelete, onUpdate };
   }
 
@@ -935,8 +930,7 @@ export class Parser {
         } while (this.match("COMMA"));
         this.expect("RPAREN");
       }
-      const onDelete = this.parseFkAction("DELETE");
-      const onUpdate = this.parseFkAction("UPDATE");
+      const { onDelete, onUpdate } = this.parseFkActions();
       return { type: "foreign_key", columns, refTable, refColumns, onDelete, onUpdate, name };
     }
     this.syntaxError("expected table constraint");
@@ -986,6 +980,17 @@ export class Parser {
       return "NO ACTION";
     }
     this.syntaxError(`expected ON ${kind} action`);
+  }
+
+  private parseFkActions(): { onDelete: FkAction | null; onUpdate: FkAction | null } {
+    let onDelete: FkAction | null = null;
+    let onUpdate: FkAction | null = null;
+    while (this.at("ON")) {
+      if (this.peek().kind === "DELETE") onDelete = this.parseFkAction("DELETE");
+      else if (this.peek().kind === "UPDATE") onUpdate = this.parseFkAction("UPDATE");
+      else this.syntaxError("expected ON DELETE or ON UPDATE");
+    }
+    return { onDelete, onUpdate };
   }
 
   private parseOrConflict(): ConflictAction | null {
@@ -1379,7 +1384,7 @@ export class Parser {
     }
     if (this.at("PARAM_NAMED")) {
       const tok = this.advance();
-      return { type: "parameter", name: tok.value.slice(1) };
+      return { type: "parameter", name: tok.value };
     }
 
     if (this.match("LPAREN")) {
