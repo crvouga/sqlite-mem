@@ -26,9 +26,9 @@ const oidcReady = Boolean(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
 
 if (inActions && !npmToken && !oidcReady) {
   error("No npm publish credentials — cannot publish to npm", [
-    "semantic-release needs credentials for https://registry.npmjs.org",
+    "semantic-release needs Trusted Publishing (OIDC) for https://registry.npmjs.org",
     "",
-    "Option A (recommended): npm Trusted Publishing (OIDC)",
+    "Configure npm Trusted Publishing (do not create an Automation token):",
     "  1. https://www.npmjs.com/package/sqlite-mem → Settings → Trusted Publisher",
     "  2. Add GitHub Actions publisher:",
     "       Organization/user: crvouga",
@@ -37,13 +37,8 @@ if (inActions && !npmToken && !oidcReady) {
     "       Environment: (leave empty unless you use one)",
     "  3. Re-run this workflow (id-token: write is already set on the release job)",
     "",
-    "Option B: Automation token secret",
-    "  1. https://www.npmjs.com/settings/~/tokens → Generate new token → Granular",
-    '     Access: Read and write for package "sqlite-mem"',
-    "  2. GitHub repo → Settings → Secrets and variables → Actions",
-    "  3. New repository secret name: NPM_TOKEN",
-    "  4. Paste the token value and re-run this workflow",
-    "",
+    "Docs: https://docs.npmjs.com/trusted-publishers",
+    "Maintainer checklist: bun run secrets:doctor  →  docs/SECRETS.md",
     "Without this, publish fails with a cryptic npm 401.",
   ]);
 }
@@ -78,10 +73,13 @@ if (failed) {
 
 console.log("release-preflight: OK");
 console.log("  - build artifacts present");
-if (npmToken) {
-  console.log("  - NPM_TOKEN is set");
-} else if (oidcReady) {
+if (oidcReady) {
   console.log("  - OIDC token endpoint available (Trusted Publishing)");
+  if (npmToken) {
+    console.log("  - note: NPM_TOKEN is also set but Trusted Publishing is preferred; token not required");
+  }
+} else if (npmToken) {
+  console.log("  - NPM_TOKEN is set (legacy); prefer Trusted Publishing — see docs/SECRETS.md");
 } else {
-  console.log("  - NPM_TOKEN unset (local dry-run)");
+  console.log("  - no npm credentials in this shell (local dry-run / configure Trusted Publishing for CI)");
 }

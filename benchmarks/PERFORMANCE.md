@@ -164,23 +164,32 @@ Fidelity: `snapshot/fidelity/200` plus `tests/contract/snapshots` and determinis
 - Stateful write benches use **`isolateIterations`** (fresh engine + setup per sample) so rows do not accumulate across iterations.
 - Workload-c reports per-query timings (`userMs`, `projectMs`, `joinMs`) plus separate email-lookup and join-only cases.
 
-## JS engine comparison (AlaSQL)
+## JS / SQLite engine comparison
 
-Fair core micros against other pure-JS SQL engines (not a SQLite compatibility claim):
+Fair core micros against other engines (not a full SQLite-compatibility claim for AlaSQL):
 
 ```bash
-bun run benchmark:compare
+bun run benchmark:compare          # both tracks, all available engines
+bun run benchmark:compare-js       # sqlite-mem vs AlaSQL (dialect-safe)
+bun run benchmark:compare-sqlite   # sqlite-mem vs bun:sqlite / sql.js / wa-sqlite
 # → benchmarks/results/compare-js.json (+ .html)
 ```
 
-Suite (`compare/*`): id lookup, N inserts, equality join, prepared id executes — sizes 100 and 1000 — engines **sqlite-mem** and **AlaSQL**.
+### Dual tracks
+
+| Track | Specs | Engines | Schema |
+| --- | --- | --- | --- |
+| **JS dialect** | `compare/js/*` | sqlite-mem, AlaSQL | `INT` / `STRING` (no INTEGER PRIMARY KEY) |
+| **SQLite** | `compare/sqlite/*` | sqlite-mem, bun-sqlite, sql.js, wa-sqlite | `INTEGER PRIMARY KEY` + index on join key |
+
+Ops (sizes 100 / 1000): id lookup, N inserts, equality join, prepared id executes.
 
 Caveats:
 
-- AlaSQL is **not** SQLite; the suite uses a conservative dialect (`INT`/`STRING`, no INTEGER PRIMARY KEY maps, no snapshots/FTS).
-- Because the shared schema omits SQLite `INTEGER PRIMARY KEY`, sqlite-mem does **not** use its rowid PK fast path here — these numbers are for cross-engine fairness, not peak sqlite-mem point-lookup claims (see `micro/pk-lookup` / `index/pk-lookup` for that).
-- “Prepared” for AlaSQL means `alasql.compile` after `alasql.use(database)` — not SQLite VDBE statements.
-- In-memory AlaSQL transactions are best-effort (`BEGIN`/`COMMIT TRANSACTION`); do not treat TX insert wins as durability batching.
-- `alasql` is a **devDependency** only; the published package stays zero-runtime-deps.
+- AlaSQL is **not** SQLite; the JS track uses a conservative dialect so both engines run the same SQL.
+- On the JS track, sqlite-mem does **not** use its rowid PK fast path — see the SQLite track (or `micro/pk-lookup`) for peak point-lookup claims.
+- “Prepared” for AlaSQL means `alasql.compile`; for sql.js / wa-sqlite it means real prepared statements (wa-sqlite’s API is async under the harness).
+- In-memory AlaSQL transactions are best-effort; do not treat TX insert wins as durability batching.
+- `alasql`, `sql.js`, and `wa-sqlite` are **devDependencies** only; the published package stays zero-runtime-deps. Missing packages are soft-skipped with a warning.
 
 Stop condition: mobile interactive and 1 MB snapshot targets met without a bytecode VM or format break.

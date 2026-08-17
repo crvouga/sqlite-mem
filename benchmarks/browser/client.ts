@@ -7,10 +7,10 @@ const params = new URLSearchParams(location.search);
 const tier = (params.get("tier") ?? "ci") as SuiteTier;
 const grep = params.get("grep") ?? undefined;
 
-let specs = allSpecs();
+let specs = allSpecs().filter((spec) => !spec.engines?.startsWith("compare"));
 if (grep) specs = specs.filter((spec) => spec.name.includes(grep));
 
-const report = runSuite({
+const report = await runSuite({
   factories: [memFactory],
   specs,
   tier,

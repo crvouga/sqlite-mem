@@ -1,11 +1,11 @@
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
 import { memFactory } from "./compare/mem.ts";
 import { renderHtmlReport } from "./harness/html-report.ts";
 import { toJson } from "./harness/report.ts";
-import { printReport, runSuite } from "./harness/run-suite.ts";
+import { engineAllowed, printReport, runSuite } from "./harness/run-suite.ts";
 import type { NamedFactory, SuiteTier } from "./harness/types.ts";
 import { allSpecs } from "./workloads/index.ts";
-import { mkdir } from "node:fs/promises";
-import path from "node:path";
 
 function arg(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -28,41 +28,87 @@ const grep = arg("--grep");
 const out = arg("--out");
 
 const factories: NamedFactory[] = [];
+const wantCompare = engineArg === "compare" || engineArg === "compare-js" || engineArg === "compare-sqlite";
 
-if (engineArg === "mem" || engineArg === "both" || engineArg === "compare") {
+if (
+  engineArg === "mem" ||
+  engineArg === "both" ||
+  engineArg === "compare" ||
+  engineArg === "compare-js" ||
+  engineArg === "compare-sqlite"
+) {
   factories.push(memFactory);
 }
-if (engineArg === "sqlite" || engineArg === "both") {
+
+if (engineArg === "sqlite" || engineArg === "both" || engineArg === "compare" || engineArg === "compare-sqlite") {
   const { sqliteFactory } = await import("./compare/sqlite.ts");
   factories.push(sqliteFactory);
 }
-if (engineArg === "alasql" || engineArg === "compare") {
+
+if (engineArg === "alasql" || engineArg === "compare" || engineArg === "compare-js") {
   const { tryLoadAlasqlFactory } = await import("./compare/alasql.ts");
   const alasqlFactory = await tryLoadAlasqlFactory();
   if (!alasqlFactory) {
-    console.error("alasql is not installed. Run: bun add -d alasql");
-    process.exit(1);
+    if (engineArg === "alasql") {
+      console.error("alasql is not installed. Run: bun add -d alasql");
+      process.exit(1);
+    }
+    console.warn("skipping alasql (not installed)");
+  } else {
+    factories.push(alasqlFactory);
   }
-  factories.push(alasqlFactory);
+}
+
+if (engineArg === "sqljs" || engineArg === "compare" || engineArg === "compare-sqlite") {
+  const { tryLoadSqlJsFactory } = await import("./compare/sqljs.ts");
+  const sqljsFactory = await tryLoadSqlJsFactory();
+  if (!sqljsFactory) {
+    if (engineArg === "sqljs") {
+      console.error("sql.js is not installed. Run: bun add -d sql.js");
+      process.exit(1);
+    }
+    console.warn("skipping sql.js");
+  } else {
+    factories.push(sqljsFactory);
+  }
+}
+
+if (engineArg === "wa-sqlite" || engineArg === "compare" || engineArg === "compare-sqlite") {
+  const { tryLoadWaSqliteFactory } = await import("./compare/wa-sqlite.ts");
+  const waFactory = await tryLoadWaSqliteFactory();
+  if (!waFactory) {
+    if (engineArg === "wa-sqlite") {
+      console.error("wa-sqlite is not installed. Run: bun add -d wa-sqlite");
+      process.exit(1);
+    }
+    console.warn("skipping wa-sqlite");
+  } else {
+    factories.push(waFactory);
+  }
 }
 
 if (factories.length === 0) {
-  console.error("unknown --engine; expected mem | sqlite | alasql | compare | both");
+  console.error(
+    "unknown --engine; expected mem | sqlite | alasql | sqljs | wa-sqlite | compare | compare-js | compare-sqlite | both",
+  );
   process.exit(1);
 }
 
 let specs = allSpecs();
 if (grep) specs = specs.filter((spec) => spec.name.includes(grep));
-// Compare-suite specs need AlaSQL in the factory set; skip them for mem-only / bun-sqlite runs.
-if (!factories.some((factory) => factory.name === "alasql")) {
-  specs = specs.filter((spec) => spec.engines !== "compare");
+// Compare-track specs only run under --engine compare|compare-js|compare-sqlite
+// (or a single compare engine like alasql/sqljs/wa-sqlite).
+if (!wantCompare && engineArg !== "alasql" && engineArg !== "sqljs" && engineArg !== "wa-sqlite") {
+  specs = specs.filter((spec) => !spec.engines?.startsWith("compare"));
+} else {
+  specs = specs.filter((spec) => factories.some((factory) => engineAllowed(spec, factory.name)));
 }
 
 console.log(
   `Running ${specs.filter((s) => s.tiers.includes(tier)).length} specs  tier=${tier}  engines=${factories.map((f) => f.name).join(",")}`,
 );
 
-const report = runSuite({
+const report = await runSuite({
   factories,
   specs,
   tier,

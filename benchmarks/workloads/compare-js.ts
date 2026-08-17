@@ -1,134 +1,236 @@
-import type { BenchEngine, BenchSpec } from "../harness/types.ts";
+import type { BenchEngine, BenchSpec, BenchStatement } from "../harness/types.ts";
 import { spec } from "./tiers.ts";
-
-/**
- * Dialect-safe schema shared by sqlite-mem and AlaSQL.
- * Avoids SQLite-only INTEGER PRIMARY KEY / autoindex assumptions.
- */
-function createUsers(engine: BenchEngine): void {
-  engine.exec("CREATE TABLE users (id INT, email STRING, name STRING, created_at INT)");
-}
-
-function fillUsers(engine: BenchEngine, n: number): void {
-  createUsers(engine);
-  const ins = engine.prepare("INSERT INTO users VALUES (?,?,?,?)");
-  engine.transaction(() => {
-    for (let i = 1; i <= n; i++) {
-      ins.run(i, `u${i}@ex.test`, `User ${i}`, 1_700_000_000 + i);
-    }
-  });
-}
 
 const SIZES = [
   { n: 100, tiers: ["ci", "default", "full"] as BenchSpec["tiers"] },
   { n: 1000, tiers: ["ci", "default", "full"] as BenchSpec["tiers"] },
 ];
 
-/**
- * Fair core comparison suite: sqlite-mem vs AlaSQL (and any other `compare` engines).
- * Same SQL for every engine; no snapshots / FTS / SQLite-specific DDL.
- */
-export function compareJsSpecs(): BenchSpec[] {
-  const specs: BenchSpec[] = [];
+async function awaitMaybe<T>(value: T | Promise<T>): Promise<T> {
+  return await value;
+}
 
+async function prepare(engine: BenchEngine, sql: string): Promise<BenchStatement> {
+  return await awaitMaybe(engine.prepare(sql));
+}
+
+async function exec(engine: BenchEngine, sql: string, params: unknown[] = []): Promise<void> {
+  await awaitMaybe(engine.exec(sql, params));
+}
+
+async function tx<T>(engine: BenchEngine, fn: () => Promise<T>): Promise<T> {
+  // Avoid sync transaction wrappers that commit before async work finishes.
+  const begin = engine.name === "alasql" ? "BEGIN TRANSACTION" : "BEGIN";
+  const commit = engine.name === "alasql" ? "COMMIT TRANSACTION" : "COMMIT";
+  const rollback = engine.name === "alasql" ? "ROLLBACK TRANSACTION" : "ROLLBACK";
+  await exec(engine, begin);
+  try {
+    const value = await fn();
+    await exec(engine, commit);
+    return value;
+  } catch (error) {
+    try {
+      await exec(engine, rollback);
+    } catch {
+      // ignore
+    }
+    throw error;
+  }
+}
+
+async function stmtRun(stmt: BenchStatement, ...params: unknown[]): Promise<void> {
+  await awaitMaybe(stmt.run(...params));
+}
+
+async function stmtGet(stmt: BenchStatement, ...params: unknown[]): Promise<unknown> {
+  return await awaitMaybe(stmt.get(...params));
+}
+
+async function stmtAll(stmt: BenchStatement, ...params: unknown[]): Promise<unknown> {
+  return await awaitMaybe(stmt.all(...params));
+}
+
+function coreOps(options: {
+  prefix: string;
+  engines: BenchSpec["engines"];
+  createUsers: (engine: BenchEngine) => Promise<void>;
+  fillUsers: (engine: BenchEngine, n: number) => Promise<void>;
+  createJoin: (engine: BenchEngine, n: number) => Promise<BenchStatement>;
+  insertSql: string;
+  lookupSql: string;
+}): BenchSpec[] {
+  const specs: BenchSpec[] = [];
   for (const { n, tiers } of SIZES) {
     const iterations = n >= 1000 ? 8 : 12;
     const warmup = 1;
 
     specs.push(
       spec({
-        name: `compare/pk-lookup/${n}`,
+        name: `${options.prefix}/pk-lookup/${n}`,
         operation: "id equality lookup",
         datasetSize: n,
         tiers,
-        engines: "compare",
+        engines: options.engines,
         layer: "engine",
         warmup,
         iterations,
         opsPerSample: 10,
-        setup: (engine) => {
-          fillUsers(engine, n);
+        setup: async (engine) => {
+          await options.fillUsers(engine, n);
           return {
-            stmt: engine.prepare("SELECT id, name FROM users WHERE id = ?"),
+            stmt: await prepare(engine, options.lookupSql),
             id: Math.max(1, Math.floor(n / 2)),
           };
         },
-        fn: (_engine, ctx) => {
-          const { stmt, id } = ctx as { stmt: { get: (v: unknown) => unknown }; id: number };
-          for (let i = 0; i < 10; i++) stmt.get(id);
+        fn: async (_engine, ctx) => {
+          const { stmt, id } = ctx as { stmt: BenchStatement; id: number };
+          for (let i = 0; i < 10; i++) await stmtGet(stmt, id);
         },
       }),
       spec({
-        name: `compare/insert/${n}`,
+        name: `${options.prefix}/insert/${n}`,
         operation: "N inserts",
         datasetSize: n,
         tiers,
-        engines: "compare",
+        engines: options.engines,
         layer: "engine",
         isolateIterations: true,
         warmup: 0,
         iterations: n >= 1000 ? 3 : 5,
         opsPerSample: n,
-        setup: (engine) => {
-          createUsers(engine);
-          return engine.prepare("INSERT INTO users VALUES (?,?,?,?)");
+        setup: async (engine) => {
+          await options.createUsers(engine);
+          return prepare(engine, options.insertSql);
         },
-        fn: (engine, ctx) => {
-          const stmt = ctx as { run: (...a: unknown[]) => unknown };
-          engine.transaction(() => {
+        fn: async (engine, ctx) => {
+          const stmt = ctx as BenchStatement;
+          await tx(engine, async () => {
             for (let i = 1; i <= n; i++) {
-              stmt.run(i, `u${i}@ex.test`, `User ${i}`, 1_700_000_000 + i);
+              await stmtRun(stmt, i, `u${i}@ex.test`, `User ${i}`, 1_700_000_000 + i);
             }
           });
         },
       }),
       spec({
-        name: `compare/join/${n}`,
+        name: `${options.prefix}/join/${n}`,
         operation: "equality join",
         datasetSize: n,
         tiers,
-        engines: "compare",
+        engines: options.engines,
         layer: "engine",
         warmup,
         iterations,
-        setup: (engine) => {
-          engine.exec("CREATE TABLE small (id INT, k INT)");
-          engine.exec("CREATE TABLE large (id INT, k INT, label STRING)");
-          const insS = engine.prepare("INSERT INTO small VALUES (?,?)");
-          const insL = engine.prepare("INSERT INTO large VALUES (?,?,?)");
-          engine.transaction(() => {
-            const smallN = Math.min(20, n);
-            for (let i = 1; i <= smallN; i++) insS.run(i, i);
-            for (let i = 1; i <= n; i++) insL.run(i, i, `L${i}`);
-          });
-          return engine.prepare("SELECT small.id, large.label FROM small JOIN large ON large.k = small.k");
-        },
-        fn: (_engine, ctx) => {
-          (ctx as { all: () => unknown }).all();
+        setup: (engine) => options.createJoin(engine, n),
+        fn: async (_engine, ctx) => {
+          await stmtAll(ctx as BenchStatement);
         },
       }),
       spec({
-        name: `compare/prepared-execute/${n}`,
+        name: `${options.prefix}/prepared-execute/${n}`,
         operation: "prepared id lookups",
         datasetSize: n,
         tiers,
-        engines: "compare",
+        engines: options.engines,
         layer: "engine",
         warmup,
         iterations,
-        opsPerSample: n,
-        setup: (engine) => {
-          fillUsers(engine, Math.min(n, 1000));
-          return engine.prepare("SELECT id, name FROM users WHERE id = ?");
+        opsPerSample: Math.min(n, 1000),
+        setup: async (engine) => {
+          await options.fillUsers(engine, Math.min(n, 1000));
+          return prepare(engine, options.lookupSql);
         },
-        fn: (_engine, ctx) => {
-          const stmt = ctx as { get: (id: number) => unknown };
+        fn: async (_engine, ctx) => {
+          const stmt = ctx as BenchStatement;
           const limit = Math.min(n, 1000);
-          for (let i = 1; i <= limit; i++) stmt.get(((i - 1) % limit) + 1);
+          for (let i = 1; i <= limit; i++) await stmtGet(stmt, ((i - 1) % limit) + 1);
         },
       }),
     );
   }
-
   return specs;
+}
+
+/** Dialect-safe track: sqlite-mem vs AlaSQL (no INTEGER PRIMARY KEY). */
+export function compareJsSpecs(): BenchSpec[] {
+  const createUsers = async (engine: BenchEngine) => {
+    await exec(engine, "CREATE TABLE users (id INT, email STRING, name STRING, created_at INT)");
+  };
+  const fillUsers = async (engine: BenchEngine, n: number) => {
+    await createUsers(engine);
+    const ins = await prepare(engine, "INSERT INTO users VALUES (?,?,?,?)");
+    await tx(engine, async () => {
+      for (let i = 1; i <= n; i++) {
+        await stmtRun(ins, i, `u${i}@ex.test`, `User ${i}`, 1_700_000_000 + i);
+      }
+    });
+  };
+  const createJoin = async (engine: BenchEngine, n: number) => {
+    await exec(engine, "CREATE TABLE small (id INT, k INT)");
+    await exec(engine, "CREATE TABLE large (id INT, k INT, label STRING)");
+    const insS = await prepare(engine, "INSERT INTO small VALUES (?,?)");
+    const insL = await prepare(engine, "INSERT INTO large VALUES (?,?,?)");
+    await tx(engine, async () => {
+      const smallN = Math.min(20, n);
+      for (let i = 1; i <= smallN; i++) await stmtRun(insS, i, i);
+      for (let i = 1; i <= n; i++) await stmtRun(insL, i, i, `L${i}`);
+    });
+    return prepare(engine, "SELECT small.id, large.label FROM small JOIN large ON large.k = small.k");
+  };
+
+  return coreOps({
+    prefix: "compare/js",
+    engines: "compare-js",
+    createUsers,
+    fillUsers,
+    createJoin,
+    insertSql: "INSERT INTO users VALUES (?,?,?,?)",
+    lookupSql: "SELECT id, name FROM users WHERE id = ?",
+  });
+}
+
+/** SQLite-native track: INTEGER PRIMARY KEY for sqlite-mem / bun:sqlite / sql.js / wa-sqlite. */
+export function compareSqliteSpecs(): BenchSpec[] {
+  const createUsers = async (engine: BenchEngine) => {
+    await exec(
+      engine,
+      "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL, name TEXT NOT NULL, created_at INTEGER NOT NULL)",
+    );
+  };
+  const fillUsers = async (engine: BenchEngine, n: number) => {
+    await createUsers(engine);
+    const ins = await prepare(engine, "INSERT INTO users(id, email, name, created_at) VALUES (?,?,?,?)");
+    await tx(engine, async () => {
+      for (let i = 1; i <= n; i++) {
+        await stmtRun(ins, i, `u${i}@ex.test`, `User ${i}`, 1_700_000_000 + i);
+      }
+    });
+  };
+  const createJoin = async (engine: BenchEngine, n: number) => {
+    await exec(engine, "CREATE TABLE small (id INTEGER PRIMARY KEY, k INTEGER NOT NULL)");
+    await exec(engine, "CREATE TABLE large (id INTEGER PRIMARY KEY, k INTEGER NOT NULL, label TEXT)");
+    await exec(engine, "CREATE INDEX idx_large_k ON large(k)");
+    const insS = await prepare(engine, "INSERT INTO small(id, k) VALUES (?,?)");
+    const insL = await prepare(engine, "INSERT INTO large(id, k, label) VALUES (?,?,?)");
+    await tx(engine, async () => {
+      const smallN = Math.min(20, n);
+      for (let i = 1; i <= smallN; i++) await stmtRun(insS, i, i);
+      for (let i = 1; i <= n; i++) await stmtRun(insL, i, i, `L${i}`);
+    });
+    return prepare(engine, "SELECT small.id, large.label FROM small JOIN large ON large.k = small.k");
+  };
+
+  return coreOps({
+    prefix: "compare/sqlite",
+    engines: "compare-sqlite",
+    createUsers,
+    fillUsers,
+    createJoin,
+    insertSql: "INSERT INTO users(id, email, name, created_at) VALUES (?,?,?,?)",
+    lookupSql: "SELECT id, name FROM users WHERE id = ?",
+  });
+}
+
+/** Both comparison tracks. */
+export function compareAllSpecs(): BenchSpec[] {
+  return [...compareJsSpecs(), ...compareSqliteSpecs()];
 }

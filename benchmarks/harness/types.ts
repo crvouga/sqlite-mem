@@ -7,30 +7,41 @@ export interface MemorySample {
 }
 
 export interface BenchStatement {
-  run(...params: unknown[]): { changes: number; lastInsertRowid: number | bigint };
-  all<T = Record<string, unknown>>(...params: unknown[]): T[];
-  get<T = Record<string, unknown>>(...params: unknown[]): T | undefined;
+  run(...params: unknown[]):
+    | { changes: number; lastInsertRowid: number | bigint }
+    | Promise<{ changes: number; lastInsertRowid: number | bigint }>;
+  all<T = Record<string, unknown>>(...params: unknown[]): T[] | Promise<T[]>;
+  get<T = Record<string, unknown>>(...params: unknown[]): T | undefined | Promise<T | undefined>;
 }
 
 export interface BenchEngine {
   readonly name: string;
-  exec(sql: string, params?: unknown[]): void;
-  query<T = Record<string, unknown>>(sql: string, params?: unknown[]): T[];
-  prepare(sql: string): BenchStatement;
-  transaction<T>(fn: () => T): T;
-  snapshot(): Uint8Array;
-  restore(snapshot: Uint8Array): void;
-  close(): void;
+  exec(sql: string, params?: unknown[]): void | Promise<void>;
+  query<T = Record<string, unknown>>(sql: string, params?: unknown[]): T[] | Promise<T[]>;
+  prepare(sql: string): BenchStatement | Promise<BenchStatement>;
+  transaction<T>(fn: () => T | Promise<T>): T | Promise<T>;
+  snapshot(): Uint8Array | Promise<Uint8Array>;
+  restore(snapshot: Uint8Array): void | Promise<void>;
+  close(): void | Promise<void>;
 }
 
-export type EngineFactory = () => BenchEngine;
+export type EngineFactory = () => BenchEngine | Promise<BenchEngine>;
 
 export interface NamedFactory {
   name: string;
   create: EngineFactory;
 }
 
-export type EngineKind = "mem" | "sqlite" | "alasql" | "compare" | "both";
+export type EngineKind =
+  | "mem"
+  | "sqlite"
+  | "alasql"
+  | "sqljs"
+  | "wa-sqlite"
+  | "compare"
+  | "compare-js"
+  | "compare-sqlite"
+  | "both";
 
 export interface BenchSpec {
   name: string;
@@ -55,9 +66,9 @@ export interface BenchSpec {
    * so stateful benches (inserts, etc.) do not accumulate across samples.
    */
   isolateIterations?: boolean;
-  setup?: (engine: BenchEngine) => unknown;
-  fn: (engine: BenchEngine, ctx: unknown) => void;
-  teardown?: (engine: BenchEngine, ctx: unknown) => void;
+  setup?: (engine: BenchEngine) => unknown | Promise<unknown>;
+  fn: (engine: BenchEngine, ctx: unknown) => void | Promise<void>;
+  teardown?: (engine: BenchEngine, ctx: unknown) => void | Promise<void>;
   extra?: (ctx: unknown) => Record<string, number | string> | undefined;
 }
 

@@ -139,7 +139,7 @@ Local checks:
 ```bash
 bunx commitlint --last --verbose
 bun run build && bun run verify-package
-# dry-run needs GITHUB_TOKEN + NPM_TOKEN (or CI); does not publish
+# dry-run needs a GitHub token for API calls; CI publish uses Trusted Publishing (no NPM_TOKEN)
 bun run release:dry-run
 ```
 
@@ -147,13 +147,13 @@ bun run release:dry-run
 
 ### One-time setup (maintainers)
 
-Do this once so CI can publish:
+Do this once so CI can publish. Full checklist: **[docs/SECRETS.md](./docs/SECRETS.md)**.
 
-1. **npm credentials** (pick one):
-   - **Trusted Publishing (recommended):** on [npmjs.com](https://www.npmjs.com/) → package `sqlite-mem` → Settings → Trusted Publisher → GitHub Actions (`crvouga/sqlite-mem`, workflow `ci.yml`).
-   - **Token:** create a granular Automation token with read/write on `sqlite-mem`, then add repo secret `NPM_TOKEN` (Settings → Secrets and variables → Actions).
-2. Confirm GitHub Actions is enabled and can create releases (default `GITHUB_TOKEN` is enough with this workflow’s permissions).
+1. **npm Trusted Publishing (OIDC)** — required. On [npmjs.com/package/sqlite-mem](https://www.npmjs.com/package/sqlite-mem) → Settings → Trusted Publisher → GitHub Actions (`crvouga/sqlite-mem`, workflow `ci.yml`). Do **not** create an Automation / granular access token for CI.
+2. Confirm GitHub Actions is enabled and can create releases (default `GITHUB_TOKEN` is enough with this workflow’s permissions). No `NPM_TOKEN` repo secret.
 3. Ensure the baseline tag exists and is pushed: `v0.1.0` (semver continues from there; the next `feat` publishes `0.2.0`).
+
+Validate the checklist anytime with `bun run secrets:doctor`.
 
 After that, every green push to `main` with releasable commits updates npm automatically.
 

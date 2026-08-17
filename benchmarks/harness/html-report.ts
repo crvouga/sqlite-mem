@@ -10,7 +10,13 @@ interface Section {
 const SECTION_ORDER: { id: string; title: string; match: (name: string) => boolean }[] = [
   { id: "startup", title: "Startup", match: (n) => n.startsWith("startup/") },
   { id: "parser", title: "Parser", match: (n) => n.startsWith("parser/") },
-  { id: "compare", title: "Compare — JS SQL engines", match: (n) => n.startsWith("compare/") },
+  { id: "compare-js", title: "Compare — JS dialect (vs AlaSQL)", match: (n) => n.startsWith("compare/js/") },
+  {
+    id: "compare-sqlite",
+    title: "Compare — SQLite engines",
+    match: (n) => n.startsWith("compare/sqlite/"),
+  },
+  { id: "compare", title: "Compare — other", match: (n) => n.startsWith("compare/") },
   { id: "micro", title: "Microbenchmarks", match: (n) => n.startsWith("micro/") },
   { id: "workload-a", title: "Workload A — Local-first CRUD", match: (n) => n.startsWith("workload-a/") },
   { id: "workload-b", title: "Workload B — Sync engine", match: (n) => n.startsWith("workload-b/") },
