@@ -1,0 +1,251 @@
+import type { Expr, IndexedColumn, SelectStmt, TableConstraint } from "../ast/nodes.ts";
+import { SqliteError } from "../errors/index.ts";
+import { evalExpr } from "../expressions/eval.ts";
+import { defaultFunctionRegistry } from "../functions/registry.ts";
+import { IndexStore } from "../indexes/index.ts";
+import { DatabaseState, type IndexInfo, type ViewInfo } from "../storage/database-state.ts";
+import type { Rowid } from "../storage/row.ts";
+import { Table, type ColumnInfo } from "../storage/table.ts";
+import { isTruthySql, utf8Decode, utf8Encode, type SqlValue } from "../types/value.ts";
+
+const MAGIC = utf8Encode("SQLM");
+const VERSION = 1;
+
+class Writer {
+  private bytes: number[] = [];
+  u8(value: number): void { this.bytes.push(value & 0xff); }
+  u32(value: number): void {
+    this.bytes.push(value & 0xff, value >>> 8 & 0xff, value >>> 16 & 0xff, value >>> 24 & 0xff);
+  }
+  raw(value: Uint8Array): void { this.bytes.push(...value); }
+  text(value: string): void {
+    const bytes = utf8Encode(value);
+    this.u32(bytes.length);
+    this.raw(bytes);
+  }
+  json(value: unknown): void { this.text(JSON.stringify(value, jsonReplacer)); }
+  value(value: SqlValue): void {
+    if (value === null) return this.u8(0);
+    if (typeof value === "bigint" || typeof value === "number" && Number.isInteger(value)) {
+      this.u8(1);
+      const bytes = new Uint8Array(8);
+      new DataView(bytes.buffer).setBigInt64(0, BigInt(value), true);
+      return this.raw(bytes);
+    }
+    if (typeof value === "number") {
+      this.u8(2);
+      const bytes = new Uint8Array(8);
+      new DataView(bytes.buffer).setFloat64(0, value, true);
+      return this.raw(bytes);
+    }
+    if (typeof value === "string") {
+      this.u8(3);
+      return this.text(value);
+    }
+    this.u8(4);
+    this.u32(value.length);
+    this.raw(value);
+  }
+  finish(): Uint8Array { return Uint8Array.from(this.bytes); }
+}
+
+class Reader {
+  private offset = 0;
+  constructor(private readonly bytes: Uint8Array) {}
+  u8(): number {
+    if (this.offset >= this.bytes.length) this.fail();
+    return this.bytes[this.offset++]!;
+  }
+  u32(): number {
+    if (this.offset + 4 > this.bytes.length) this.fail();
+    const value = new DataView(this.bytes.buffer, this.bytes.byteOffset + this.offset, 4).getUint32(0, true);
+    this.offset += 4;
+    return value;
+  }
+  raw(length: number): Uint8Array {
+    if (length < 0 || this.offset + length > this.bytes.length) this.fail();
+    const value = this.bytes.slice(this.offset, this.offset + length);
+    this.offset += length;
+    return value;
+  }
+  text(): string { return utf8Decode(this.raw(this.u32())); }
+  json<T>(): T { return JSON.parse(this.text(), jsonReviver) as T; }
+  value(): SqlValue {
+    const tag = this.u8();
+    if (tag === 0) return null;
+    if (tag === 1) {
+      const bytes = this.raw(8);
+      const integer = new DataView(bytes.buffer, bytes.byteOffset, 8).getBigInt64(0, true);
+      return integer <= BigInt(Number.MAX_SAFE_INTEGER) && integer >= BigInt(Number.MIN_SAFE_INTEGER) ? Number(integer) : integer;
+    }
+    if (tag === 2) {
+      const bytes = this.raw(8);
+      return new DataView(bytes.buffer, bytes.byteOffset, 8).getFloat64(0, true);
+    }
+    if (tag === 3) return this.text();
+    if (tag === 4) return this.raw(this.u32());
+    this.fail();
+  }
+  done(): boolean { return this.offset === this.bytes.length; }
+  private fail(): never { throw new SqliteError("invalid or truncated sqlite-mem snapshot", "other"); }
+}
+
+interface TableMeta {
+  name: string;
+  columns: ColumnInfo[];
+  constraints: TableConstraint[];
+  indexes: string[];
+  originalSql: string | null;
+}
+
+interface IndexMeta {
+  name: string;
+  tableName: string;
+  unique: boolean;
+  columns: IndexedColumn[];
+  where: Expr | null;
+  originalSql: string | null;
+}
+
+export function encodeDatabaseState(state: DatabaseState): Uint8Array {
+  const writer = new Writer();
+  writer.raw(MAGIC);
+  writer.u32(VERSION);
+  writer.u8(state.foreignKeysEnabled ? 1 : 0);
+  writer.u32(state.schemaVersion);
+  writer.u32(state.changes);
+  writer.u32(state.totalChanges);
+  writer.value(state.lastInsertRowid);
+  writer.u32(state.tables.size);
+  for (const table of sortedValues(state.tables)) {
+    writer.json({
+      name: table.name,
+      columns: table.columns,
+      constraints: table.constraints,
+      indexes: [...table.indexes].sort(compareNames),
+      originalSql: table.originalSql,
+    });
+    writer.value(table.nextRowid);
+    const rows = [...table.rows.values()].sort((a, b) => compareRowids(a.rowid, b.rowid));
+    writer.u32(rows.length);
+    for (const row of rows) {
+      writer.value(row.rowid);
+      writer.u32(table.columns.length);
+      for (const column of table.columns) writer.value(row.values.get(column.name.toLowerCase()) ?? null);
+    }
+  }
+  const views = sortedValues(state.views);
+  writer.u32(views.length);
+  for (const view of views) writer.json(view);
+  const indexes = sortedValues(state.indexes);
+  writer.u32(indexes.length);
+  for (const index of indexes) {
+    writer.json({
+      name: index.name,
+      tableName: index.tableName,
+      unique: index.unique,
+      columns: index.columns,
+      where: index.where,
+      originalSql: index.originalSql,
+    });
+  }
+  return writer.finish();
+}
+
+export function decodeDatabaseState(snapshot: Uint8Array): DatabaseState {
+  const reader = new Reader(snapshot);
+  const magic = reader.raw(4);
+  if (!magic.every((byte, index) => byte === MAGIC[index])) throw new SqliteError("invalid sqlite-mem snapshot magic", "other");
+  const version = reader.u32();
+  if (version !== VERSION) throw new SqliteError(`unsupported sqlite-mem snapshot version: ${version}`, "unsupported");
+  const state = new DatabaseState();
+  state.foreignKeysEnabled = reader.u8() !== 0;
+  state.schemaVersion = reader.u32();
+  state.changes = reader.u32();
+  state.totalChanges = reader.u32();
+  state.lastInsertRowid = asRowid(reader.value());
+  const tableCount = reader.u32();
+  for (let tableIndex = 0; tableIndex < tableCount; tableIndex++) {
+    const meta = reader.json<TableMeta>();
+    const table = new Table(meta.name, meta.columns, {
+      constraints: meta.constraints,
+      indexes: meta.indexes,
+      originalSql: meta.originalSql,
+    });
+    table.nextRowid = asRowid(reader.value());
+    const rowCount = reader.u32();
+    for (let rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+      const rowid = asRowid(reader.value());
+      const valueCount = reader.u32();
+      if (valueCount !== table.columns.length) throw new SqliteError("snapshot row column count mismatch", "other");
+      const values = new Map<string, SqlValue>();
+      for (const column of table.columns) values.set(column.name.toLowerCase(), reader.value());
+      table.rows.set(rowid, { rowid, values });
+    }
+    state.tables.set(table.name.toLowerCase(), table);
+  }
+  const viewCount = reader.u32();
+  for (let index = 0; index < viewCount; index++) {
+    const view = reader.json<ViewInfo>();
+    state.views.set(view.name.toLowerCase(), view);
+  }
+  const indexCount = reader.u32();
+  for (let indexPosition = 0; indexPosition < indexCount; indexPosition++) {
+    const meta = reader.json<IndexMeta>();
+    const info: IndexInfo = { ...meta, store: new IndexStore(meta.name) };
+    state.indexes.set(info.name.toLowerCase(), info);
+    const table = state.getTable(info.tableName);
+    for (const row of table.scan()) {
+      if (info.where && isTruthySql(evalExpr(info.where, {
+        functions: defaultFunctionRegistry,
+        resolveColumn: (qualifier, name) => {
+          if (qualifier && qualifier.toLowerCase() !== table.name.toLowerCase()) {
+            throw new SqliteError(`no such column: ${qualifier}.${name}`, "no_such_column");
+          }
+          if (name.toLowerCase() === "rowid") return row.rowid;
+          if (!row.values.has(name.toLowerCase())) throw new SqliteError(`no such column: ${name}`, "no_such_column");
+          return row.values.get(name.toLowerCase()) ?? null;
+        },
+        getParameter: () => { throw new SqliteError("parameters are not allowed in index predicates", "misuse"); },
+      })) !== true) continue;
+      info.store.insert(info.columns.map((column) => row.values.get(column.name.toLowerCase()) ?? null), row.rowid);
+    }
+  }
+  if (!reader.done()) throw new SqliteError("snapshot has trailing data", "other");
+  return state;
+}
+
+function asRowid(value: SqlValue): Rowid {
+  if (typeof value === "number" && Number.isSafeInteger(value) || typeof value === "bigint") return value;
+  throw new SqliteError("invalid rowid in snapshot", "other");
+}
+
+function compareNames(a: string, b: string): number {
+  return a.localeCompare(b, "en", { sensitivity: "accent" });
+}
+
+function compareRowids(a: Rowid, b: Rowid): number {
+  const left = typeof a === "bigint" ? a : BigInt(a);
+  const right = typeof b === "bigint" ? b : BigInt(b);
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
+function sortedValues<T extends { name: string }>(map: Map<string, T>): T[] {
+  return [...map.values()].sort((a, b) => compareNames(a.name, b.name));
+}
+
+function jsonReplacer(_key: string, value: unknown): unknown {
+  if (typeof value === "bigint") return { $sqlm: "bigint", value: value.toString() };
+  if (value instanceof Uint8Array) return { $sqlm: "blob", value: Array.from(value) };
+  return value;
+}
+
+function jsonReviver(_key: string, value: unknown): unknown {
+  if (!value || typeof value !== "object" || !("$sqlm" in value)) return value;
+  const tagged = value as { $sqlm: string; value: string | number[] };
+  if (tagged.$sqlm === "bigint") return BigInt(tagged.value as string);
+  if (tagged.$sqlm === "blob") return Uint8Array.from(tagged.value as number[]);
+  return value;
+}

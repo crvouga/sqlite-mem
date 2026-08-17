@@ -1,0 +1,49 @@
+{
+  "name": "sqlite-mem",
+  "version": "0.1.0",
+  "description": "Pure TypeScript in-memory SQLite implementation with zero WASM/native dependencies",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "COMPATIBILITY.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "test": "bun test tests/contract tests/fuzz tests/harness",
+    "test:contract": "bun test tests/contract",
+    "test:fuzz": "bun test tests/fuzz",
+    "test:browser": "bun run tests/browser/run.ts",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "esbuild": "^0.28.2",
+    "fast-check": "^4.1.1",
+    "playwright": "^1.52.0",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "bun": ">=1.1.0"
+  },
+  "keywords": [
+    "sqlite",
+    "typescript",
+    "in-memory",
+    "database",
+    "sql"
+  ]
+}

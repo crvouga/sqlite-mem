@@ -1,0 +1,64 @@
+import type { SqlValue } from "../types/value.ts";
+import { aggregateFunctions, type AggregateAccumulator, type AggregateFactory } from "./aggregate.ts";
+import { dateTimeFunctions } from "./datetime.ts";
+import { getScalarFunctions } from "./scalar.ts";
+
+export interface FunctionContext {
+  changes?: () => number;
+  lastInsertRowid?: () => number | bigint;
+  /** Injectable clock — defaults to a fixed instant on Database. */
+  now?: () => Date;
+  /** Injectable SQLite `random()` source — defaults to a seeded PRNG on Database. */
+  random?: () => bigint;
+}
+
+export type ScalarFunction = (args: SqlValue[], context: FunctionContext) => SqlValue;
+
+export class FunctionRegistry {
+  private readonly scalars = new Map<string, ScalarFunction>();
+  private readonly aggregates = new Map<string, AggregateFactory>();
+
+  constructor() {
+    for (const [name, fn] of Object.entries(getScalarFunctions())) this.scalars.set(name, fn);
+    for (const [name, fn] of Object.entries(dateTimeFunctions)) this.scalars.set(name, fn);
+    for (const [name, factory] of Object.entries(aggregateFunctions)) this.aggregates.set(name, factory);
+  }
+
+  registerScalar(name: string, fn: ScalarFunction): void {
+    this.scalars.set(name.toLowerCase(), fn);
+  }
+
+  registerAggregate(name: string, factory: AggregateFactory): void {
+    this.aggregates.set(name.toLowerCase(), factory);
+  }
+
+  lookupScalar(name: string): ScalarFunction | undefined {
+    return this.scalars.get(name.toLowerCase());
+  }
+
+  lookupAggregate(name: string): AggregateFactory | undefined {
+    return this.aggregates.get(name.toLowerCase());
+  }
+
+  createAggregate(name: string): AggregateAccumulator | undefined {
+    return this.lookupAggregate(name)?.();
+  }
+
+  isAggregateName(name: string): boolean {
+    return this.aggregates.has(name.toLowerCase());
+  }
+}
+
+export const defaultFunctionRegistry = new FunctionRegistry();
+
+export function lookupScalar(name: string): ScalarFunction | undefined {
+  return defaultFunctionRegistry.lookupScalar(name);
+}
+
+export function lookupAggregate(name: string): AggregateFactory | undefined {
+  return defaultFunctionRegistry.lookupAggregate(name);
+}
+
+export function isAggregateName(name: string): boolean {
+  return defaultFunctionRegistry.isAggregateName(name);
+}
