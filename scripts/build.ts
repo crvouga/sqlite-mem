@@ -21,7 +21,25 @@ const build = Bun.spawn(
 const code = await build.exited;
 if (code !== 0) process.exit(code);
 
-await $`tsc --emitDeclarationOnly --declaration --declarationMap --outDir dist`;
+await $`tsc -p tsconfig.build.json`;
+
+// tsc keeps `.ts` specifiers in .d.ts even with rewriteRelativeImportExtensions
+// when the source uses allowImportingTsExtensions. Consumers resolve `.js` → `.d.ts`.
+const dtsGlob = new Bun.Glob("**/*.d.ts");
+let rewritten = 0;
+for await (const file of dtsGlob.scan({ cwd: "dist" })) {
+  const path = `dist/${file}`;
+  const text = await Bun.file(path).text();
+  const next = text.replaceAll(/\b((?:from|import)\s*(?:\(\s*)?)(["'])(\.[^"']+)\.ts\2/g, "$1$2$3.js$2");
+  if (next !== text) {
+    await Bun.write(path, next);
+    rewritten++;
+  }
+}
+if (rewritten === 0) {
+  console.error("Build incomplete: no declaration import specifiers were rewritten to .js");
+  process.exit(1);
+}
 
 const mod = await import(new URL("../dist/index.js", import.meta.url).href);
 if (typeof mod.Database !== "function") {

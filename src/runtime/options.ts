@@ -1,10 +1,11 @@
 import type { Clock } from "./clock.ts";
 import type { Prng } from "./prng.ts";
 
+/** Options for {@link Database} construction. All fields are optional. */
 export interface DatabaseOptions {
   /**
    * Seed for deterministic `random()` (and any other PRNG-backed builtins).
-   * Defaults to `1`.
+   * Defaults to {@link DEFAULT_DATABASE_SEED} (`1`).
    */
   seed?: number | bigint;
   /**
@@ -17,4 +18,5 @@ export interface DatabaseOptions {
   prng?: Prng;
 }
 
+/** Default {@link DatabaseOptions.seed} when constructing a {@link Database}. */
 export const DEFAULT_DATABASE_SEED = 1;

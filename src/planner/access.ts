@@ -1,6 +1,7 @@
 import type { Expr, FromItem, TableRef } from "../ast/nodes.ts";
 import type { ExecutionEnv } from "../executor/env.ts";
 import { evalExpr } from "../expressions/eval.ts";
+import { exprEquals } from "../expressions/equals.ts";
 import type { IndexInfo } from "../storage/database-state.ts";
 import type { Row, Rowid } from "../storage/row.ts";
 import type { Table } from "../storage/table.ts";
@@ -31,6 +32,17 @@ export function equalityAgainstConst(expr: Expr): ConstEquality | null {
   }
   if (expr.right.type === "column" && isRowIndependentExpr(expr.left)) {
     return { table: expr.right.table, column: expr.right.name, valueExpr: expr.left };
+  }
+  return null;
+}
+
+export function equalityAgainstExpr(expr: Expr): { expr: Expr; valueExpr: Expr } | null {
+  if (expr.type !== "binary" || (expr.op !== "=" && expr.op !== "==")) return null;
+  if (expr.left.type !== "column" && isRowIndependentExpr(expr.right)) {
+    return { expr: expr.left, valueExpr: expr.right };
+  }
+  if (expr.right.type !== "column" && isRowIndependentExpr(expr.left)) {
+    return { expr: expr.right, valueExpr: expr.left };
   }
   return null;
 }
@@ -86,11 +98,11 @@ export function lookupTableRows(from: TableRef, where: Expr, env: ExecutionEnv):
     return null;
   }
 
-  const equalities = conjunctions(where)
+  const parts = conjunctions(where);
+  const equalities = parts
     .map(equalityAgainstConst)
     .filter((item): item is ConstEquality => item !== null)
     .filter((item) => matchesTable(item.table, alias, table.name));
-  if (equalities.length === 0) return null;
 
   const evalConst = (expr: Expr): SqlValue | undefined => {
     try {
@@ -106,7 +118,6 @@ export function lookupTableRows(from: TableRef, where: Expr, env: ExecutionEnv):
     if (value === undefined) continue;
     resolved.push({ table: eq.table, column: eq.column, value });
   }
-  if (resolved.length === 0) return null;
 
   const pk = table.integerPkColumn();
   for (const eq of resolved) {
@@ -129,17 +140,44 @@ export function lookupTableRows(from: TableRef, where: Expr, env: ExecutionEnv):
   let best: { rowids: readonly Rowid[]; columns: string[] } | null = null;
   for (const indexName of table.indexes) {
     const index = db.indexes.get(indexName.toLowerCase());
-    if (!index || index.where) continue;
+    if (!index) continue;
+    if (index.where && !parts.some((part) => exprEquals(part, index.where!))) continue;
+
+    if (index.columns.some((column) => column.expr)) {
+      const prefix: SqlValue[] = [];
+      for (const column of index.columns) {
+        if (!column.expr) {
+          const value = byColumn.get(column.name.toLowerCase());
+          if (value === undefined) break;
+          prefix.push(normalizeForCollation(value, column.collate ?? "BINARY"));
+          continue;
+        }
+        const match = parts.map(equalityAgainstExpr).find((item) => item && exprEquals(item.expr, column.expr!));
+        if (!match) break;
+        const value = evalConst(match.valueExpr);
+        if (value === undefined) break;
+        prefix.push(normalizeForCollation(value, column.collate ?? "BINARY"));
+      }
+      if (prefix.length === 0) continue;
+      const rowids =
+        prefix.length === index.columns.length ? index.store.lookup(prefix) : index.store.lookupPrefix(prefix);
+      best = { rowids, columns: index.columns.map((column) => column.name.toLowerCase()) };
+      if (index.unique || rowids.length <= 1) break;
+      continue;
+    }
+
     const prefix: SqlValue[] = [];
     for (const column of index.columns) {
       const value = byColumn.get(column.name.toLowerCase());
       if (value === undefined) break;
       prefix.push(normalizeForCollation(value, column.collate ?? "BINARY"));
     }
-    if (prefix.length !== index.columns.length) continue;
-    const rowids = index.store.lookup(prefix);
-    best = { rowids, columns: index.columns.map((column) => column.name.toLowerCase()) };
-    if (index.unique || rowids.length <= 1) break;
+    if (prefix.length === 0) continue;
+    const rowids =
+      prefix.length === index.columns.length ? index.store.lookup(prefix) : index.store.lookupPrefix(prefix);
+    best = { rowids, columns: index.columns.slice(0, prefix.length).map((column) => column.name.toLowerCase()) };
+    if (index.unique && prefix.length === index.columns.length) break;
+    if (rowids.length <= 1) break;
   }
 
   if (best) {
@@ -161,6 +199,91 @@ export function lookupTableRows(from: TableRef, where: Expr, env: ExecutionEnv):
     return { table, alias, rows: hashed, coveredColumns: new Set([col]) };
   }
 
+  const range = rangeAgainstConst(where) ?? rangeFromBetween(where);
+  if (range && matchesTable(range.table, alias, table.name)) {
+    const value = evalConst(range.valueExpr);
+    const value2 = range.valueExpr2 ? evalConst(range.valueExpr2) : undefined;
+    if (value !== undefined) {
+      for (const indexName of table.indexes) {
+        const index = db.indexes.get(indexName.toLowerCase());
+        if (!index || index.where || index.columns.length !== 1) continue;
+        if (index.columns[0]!.expr) continue;
+        if (index.columns[0]!.name.toLowerCase() !== range.column.toLowerCase()) continue;
+        const bound = normalizeForCollation(value, index.columns[0]!.collate ?? "BINARY");
+        const bound2 =
+          value2 !== undefined ? normalizeForCollation(value2, index.columns[0]!.collate ?? "BINARY") : undefined;
+        const rowids = index.store.rangeLookup(range.op, bound, bound2);
+        const rows: Row[] = [];
+        for (const rowid of rowids) {
+          const row = table.get(rowid);
+          if (row) rows.push(row);
+        }
+        return { table, alias, rows, coveredColumns: new Set([range.column.toLowerCase()]) };
+      }
+    }
+  }
+
+  return null;
+}
+
+function rangeAgainstConst(
+  expr: Expr,
+): { table: string | null; column: string; op: ">" | ">=" | "<" | "<="; valueExpr: Expr; valueExpr2?: Expr } | null {
+  if (expr.type !== "binary") return null;
+  const op = expr.op;
+  if (op !== ">" && op !== ">=" && op !== "<" && op !== "<=") return null;
+  if (expr.left.type === "column" && isRowIndependentExpr(expr.right)) {
+    return { table: expr.left.table, column: expr.left.name, op, valueExpr: expr.right };
+  }
+  if (expr.right.type === "column" && isRowIndependentExpr(expr.left)) {
+    const flipped = op === ">" ? "<" : op === ">=" ? "<=" : op === "<" ? ">" : ">=";
+    return { table: expr.right.table, column: expr.right.name, op: flipped, valueExpr: expr.left };
+  }
+  return null;
+}
+
+function rangeFromBetween(
+  expr: Expr,
+): { table: string | null; column: string; op: "between"; valueExpr: Expr; valueExpr2: Expr } | null {
+  if (expr.type !== "between" || expr.not || expr.expr.type !== "column") return null;
+  return {
+    table: expr.expr.table,
+    column: expr.expr.name,
+    op: "between",
+    valueExpr: expr.lower,
+    valueExpr2: expr.upper,
+  };
+}
+
+export function tryIndexedOrder(
+  from: FromItem,
+  order: { expr: Expr; dir: "ASC" | "DESC" },
+  env: ExecutionEnv,
+  limit?: number,
+): TableRowLookup | null {
+  if (from.type !== "table" || order.expr.type !== "column") return null;
+  const alias = from.alias ?? from.name;
+  const db = env.state.databaseForSchema(from.schema, from.schema ? `${from.schema}.${from.name}` : from.name);
+  let table: Table;
+  try {
+    table = db.getTable(from.name);
+  } catch {
+    return null;
+  }
+  const col = order.expr.name.toLowerCase();
+  for (const indexName of table.indexes) {
+    const index = db.indexes.get(indexName.toLowerCase());
+    if (!index || index.where || index.columns.length !== 1 || index.columns[0]!.expr) continue;
+    if (index.columns[0]!.name.toLowerCase() !== col) continue;
+    const desc = order.dir === "DESC";
+    const rows: Row[] = [];
+    for (const rowid of index.store.orderedRowids(desc)) {
+      const row = table.get(rowid);
+      if (row) rows.push(row);
+      if (limit !== undefined && rows.length >= limit) break;
+    }
+    return { table, alias, rows, coveredColumns: new Set([col]) };
+  }
   return null;
 }
 

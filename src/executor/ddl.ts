@@ -12,6 +12,7 @@ import { evalExpr } from "../expressions/eval.ts";
 import { normalizeColumnName } from "../storage/row.ts";
 import { makeColumnInfo } from "../storage/table.ts";
 import { normalizeForCollation } from "../types/collation.ts";
+import { isTruthySql } from "../types/value.ts";
 import type { ExecutionEnv } from "./env.ts";
 import { emptyResult, type ResultSet, resultValues } from "./result.ts";
 import { executeSelect } from "./select.ts";
@@ -64,11 +65,14 @@ export function executeCreateIndex(stmt: CreateIndexStmt, env: ExecutionEnv): Re
           value: row.values.get(normalizeColumnName(column.name)) ?? null,
         })),
       });
-      if (stmt.where && !evalExpr(stmt.where, ctx)) continue;
+      if (stmt.where && isTruthySql(evalExpr(stmt.where, ctx)) !== true) continue;
       index.store.insert(
-        stmt.columns.map((column) =>
-          normalizeForCollation(row.values.get(normalizeColumnName(column.name)) ?? null, column.collate ?? "BINARY"),
-        ),
+        stmt.columns.map((column) => {
+          const raw = column.expr
+            ? evalExpr(column.expr, ctx)
+            : (row.values.get(normalizeColumnName(column.name)) ?? null);
+          return normalizeForCollation(raw, column.collate ?? "BINARY");
+        }),
         row.rowid,
         stmt.unique,
       );
@@ -81,7 +85,7 @@ export function executeCreateIndex(stmt: CreateIndexStmt, env: ExecutionEnv): Re
 }
 
 export function executeAlterTable(stmt: AlterTableStmt, env: ExecutionEnv): ResultSet {
-  const table = env.state.getTable(stmt.table);
+  const table = env.state.getWritableTable(stmt.table);
   const action = stmt.action;
   if (action.kind === "rename_table") {
     env.state.renameTable(stmt.table, action.newName);
@@ -100,7 +104,7 @@ export function executeAlterTable(stmt: AlterTableStmt, env: ExecutionEnv): Resu
     }
     for (const constraint of table.constraints) renameConstraintColumn(constraint, action.oldName, action.newName);
     for (const name of table.indexes) {
-      const index = env.state.indexes.get(name.toLowerCase());
+      const index = env.state.getWritableIndex(name);
       if (index)
         for (const indexed of index.columns)
           if (indexed.name.toLowerCase() === action.oldName.toLowerCase()) indexed.name = action.newName;

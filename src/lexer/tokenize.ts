@@ -1,5 +1,6 @@
 import { SqliteError } from "../errors/index.ts";
 
+/** Lexer token kind: keywords, literals, operators, and punctuation. */
 export type TokenKind =
   | "EOF"
   | "IDENT"
@@ -181,6 +182,7 @@ export type TokenKind =
   | "WITH"
   | "WITHOUT";
 
+/** A single lexer token from {@link tokenize}. */
 export interface Token {
   kind: TokenKind;
   value: string;
@@ -344,6 +346,11 @@ const KEYWORDS: Record<string, TokenKind> = {
   WITHOUT: "WITHOUT",
 };
 
+/**
+ * Lex `input` into SQLite tokens (keywords, literals, operators, parameters).
+ *
+ * @param input - SQL source text.
+ */
 export function tokenize(input: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;

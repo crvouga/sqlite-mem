@@ -1,3 +1,4 @@
+/** Coarse classification of {@link SqliteError} for catch-site branching. */
 export type ErrorCategory =
   | "syntax"
   | "no_such_table"
@@ -14,10 +15,34 @@ export type ErrorCategory =
   | "misuse"
   | "other";
 
+/**
+ * Engine error. `name` is always `"SqliteError"`.
+ *
+ * @example
+ * ```ts
+ * import { Database, SqliteError } from "@crvouga/sqlite-mem";
+ *
+ * const db = new Database();
+ * try {
+ *   db.exec("SELECT * FROM missing");
+ * } catch (err) {
+ *   if (err instanceof SqliteError && err.category === "no_such_table") {
+ *     // handle
+ *   }
+ * }
+ * ```
+ */
 export class SqliteError extends Error {
+  /** Coarse error class (constraint vs syntax vs missing object, …). */
   readonly category: ErrorCategory;
+  /** Optional SQLite result-code name such as `SQLITE_CONSTRAINT`. */
   readonly sqliteCode?: string;
 
+  /**
+   * @param message - Human-readable error text.
+   * @param category - Coarse class; defaults to `"other"`.
+   * @param sqliteCode - Optional SQLite result-code name.
+   */
   constructor(message: string, category: ErrorCategory = "other", sqliteCode?: string) {
     super(message);
     this.name = "SqliteError";

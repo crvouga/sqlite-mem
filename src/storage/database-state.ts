@@ -9,6 +9,7 @@ import type {
 } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
 import { IndexStore } from "../indexes/index.ts";
+import { isStrictTypeName, unknownStrictType } from "../types/strict.ts";
 import { affinityFromTypeName } from "../types/value.ts";
 import { Fts5VirtualTable } from "../vtable/fts5.ts";
 import {
@@ -60,6 +61,7 @@ export interface TriggerInfo {
   originalSql: string | null;
 }
 
+/** In-memory catalog: tables, indexes, views, triggers, and mutation counters. */
 export class DatabaseState {
   tables = new Map<string, Table>();
   virtualTables = new Map<string, AnyVirtualTable>();
@@ -255,6 +257,12 @@ export class DatabaseState {
     if (stmt.columns.length === 0) {
       throw new SqliteError("table must have at least one column", "syntax");
     }
+    if (stmt.strict) {
+      for (const definition of stmt.columns) {
+        const typeName = definition.typeName?.trim() ?? "";
+        if (!isStrictTypeName(typeName)) unknownStrictType(bare, definition.name, typeName || "null");
+      }
+    }
 
     const normalizedConstraints = [...stmt.constraints];
     for (const definition of stmt.columns) {
@@ -270,6 +278,8 @@ export class DatabaseState {
             onDelete: constraint.onDelete,
             onUpdate: constraint.onUpdate,
             name: null,
+            deferrable: constraint.deferrable,
+            initiallyDeferred: constraint.initiallyDeferred,
           });
         }
       }
@@ -278,6 +288,7 @@ export class DatabaseState {
       constraints: normalizedConstraints,
       originalSql,
       withoutRowid: stmt.withoutRowid,
+      strict: stmt.strict,
     });
     if (stmt.withoutRowid) {
       const pk = columns.filter((column) => column.primaryKey);
@@ -370,7 +381,7 @@ export class DatabaseState {
       return this.databaseForSchema(oldSchema, oldName).renameTable(oldBare, splitQualifiedName(newName).bare);
     }
     const oldKey = keyOf(oldBare);
-    const table = this.getTable(oldName);
+    const table = this.getWritableTable(oldName);
     const { schema: newSchema, bare: newBare } = splitQualifiedName(newName);
     if (newSchema !== null) {
       throw new SqliteError(`no such table: ${newName}`, "no_such_table");
@@ -379,11 +390,13 @@ export class DatabaseState {
     this.tables.delete(oldKey);
     table.name = newBare;
     this.tables.set(keyOf(newBare), table);
-    for (const index of this.indexes.values()) {
-      if (keyOf(index.tableName) === oldKey) index.tableName = newBare;
+    for (const index of [...this.indexes.values()]) {
+      if (keyOf(index.tableName) !== oldKey) continue;
+      this.ensureWritableIndex(index).tableName = newBare;
     }
-    for (const trigger of this.triggers.values()) {
-      if (keyOf(trigger.tableName) === oldKey) trigger.tableName = newBare;
+    for (const [key, trigger] of this.triggers) {
+      if (keyOf(trigger.tableName) !== oldKey) continue;
+      this.triggers.set(key, { ...trigger, tableName: newBare });
     }
     this.schemaVersion++;
     return table;
@@ -421,7 +434,7 @@ export class DatabaseState {
   }
 
   createIndex(stmt: CreateIndexStmt, originalSql: string | null = null): IndexInfo {
-    const table = this.getTable(stmt.table);
+    const table = this.getWritableTable(stmt.table);
     const { schema, bare } = splitQualifiedName(stmt.name);
     const target = schema !== null ? this.databaseForSchema(schema, stmt.name) : this.databaseForTable(table);
     const key = keyOf(bare);
@@ -429,6 +442,7 @@ export class DatabaseState {
     if (existing && stmt.ifNotExists) return existing;
     target.assertSchemaNameAvailable(bare);
     for (const indexed of stmt.columns) {
+      if (indexed.expr) continue;
       if (!table.columns.some((column) => keyOf(column.name) === keyOf(indexed.name))) {
         throw new SqliteError(`no such column: ${indexed.name}`, "no_such_column");
       }
@@ -459,7 +473,10 @@ export class DatabaseState {
     }
     target.indexes.delete(key);
     const table = target.tables.get(keyOf(index.tableName));
-    if (table) table.indexes = table.indexes.filter((item) => keyOf(item) !== key);
+    if (table) {
+      const writable = target.ensureWritableTable(table);
+      writable.indexes = writable.indexes.filter((item) => keyOf(item) !== key);
+    }
     target.schemaVersion++;
     return true;
   }
@@ -548,6 +565,78 @@ export class DatabaseState {
     copy.totalChanges = this.totalChanges;
     copy.foreignKeysEnabled = this.foreignKeysEnabled;
     copy.schemaVersion = this.schemaVersion;
+    copy.userVersion = this.userVersion;
+    return copy;
+  }
+
+  /** Share table/index objects with the live state. Callers must freeze first. */
+  cloneShallow(): DatabaseState {
+    const copy = new DatabaseState();
+    copy.tables = new Map(this.tables);
+    for (const [key, table] of this.virtualTables) copy.virtualTables.set(key, table.clone());
+    copy.views = new Map(this.views);
+    copy.indexes = new Map(this.indexes);
+    copy.triggers = new Map(this.triggers);
+    for (const [name, attached] of this.attached) {
+      copy.attached.set(name, { state: attached.state.cloneShallow(), filename: attached.filename });
+    }
+    copy.lastInsertRowid = this.lastInsertRowid;
+    copy.changes = this.changes;
+    copy.totalChanges = this.totalChanges;
+    copy.foreignKeysEnabled = this.foreignKeysEnabled;
+    copy.schemaVersion = this.schemaVersion;
+    copy.userVersion = this.userVersion;
+    return copy;
+  }
+
+  freezeShared(): void {
+    for (const table of this.tables.values()) table.freeze();
+    for (const index of this.indexes.values()) index.store.freeze();
+    for (const attached of this.attached.values()) attached.state.freezeShared();
+  }
+
+  thawShared(): void {
+    for (const table of this.tables.values()) table.frozen = false;
+    for (const index of this.indexes.values()) index.store.frozen = false;
+    for (const attached of this.attached.values()) attached.state.thawShared();
+  }
+
+  getWritableTable(name: string): Table {
+    const { schema, bare } = splitQualifiedName(name);
+    if (schema !== null) {
+      return this.databaseForSchema(schema, name).getWritableTable(bare);
+    }
+    const table = this.getTable(bare);
+    return this.ensureWritableTable(table);
+  }
+
+  ensureWritableTable(table: Table): Table {
+    if (!table.frozen) return table;
+    const key = keyOf(table.name);
+    const copy = table.clone();
+    this.tables.set(key, copy);
+    return copy;
+  }
+
+  getWritableIndex(name: string): IndexInfo {
+    const key = keyOf(name);
+    const index = this.indexes.get(key);
+    if (!index) throw new SqliteError(`no such index: ${name}`, "other");
+    return this.ensureWritableIndex(index);
+  }
+
+  ensureWritableIndex(index: IndexInfo): IndexInfo {
+    if (!index.store.frozen) return index;
+    const copy: IndexInfo = {
+      name: index.name,
+      tableName: index.tableName,
+      unique: index.unique,
+      columns: structuredClone(index.columns),
+      where: index.where ? structuredClone(index.where) : null,
+      originalSql: index.originalSql,
+      store: index.store.clone(),
+    };
+    this.indexes.set(keyOf(index.name), copy);
     return copy;
   }
 
@@ -564,6 +653,7 @@ export class DatabaseState {
     this.totalChanges = copy.totalChanges;
     this.foreignKeysEnabled = copy.foreignKeysEnabled;
     this.schemaVersion = copy.schemaVersion;
+    this.userVersion = copy.userVersion;
   }
 
   private assertSchemaNameAvailable(name: string): void {

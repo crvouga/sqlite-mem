@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-17T20:55:37.353Z",
+  "generatedAt": "2026-08-18T07:10:49.426Z",
   "tier": "ci",
   "environment": {
     "runtime": "bun",
@@ -16,24 +16,24 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 1,
-      "p50": 0.001708,
-      "p95": 0.005823,
-      "p99": 0.006765,
-      "mean": 0.002597,
-      "min": 0.001417,
-      "max": 0.007,
-      "opsPerSec": 385010.26694,
-      "perOpMs": 0.002597,
+      "p50": 0.001604,
+      "p95": 0.004167,
+      "p99": 0.004667,
+      "mean": 0.002174,
+      "min": 0.001333,
+      "max": 0.004792,
+      "opsPerSec": 460087.416609,
+      "perOpMs": 0.002174,
       "reliablePercentiles": true,
       "memoryBefore": {
-        "heapUsed": 522916,
-        "heapTotal": 2167808,
-        "rss": 50429952
+        "heapUsed": 524596,
+        "heapTotal": 2250752,
+        "rss": 51593216
       },
       "memoryAfter": {
-        "heapUsed": 522916,
-        "heapTotal": 2167808,
-        "rss": 50429952
+        "heapUsed": 524596,
+        "heapTotal": 2250752,
+        "rss": 51593216
       }
     },
     {
@@ -44,24 +44,24 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 1,
-      "p50": 0.137459,
-      "p95": 0.373365,
-      "p99": 0.396607,
-      "mean": 0.197653,
-      "min": 0.103209,
-      "max": 0.402417,
-      "opsPerSec": 5059.371727,
-      "perOpMs": 0.197653,
+      "p50": 0.133479,
+      "p95": 0.389167,
+      "p99": 0.413133,
+      "mean": 0.202056,
+      "min": 0.104875,
+      "max": 0.419125,
+      "opsPerSec": 4949.135262,
+      "perOpMs": 0.202056,
       "reliablePercentiles": true,
       "memoryBefore": {
-        "heapUsed": 522916,
-        "heapTotal": 2441216,
-        "rss": 53280768
+        "heapUsed": 524596,
+        "heapTotal": 2523136,
+        "rss": 54476800
       },
       "memoryAfter": {
-        "heapUsed": 522916,
-        "heapTotal": 2899968,
-        "rss": 54706176
+        "heapUsed": 524596,
+        "heapTotal": 2981888,
+        "rss": 55869440
       }
     },
     {
@@ -72,24 +72,24 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 5,
-      "p50": 0.13725,
-      "p95": 0.181104,
-      "p99": 0.190687,
-      "mean": 0.140438,
-      "min": 0.113959,
-      "max": 0.193083,
-      "opsPerSec": 35602.984005,
-      "perOpMs": 0.028088,
+      "p50": 0.152646,
+      "p95": 0.199083,
+      "p99": 0.202217,
+      "mean": 0.155208,
+      "min": 0.113958,
+      "max": 0.203,
+      "opsPerSec": 32214.799694,
+      "perOpMs": 0.031042,
       "reliablePercentiles": true,
       "memoryBefore": {
-        "heapUsed": 522916,
-        "heapTotal": 3031040,
-        "rss": 55656448
+        "heapUsed": 524596,
+        "heapTotal": 3080192,
+        "rss": 56819712
       },
       "memoryAfter": {
-        "heapUsed": 522916,
-        "heapTotal": 3702784,
-        "rss": 58277888
+        "heapUsed": 524596,
+        "heapTotal": 3751936,
+        "rss": 59621376
       }
     },
     {
@@ -100,24 +100,24 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 1,
-      "p50": 0.022958,
-      "p95": 0.033625,
-      "p99": 0.033859,
-      "mean": 0.023299,
-      "min": 0.013,
-      "max": 0.033917,
-      "opsPerSec": 42921.218104,
-      "perOpMs": 0.023299,
+      "p50": 0.018041,
+      "p95": 0.028896,
+      "p99": 0.031213,
+      "mean": 0.019424,
+      "min": 0.014083,
+      "max": 0.031792,
+      "opsPerSec": 51483.585317,
+      "perOpMs": 0.019424,
       "reliablePercentiles": true,
       "memoryBefore": {
-        "heapUsed": 522916,
-        "heapTotal": 4489216,
-        "rss": 65650688
+        "heapUsed": 524596,
+        "heapTotal": 5113856,
+        "rss": 67829760
       },
       "memoryAfter": {
-        "heapUsed": 522916,
-        "heapTotal": 4620288,
-        "rss": 65814528
+        "heapUsed": 524596,
+        "heapTotal": 5212160,
+        "rss": 68075520
       }
     },
     {
@@ -128,24 +128,24 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 20,
-      "p50": 0.114084,
-      "p95": 0.323011,
-      "p99": 0.363802,
-      "mean": 0.157799,
-      "min": 0.077333,
-      "max": 0.374,
-      "opsPerSec": 126743.783217,
-      "perOpMs": 0.00789,
+      "p50": 0.16475,
+      "p95": 0.315114,
+      "p99": 0.343156,
+      "mean": 0.187555,
+      "min": 0.101792,
+      "max": 0.350166,
+      "opsPerSec": 106635.102676,
+      "perOpMs": 0.009378,
       "reliablePercentiles": true,
       "memoryBefore": {
-        "heapUsed": 522916,
-        "heapTotal": 5538816,
-        "rss": 68075520
+        "heapUsed": 524596,
+        "heapTotal": 6654976,
+        "rss": 70631424
       },
       "memoryAfter": {
-        "heapUsed": 522916,
-        "heapTotal": 6112256,
-        "rss": 69517312
+        "heapUsed": 524596,
+        "heapTotal": 7162880,
+        "rss": 72302592
       }
     },
     {
@@ -156,24 +156,24 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 20,
-      "p50": 0.243063,
-      "p95": 0.40727,
-      "p99": 0.42812,
-      "mean": 0.276625,
-      "min": 0.20175,
-      "max": 0.433333,
-      "opsPerSec": 72300.088748,
-      "perOpMs": 0.013831,
+      "p50": 0.900105,
+      "p95": 1.64299,
+      "p99": 1.790932,
+      "mean": 1.014,
+      "min": 0.638417,
+      "max": 1.827917,
+      "opsPerSec": 19723.862636,
+      "perOpMs": 0.0507,
       "reliablePercentiles": true,
       "memoryBefore": {
-        "heapUsed": 522916,
-        "heapTotal": 7162880,
-        "rss": 71270400
+        "heapUsed": 524596,
+        "heapTotal": 8687616,
+        "rss": 75382784
       },
       "memoryAfter": {
-        "heapUsed": 522916,
-        "heapTotal": 8686592,
-        "rss": 73515008
+        "heapUsed": 524596,
+        "heapTotal": 10244096,
+        "rss": 77987840
       }
     },
     {
@@ -184,24 +184,24 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 10,
-      "p50": 0.028979,
-      "p95": 0.030084,
-      "p99": 0.03035,
-      "mean": 0.028903,
-      "min": 0.02725,
-      "max": 0.030417,
-      "opsPerSec": 345986.840967,
-      "perOpMs": 0.00289,
+      "p50": 0.077354,
+      "p95": 1.44876,
+      "p99": 1.805252,
+      "mean": 0.369097,
+      "min": 0.026083,
+      "max": 1.894375,
+      "opsPerSec": 27093.136721,
+      "perOpMs": 0.03691,
       "reliablePercentiles": true,
       "memoryBefore": {
-        "heapUsed": 522916,
-        "heapTotal": 9587712,
-        "rss": 74711040
+        "heapUsed": 524596,
+        "heapTotal": 11603968,
+        "rss": 79577088
       },
       "memoryAfter": {
-        "heapUsed": 522916,
-        "heapTotal": 9849856,
-        "rss": 74989568
+        "heapUsed": 524596,
+        "heapTotal": 11898880,
+        "rss": 79953920
       }
     },
     {
@@ -212,24 +212,24 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 10,
-      "p50": 0.040146,
-      "p95": 0.058667,
-      "p99": 0.061367,
-      "mean": 0.043729,
-      "min": 0.035625,
-      "max": 0.062042,
-      "opsPerSec": 228679.452389,
-      "perOpMs": 0.004373,
+      "p50": 0.047125,
+      "p95": 0.055615,
+      "p99": 0.056457,
+      "mean": 0.047313,
+      "min": 0.038625,
+      "max": 0.056667,
+      "opsPerSec": 211359.889529,
+      "perOpMs": 0.004731,
       "reliablePercentiles": true,
       "memoryBefore": {
-        "heapUsed": 522916,
-        "heapTotal": 10734592,
-        "rss": 76365824
+        "heapUsed": 524596,
+        "heapTotal": 13258752,
+        "rss": 82018304
       },
       "memoryAfter": {
-        "heapUsed": 522916,
-        "heapTotal": 11045888,
-        "rss": 76709888
+        "heapUsed": 524596,
+        "heapTotal": 13570048,
+        "rss": 82509824
       }
     },
     {
@@ -240,24 +240,24 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 1,
-      "p50": 0.007479,
-      "p95": 0.01475,
-      "p99": 0.016616,
-      "mean": 0.008069,
-      "min": 0.004125,
-      "max": 0.017083,
-      "opsPerSec": 123925.974884,
-      "perOpMs": 0.008069,
+      "p50": 0.031437,
+      "p95": 0.0975,
+      "p99": 0.109166,
+      "mean": 0.045375,
+      "min": 0.01825,
+      "max": 0.112083,
+      "opsPerSec": 22038.567493,
+      "perOpMs": 0.045375,
       "reliablePercentiles": true,
       "memoryBefore": {
-        "heapUsed": 522916,
-        "heapTotal": 12930048,
-        "rss": 80527360
+        "heapUsed": 524596,
+        "heapTotal": 15667200,
+        "rss": 88096768
       },
       "memoryAfter": {
-        "heapUsed": 522916,
-        "heapTotal": 12946432,
-        "rss": 80576512
+        "heapUsed": 524596,
+        "heapTotal": 15683584,
+        "rss": 88227840
       }
     },
     {
@@ -268,24 +268,24 @@
       "iterations": 1,
       "warmup": 0,
       "opsPerSample": 200,
-      "p50": 1.385875,
-      "p95": 1.385875,
-      "p99": 1.385875,
-      "mean": 1.385875,
-      "min": 1.385875,
-      "max": 1.385875,
-      "opsPerSec": 144313.159556,
-      "perOpMs": 0.006929,
+      "p50": 4.131833,
+      "p95": 4.131833,
+      "p99": 4.131833,
+      "mean": 4.131833,
+      "min": 4.131833,
+      "max": 4.131833,
+      "opsPerSec": 48404.666888,
+      "perOpMs": 0.020659,
       "reliablePercentiles": false,
       "memoryBefore": {
-        "heapUsed": 522916,
-        "heapTotal": 13782016,
-        "rss": 83640320
+        "heapUsed": 524596,
+        "heapTotal": 16977920,
+        "rss": 92045312
       },
       "memoryAfter": {
-        "heapUsed": 522916,
-        "heapTotal": 15289344,
-        "rss": 87048192
+        "heapUsed": 524596,
+        "heapTotal": 19337216,
+        "rss": 95485952
       }
     },
     {
@@ -296,24 +296,24 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 10,
-      "p50": 0.199937,
-      "p95": 0.319834,
-      "p99": 0.331,
-      "mean": 0.213201,
-      "min": 0.120167,
-      "max": 0.333792,
-      "opsPerSec": 46903.985197,
-      "perOpMs": 0.02132,
+      "p50": 0.329375,
+      "p95": 0.493562,
+      "p99": 0.520045,
+      "mean": 0.319389,
+      "min": 0.148333,
+      "max": 0.526666,
+      "opsPerSec": 31309.782115,
+      "perOpMs": 0.031939,
       "reliablePercentiles": true,
       "memoryBefore": {
-        "heapUsed": 522916,
-        "heapTotal": 16323584,
-        "rss": 91324416
+        "heapUsed": 524596,
+        "heapTotal": 20862976,
+        "rss": 101826560
       },
       "memoryAfter": {
-        "heapUsed": 522916,
-        "heapTotal": 17126400,
-        "rss": 95027200
+        "heapUsed": 524596,
+        "heapTotal": 21960704,
+        "rss": 103432192
       }
     },
     {
@@ -324,24 +324,24 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 1,
-      "p50": 0.015667,
-      "p95": 0.033094,
-      "p99": 0.035586,
-      "mean": 0.019875,
-      "min": 0.013584,
-      "max": 0.036209,
-      "opsPerSec": 50314.043488,
-      "perOpMs": 0.019875,
+      "p50": 0.016125,
+      "p95": 0.040104,
+      "p99": 0.042121,
+      "mean": 0.022875,
+      "min": 0.014209,
+      "max": 0.042625,
+      "opsPerSec": 43715.846995,
+      "perOpMs": 0.022875,
       "reliablePercentiles": true,
       "memoryBefore": {
-        "heapUsed": 522916,
-        "heapTotal": 18044928,
-        "rss": 97107968
+        "heapUsed": 524596,
+        "heapTotal": 23353344,
+        "rss": 105938944
       },
       "memoryAfter": {
-        "heapUsed": 522916,
-        "heapTotal": 18126848,
-        "rss": 97501184
+        "heapUsed": 524596,
+        "heapTotal": 23468032,
+        "rss": 106102784
       }
     },
     {
@@ -352,24 +352,24 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 1,
-      "p50": 0.323813,
-      "p95": 0.826959,
-      "p99": 0.943625,
-      "mean": 0.431403,
-      "min": 0.276875,
-      "max": 0.972792,
-      "opsPerSec": 2318.018187,
-      "perOpMs": 0.431403,
+      "p50": 0.292875,
+      "p95": 0.363406,
+      "p99": 0.374615,
+      "mean": 0.300806,
+      "min": 0.256583,
+      "max": 0.377417,
+      "opsPerSec": 3324.4073,
+      "perOpMs": 0.300806,
       "reliablePercentiles": true,
       "memoryBefore": {
-        "heapUsed": 522916,
-        "heapTotal": 19355648,
-        "rss": 99188736
+        "heapUsed": 524596,
+        "heapTotal": 25139200,
+        "rss": 108281856
       },
       "memoryAfter": {
-        "heapUsed": 522916,
-        "heapTotal": 21829632,
-        "rss": 103038976
+        "heapUsed": 524596,
+        "heapTotal": 27662336,
+        "rss": 111755264
       }
     },
     {
@@ -380,24 +380,24 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 1,
-      "p50": 0.272688,
-      "p95": 0.354855,
-      "p99": 0.358838,
-      "mean": 0.28216,
-      "min": 0.22025,
-      "max": 0.359834,
-      "opsPerSec": 3544.08846,
-      "perOpMs": 0.28216,
+      "p50": 0.238938,
+      "p95": 0.327927,
+      "p99": 0.344652,
+      "mean": 0.253618,
+      "min": 0.210709,
+      "max": 0.348833,
+      "opsPerSec": 3942.932622,
+      "perOpMs": 0.253618,
       "reliablePercentiles": true,
       "memoryBefore": {
-        "heapUsed": 522916,
-        "heapTotal": 23189504,
-        "rss": 104759296
+        "heapUsed": 524596,
+        "heapTotal": 29464576,
+        "rss": 113917952
       },
       "memoryAfter": {
-        "heapUsed": 522916,
-        "heapTotal": 26056704,
-        "rss": 108642304
+        "heapUsed": 524596,
+        "heapTotal": 32331776,
+        "rss": 117506048
       }
     },
     {
@@ -408,24 +408,24 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 1,
-      "p50": 0.264667,
-      "p95": 0.345292,
-      "p99": 0.360792,
-      "mean": 0.276181,
-      "min": 0.237667,
-      "max": 0.364667,
-      "opsPerSec": 3620.816072,
-      "perOpMs": 0.276181,
+      "p50": 0.193021,
+      "p95": 0.291468,
+      "p99": 0.305426,
+      "mean": 0.217646,
+      "min": 0.185542,
+      "max": 0.308916,
+      "opsPerSec": 4594.620465,
+      "perOpMs": 0.217646,
       "reliablePercentiles": true,
       "memoryBefore": {
-        "heapUsed": 522916,
-        "heapTotal": 28301312,
-        "rss": 112246784
+        "heapUsed": 4827977,
+        "heapTotal": 32412672,
+        "rss": 118489088
       },
       "memoryAfter": {
-        "heapUsed": 522916,
-        "heapTotal": 31381504,
-        "rss": 116457472
+        "heapUsed": 4827977,
+        "heapTotal": 32429056,
+        "rss": 118898688
       }
     },
     {
@@ -436,24 +436,24 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 1,
-      "p50": 0.304645,
-      "p95": 0.705125,
-      "p99": 0.776892,
-      "mean": 0.40159,
-      "min": 0.272542,
-      "max": 0.794834,
-      "opsPerSec": 2490.099778,
-      "perOpMs": 0.40159,
+      "p50": 0.313437,
+      "p95": 0.475093,
+      "p99": 0.514585,
+      "mean": 0.340514,
+      "min": 0.271791,
+      "max": 0.524458,
+      "opsPerSec": 2936.738253,
+      "perOpMs": 0.340514,
       "reliablePercentiles": true,
       "memoryBefore": {
-        "heapUsed": 4755001,
-        "heapTotal": 32609280,
-        "rss": 119160832
+        "heapUsed": 4827977,
+        "heapTotal": 32446464,
+        "rss": 119422976
       },
       "memoryAfter": {
-        "heapUsed": 4755001,
-        "heapTotal": 32609280,
-        "rss": 120029184
+        "heapUsed": 4827977,
+        "heapTotal": 32446464,
+        "rss": 119848960
       }
     },
     {
@@ -464,24 +464,24 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 1,
-      "p50": 0.157958,
-      "p95": 0.163687,
-      "p99": 0.163904,
-      "mean": 0.155868,
-      "min": 0.142,
-      "max": 0.163958,
-      "opsPerSec": 6415.685067,
-      "perOpMs": 0.155868,
+      "p50": 0.158938,
+      "p95": 0.204448,
+      "p99": 0.208456,
+      "mean": 0.169736,
+      "min": 0.147083,
+      "max": 0.209458,
+      "opsPerSec": 5891.502097,
+      "perOpMs": 0.169736,
       "reliablePercentiles": true,
       "memoryBefore": {
-        "heapUsed": 4755001,
-        "heapTotal": 32609280,
-        "rss": 120143872
+        "heapUsed": 4827977,
+        "heapTotal": 32446464,
+        "rss": 120307712
       },
       "memoryAfter": {
-        "heapUsed": 4755001,
-        "heapTotal": 32609280,
-        "rss": 120209408
+        "heapUsed": 4827977,
+        "heapTotal": 32446464,
+        "rss": 120307712
       }
     },
     {
@@ -492,24 +492,24 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 1,
-      "p50": 0.125958,
-      "p95": 0.132052,
-      "p99": 0.13261,
-      "mean": 0.126292,
-      "min": 0.121041,
-      "max": 0.13275,
-      "opsPerSec": 7918.168369,
-      "perOpMs": 0.126292,
+      "p50": 0.113208,
+      "p95": 0.133333,
+      "p99": 0.138067,
+      "mean": 0.116903,
+      "min": 0.108333,
+      "max": 0.13925,
+      "opsPerSec": 8554.124799,
+      "perOpMs": 0.116903,
       "reliablePercentiles": true,
       "memoryBefore": {
-        "heapUsed": 4755001,
-        "heapTotal": 32609280,
-        "rss": 120389632
+        "heapUsed": 4827977,
+        "heapTotal": 32463872,
+        "rss": 120471552
       },
       "memoryAfter": {
-        "heapUsed": 4755001,
-        "heapTotal": 32609280,
-        "rss": 120422400
+        "heapUsed": 4827977,
+        "heapTotal": 32463872,
+        "rss": 120487936
       }
     },
     {
@@ -520,24 +520,24 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 1,
-      "p50": 0.119688,
-      "p95": 0.174771,
-      "p99": 0.187821,
-      "mean": 0.128549,
-      "min": 0.105875,
-      "max": 0.191083,
-      "opsPerSec": 7779.154976,
-      "perOpMs": 0.128549,
+      "p50": 0.13225,
+      "p95": 0.246135,
+      "p99": 0.255393,
+      "mean": 0.157472,
+      "min": 0.103708,
+      "max": 0.257708,
+      "opsPerSec": 6350.321855,
+      "perOpMs": 0.157472,
       "reliablePercentiles": true,
       "memoryBefore": {
-        "heapUsed": 4755001,
-        "heapTotal": 32609280,
-        "rss": 120586240
+        "heapUsed": 4827977,
+        "heapTotal": 32480256,
+        "rss": 120651776
       },
       "memoryAfter": {
-        "heapUsed": 4755001,
-        "heapTotal": 32609280,
-        "rss": 120619008
+        "heapUsed": 4827977,
+        "heapTotal": 32480256,
+        "rss": 120717312
       }
     },
     {
@@ -548,24 +548,24 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 1000,
-      "p50": 1.022354,
-      "p95": 2.389969,
-      "p99": 2.445594,
-      "mean": 1.450827,
-      "min": 1.007084,
-      "max": 2.4595,
-      "opsPerSec": 689262.292907,
-      "perOpMs": 0.001451,
+      "p50": 1.652833,
+      "p95": 2.029677,
+      "p99": 2.088135,
+      "mean": 1.640194,
+      "min": 1.156958,
+      "max": 2.10275,
+      "opsPerSec": 609683.79055,
+      "perOpMs": 0.00164,
       "reliablePercentiles": true,
       "memoryBefore": {
-        "heapUsed": 4755001,
-        "heapTotal": 32740352,
-        "rss": 124387328
+        "heapUsed": 6108348,
+        "heapTotal": 37755904,
+        "rss": 127647744
       },
       "memoryAfter": {
-        "heapUsed": 5793929,
-        "heapTotal": 37721088,
-        "rss": 129794048
+        "heapUsed": 6108348,
+        "heapTotal": 41049088,
+        "rss": 135299072
       }
     },
     {
@@ -576,25 +576,25 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 50,
-      "p50": 6.912458,
-      "p95": 7.746427,
-      "p99": 7.862453,
-      "mean": 6.991576,
-      "min": 6.428167,
-      "max": 7.891459,
-      "opsPerSec": 7151.462907,
-      "perOpMs": 0.139832,
+      "p50": 7.321979,
+      "p95": 9.213042,
+      "p99": 9.536642,
+      "mean": 7.676792,
+      "min": 6.719583,
+      "max": 9.617542,
+      "opsPerSec": 6513.137541,
+      "perOpMs": 0.153536,
       "reliablePercentiles": true,
       "layer": "app",
       "memoryBefore": {
-        "heapUsed": 6103913,
-        "heapTotal": 39212032,
-        "rss": 132661248
+        "heapUsed": 6463512,
+        "heapTotal": 41311232,
+        "rss": 137216000
       },
       "memoryAfter": {
-        "heapUsed": 7171551,
-        "heapTotal": 43176960,
-        "rss": 140918784
+        "heapUsed": 7887182,
+        "heapTotal": 46111744,
+        "rss": 150224896
       }
     },
     {
@@ -605,25 +605,25 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 1,
-      "p50": 1.730312,
-      "p95": 2.582281,
-      "p99": 2.771756,
-      "mean": 1.913486,
-      "min": 1.64875,
-      "max": 2.819125,
-      "opsPerSec": 522.606384,
-      "perOpMs": 1.913486,
+      "p50": 1.192646,
+      "p95": 1.314458,
+      "p99": 1.324992,
+      "mean": 1.210396,
+      "min": 1.11425,
+      "max": 1.327625,
+      "opsPerSec": 826.176124,
+      "perOpMs": 1.210396,
       "reliablePercentiles": true,
       "layer": "app",
       "memoryBefore": {
-        "heapUsed": 7171551,
-        "heapTotal": 43209728,
-        "rss": 143769600
+        "heapUsed": 9445548,
+        "heapTotal": 46144512,
+        "rss": 153616384
       },
       "memoryAfter": {
-        "heapUsed": 8336307,
-        "heapTotal": 43635712,
-        "rss": 145588224
+        "heapUsed": 9445548,
+        "heapTotal": 46750720,
+        "rss": 161382400
       }
     },
     {
@@ -634,30 +634,30 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 1,
-      "p50": 2.347875,
-      "p95": 3.754636,
-      "p99": 3.802861,
-      "mean": 2.74775,
-      "min": 2.163958,
-      "max": 3.814917,
-      "opsPerSec": 363.93415,
-      "perOpMs": 2.74775,
+      "p50": 2.330375,
+      "p95": 2.993656,
+      "p99": 3.081231,
+      "mean": 2.478368,
+      "min": 2.208584,
+      "max": 3.103125,
+      "opsPerSec": 403.491303,
+      "perOpMs": 2.478368,
       "reliablePercentiles": true,
       "layer": "app",
       "memoryBefore": {
-        "heapUsed": 8336307,
-        "heapTotal": 43685888,
-        "rss": 147095552
+        "heapUsed": 11295859,
+        "heapTotal": 46816256,
+        "rss": 162709504
       },
       "memoryAfter": {
-        "heapUsed": 11660971,
-        "heapTotal": 46585856,
-        "rss": 151715840
+        "heapUsed": 12846044,
+        "heapTotal": 47406080,
+        "rss": 164265984
       },
       "extra": {
-        "userMs": 0.004458,
-        "projectMs": 0.056791,
-        "joinMs": 3.508625
+        "userMs": 0.012333,
+        "projectMs": 0.08575,
+        "joinMs": 2.109792
       }
     },
     {
@@ -668,25 +668,25 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 1,
-      "p50": 0.002542,
-      "p95": 0.004573,
-      "p99": 0.005048,
-      "mean": 0.002924,
-      "min": 0.00225,
-      "max": 0.005167,
-      "opsPerSec": 342016.75882,
-      "perOpMs": 0.002924,
+      "p50": 0.002917,
+      "p95": 0.008489,
+      "p99": 0.008631,
+      "mean": 0.004493,
+      "min": 0.002166,
+      "max": 0.008666,
+      "opsPerSec": 222568.439795,
+      "perOpMs": 0.004493,
       "reliablePercentiles": true,
       "layer": "api",
       "memoryBefore": {
-        "heapUsed": 11660971,
-        "heapTotal": 46585856,
-        "rss": 153649152
+        "heapUsed": 14089358,
+        "heapTotal": 47602688,
+        "rss": 166969344
       },
       "memoryAfter": {
-        "heapUsed": 11660971,
-        "heapTotal": 46585856,
-        "rss": 153698304
+        "heapUsed": 14089358,
+        "heapTotal": 47602688,
+        "rss": 166985728
       }
     },
     {
@@ -697,25 +697,25 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 1,
-      "p50": 2.242959,
-      "p95": 3.962375,
-      "p99": 4.026141,
-      "mean": 2.730403,
-      "min": 2.060625,
-      "max": 4.042083,
-      "opsPerSec": 366.246346,
-      "perOpMs": 2.730403,
+      "p50": 2.430104,
+      "p95": 4.708489,
+      "p99": 5.111364,
+      "mean": 2.976118,
+      "min": 2.263458,
+      "max": 5.212083,
+      "opsPerSec": 336.008201,
+      "perOpMs": 2.976118,
       "reliablePercentiles": true,
       "layer": "api",
       "memoryBefore": {
-        "heapUsed": 11660971,
-        "heapTotal": 46864384,
-        "rss": 155713536
+        "heapUsed": 14089358,
+        "heapTotal": 47750144,
+        "rss": 169263104
       },
       "memoryAfter": {
-        "heapUsed": 14468183,
-        "heapTotal": 49567744,
-        "rss": 162611200
+        "heapUsed": 17501999,
+        "heapTotal": 52173824,
+        "rss": 176029696
       }
     },
     {
@@ -726,25 +726,25 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 1,
-      "p50": 0.028708,
-      "p95": 0.059927,
-      "p99": 0.067119,
-      "mean": 0.035438,
-      "min": 0.0265,
-      "max": 0.068917,
-      "opsPerSec": 28218.56217,
-      "perOpMs": 0.035438,
+      "p50": 0.02825,
+      "p95": 0.062198,
+      "p99": 0.06994,
+      "mean": 0.035924,
+      "min": 0.026792,
+      "max": 0.071875,
+      "opsPerSec": 27836.802108,
+      "perOpMs": 0.035924,
       "reliablePercentiles": true,
       "layer": "engine",
       "memoryBefore": {
-        "heapUsed": 14468183,
-        "heapTotal": 50469888,
-        "rss": 164610048
+        "heapUsed": 17501999,
+        "heapTotal": 53534720,
+        "rss": 177831936
       },
       "memoryAfter": {
-        "heapUsed": 14468183,
-        "heapTotal": 50469888,
-        "rss": 164610048
+        "heapUsed": 17501999,
+        "heapTotal": 53534720,
+        "rss": 177848320
       }
     },
     {
@@ -755,25 +755,25 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 1,
-      "p50": 0.651209,
-      "p95": 1.594136,
-      "p99": 1.808561,
-      "mean": 0.852403,
-      "min": 0.57075,
-      "max": 1.862167,
-      "opsPerSec": 1173.154242,
-      "perOpMs": 0.852403,
+      "p50": 0.617063,
+      "p95": 1.680604,
+      "p99": 1.940021,
+      "mean": 0.830333,
+      "min": 0.476625,
+      "max": 2.004875,
+      "opsPerSec": 1204.335608,
+      "perOpMs": 0.830333,
       "reliablePercentiles": true,
       "layer": "engine",
       "memoryBefore": {
-        "heapUsed": 14468183,
-        "heapTotal": 52039680,
-        "rss": 168280064
+        "heapUsed": 17501999,
+        "heapTotal": 55398400,
+        "rss": 180666368
       },
       "memoryAfter": {
-        "heapUsed": 15754832,
-        "heapTotal": 53548032,
-        "rss": 170590208
+        "heapUsed": 18766496,
+        "heapTotal": 56945664,
+        "rss": 182452224
       }
     },
     {
@@ -784,25 +784,25 @@
       "iterations": 3,
       "warmup": 0,
       "opsPerSample": 1000,
-      "p50": 26.106875,
-      "p95": 26.59835,
-      "p99": 26.642036,
-      "mean": 26.075889,
-      "min": 25.467834,
-      "max": 26.652958,
-      "opsPerSec": 38349.603344,
-      "perOpMs": 0.026076,
+      "p50": 25.065834,
+      "p95": 25.558508,
+      "p99": 25.602302,
+      "mean": 25.232223,
+      "min": 25.017584,
+      "max": 25.61325,
+      "opsPerSec": 39631.863321,
+      "perOpMs": 0.025232,
       "reliablePercentiles": false,
       "layer": "engine",
       "memoryBefore": {
-        "heapUsed": 15754832,
-        "heapTotal": 53548032,
-        "rss": 170606592
+        "heapUsed": 18766496,
+        "heapTotal": 56945664,
+        "rss": 182452224
       },
       "memoryAfter": {
-        "heapUsed": 17319931,
-        "heapTotal": 62428160,
-        "rss": 182566912
+        "heapUsed": 20321458,
+        "heapTotal": 65465344,
+        "rss": 192315392
       }
     },
     {
@@ -813,25 +813,25 @@
       "iterations": 3,
       "warmup": 0,
       "opsPerSample": 1000,
-      "p50": 25.635959,
-      "p95": 26.662521,
-      "p99": 26.753771,
-      "mean": 25.758597,
-      "min": 24.86325,
-      "max": 26.776583,
-      "opsPerSec": 38821.989686,
-      "perOpMs": 0.025759,
+      "p50": 24.468792,
+      "p95": 24.880279,
+      "p99": 24.916856,
+      "mean": 24.417917,
+      "min": 23.858958,
+      "max": 24.926,
+      "opsPerSec": 40953.534802,
+      "perOpMs": 0.024418,
       "reliablePercentiles": false,
       "layer": "engine",
       "memoryBefore": {
-        "heapUsed": 17319931,
-        "heapTotal": 62428160,
-        "rss": 182566912
+        "heapUsed": 20321458,
+        "heapTotal": 65465344,
+        "rss": 192315392
       },
       "memoryAfter": {
-        "heapUsed": 18846716,
-        "heapTotal": 63673344,
-        "rss": 184205312
+        "heapUsed": 21876599,
+        "heapTotal": 66694144,
+        "rss": 194379776
       }
     },
     {
@@ -842,24 +842,24 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 20,
-      "p50": 0.044354,
-      "p95": 0.101094,
-      "p99": 0.107419,
-      "mean": 0.059757,
-      "min": 0.041375,
-      "max": 0.109,
-      "opsPerSec": 334689.756541,
-      "perOpMs": 0.002988,
+      "p50": 0.043417,
+      "p95": 0.059958,
+      "p99": 0.062724,
+      "mean": 0.04684,
+      "min": 0.04025,
+      "max": 0.063416,
+      "opsPerSec": 426982.443905,
+      "perOpMs": 0.002342,
       "reliablePercentiles": true,
       "memoryBefore": {
-        "heapUsed": 19315645,
-        "heapTotal": 63869952,
-        "rss": 184451072
+        "heapUsed": 22441864,
+        "heapTotal": 67120128,
+        "rss": 194871296
       },
       "memoryAfter": {
-        "heapUsed": 19315645,
-        "heapTotal": 63869952,
-        "rss": 184451072
+        "heapUsed": 22441864,
+        "heapTotal": 67120128,
+        "rss": 194871296
       }
     },
     {
@@ -870,24 +870,24 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 20,
-      "p50": 0.056292,
-      "p95": 0.066625,
-      "p99": 0.066859,
-      "mean": 0.058111,
-      "min": 0.050875,
-      "max": 0.066917,
-      "opsPerSec": 344167.931006,
-      "perOpMs": 0.002906,
+      "p50": 0.04875,
+      "p95": 0.064854,
+      "p99": 0.068571,
+      "mean": 0.051632,
+      "min": 0.045292,
+      "max": 0.0695,
+      "opsPerSec": 387357.92841,
+      "perOpMs": 0.002582,
       "reliablePercentiles": true,
       "memoryBefore": {
-        "heapUsed": 20057558,
-        "heapTotal": 63919104,
-        "rss": 184549376
+        "heapUsed": 22441864,
+        "heapTotal": 67152896,
+        "rss": 194969600
       },
       "memoryAfter": {
-        "heapUsed": 20057558,
-        "heapTotal": 63935488,
-        "rss": 184565760
+        "heapUsed": 22441864,
+        "heapTotal": 67152896,
+        "rss": 194969600
       }
     },
     {
@@ -898,25 +898,277 @@
       "iterations": 6,
       "warmup": 1,
       "opsPerSample": 1,
-      "p50": 0.029999,
-      "p95": 0.069083,
-      "p99": 0.076683,
-      "mean": 0.036833,
-      "min": 0.019667,
-      "max": 0.078583,
-      "opsPerSec": 27149.566964,
-      "perOpMs": 0.036833,
+      "p50": 0.028022,
+      "p95": 0.068719,
+      "p99": 0.074277,
+      "mean": 0.036861,
+      "min": 0.019166,
+      "max": 0.075667,
+      "opsPerSec": 27128.698546,
+      "perOpMs": 0.036861,
       "reliablePercentiles": true,
       "layer": "engine",
       "memoryBefore": {
-        "heapUsed": 20057558,
-        "heapTotal": 63968256,
-        "rss": 184877056
+        "heapUsed": 22441864,
+        "heapTotal": 67202048,
+        "rss": 195313664
       },
       "memoryAfter": {
-        "heapUsed": 20057558,
-        "heapTotal": 63968256,
-        "rss": 184893440
+        "heapUsed": 22441864,
+        "heapTotal": 67202048,
+        "rss": 195379200
+      }
+    },
+    {
+      "name": "hotspot/range-gt/100",
+      "datasetSize": 100,
+      "operation": "indexed created_at > ?",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.050604,
+      "p95": 0.076583,
+      "p99": 0.083149,
+      "mean": 0.054208,
+      "min": 0.043625,
+      "max": 0.084791,
+      "opsPerSec": 18447.348194,
+      "perOpMs": 0.054208,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 22441864,
+        "heapTotal": 67251200,
+        "rss": 195575808
+      },
+      "memoryAfter": {
+        "heapUsed": 22441864,
+        "heapTotal": 67251200,
+        "rss": 195575808
+      }
+    },
+    {
+      "name": "hotspot/range-gt-scan/100",
+      "datasetSize": 100,
+      "operation": "unindexed created_at > ?",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.147938,
+      "p95": 0.16376,
+      "p99": 0.164686,
+      "mean": 0.151271,
+      "min": 0.14075,
+      "max": 0.164917,
+      "opsPerSec": 6610.652405,
+      "perOpMs": 0.151271,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 22835138,
+        "heapTotal": 67251200,
+        "rss": 195608576
+      },
+      "memoryAfter": {
+        "heapUsed": 22835138,
+        "heapTotal": 67251200,
+        "rss": 195608576
+      }
+    },
+    {
+      "name": "hotspot/between/100",
+      "datasetSize": 100,
+      "operation": "indexed BETWEEN",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.056312,
+      "p95": 0.072125,
+      "p99": 0.076225,
+      "mean": 0.058597,
+      "min": 0.049709,
+      "max": 0.07725,
+      "opsPerSec": 17065.671548,
+      "perOpMs": 0.058597,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 22835138,
+        "heapTotal": 67251200,
+        "rss": 195690496
+      },
+      "memoryAfter": {
+        "heapUsed": 22835138,
+        "heapTotal": 67251200,
+        "rss": 195706880
+      }
+    },
+    {
+      "name": "hotspot/order-limit/100",
+      "datasetSize": 100,
+      "operation": "ORDER BY indexed LIMIT 50",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.085125,
+      "p95": 0.091584,
+      "p99": 0.09275,
+      "mean": 0.083681,
+      "min": 0.074,
+      "max": 0.093042,
+      "opsPerSec": 11950.215403,
+      "perOpMs": 0.083681,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 22835138,
+        "heapTotal": 67251200,
+        "rss": 195870720
+      },
+      "memoryAfter": {
+        "heapUsed": 22835138,
+        "heapTotal": 67251200,
+        "rss": 195870720
+      }
+    },
+    {
+      "name": "hotspot/index-prefix/100",
+      "datasetSize": 100,
+      "operation": "composite index leftmost prefix",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 10,
+      "p50": 0.127896,
+      "p95": 0.135729,
+      "p99": 0.137546,
+      "mean": 0.128195,
+      "min": 0.1225,
+      "max": 0.138,
+      "opsPerSec": 78006.365319,
+      "perOpMs": 0.012819,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 22835138,
+        "heapTotal": 67251200,
+        "rss": 196018176
+      },
+      "memoryAfter": {
+        "heapUsed": 22835138,
+        "heapTotal": 67251200,
+        "rss": 196018176
+      }
+    },
+    {
+      "name": "hotspot/partial-lookup/1000",
+      "datasetSize": 1000,
+      "operation": "partial unique index lookup",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 10,
+      "p50": 0.054479,
+      "p95": 0.064292,
+      "p99": 0.064758,
+      "mean": 0.053305,
+      "min": 0.035375,
+      "max": 0.064875,
+      "opsPerSec": 187598.489207,
+      "perOpMs": 0.005331,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 22835138,
+        "heapTotal": 67251200,
+        "rss": 196182016
+      },
+      "memoryAfter": {
+        "heapUsed": 22835138,
+        "heapTotal": 67251200,
+        "rss": 196214784
+      }
+    },
+    {
+      "name": "hotspot/tx-begin/1000",
+      "datasetSize": 1000,
+      "operation": "BEGIN on 1000-row DB",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.006771,
+      "p95": 0.017511,
+      "p99": 0.019336,
+      "mean": 0.009271,
+      "min": 0.005541,
+      "max": 0.019792,
+      "opsPerSec": 107869.046977,
+      "perOpMs": 0.009271,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 24613259,
+        "heapTotal": 67251200,
+        "rss": 196476928
+      },
+      "memoryAfter": {
+        "heapUsed": 24613259,
+        "heapTotal": 67251200,
+        "rss": 196476928
+      }
+    },
+    {
+      "name": "hotspot/savepoint/1000",
+      "datasetSize": 1000,
+      "operation": "SAVEPOINT on 1000-row DB",
+      "engine": "sqlite-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.007333,
+      "p95": 0.017354,
+      "p99": 0.018771,
+      "mean": 0.009743,
+      "min": 0.006125,
+      "max": 0.019125,
+      "opsPerSec": 102636.035512,
+      "perOpMs": 0.009743,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 24613259,
+        "heapTotal": 67333120,
+        "rss": 196526080
+      },
+      "memoryAfter": {
+        "heapUsed": 24613259,
+        "heapTotal": 67333120,
+        "rss": 196526080
+      }
+    },
+    {
+      "name": "hotspot/insert-pk/1000",
+      "datasetSize": 1000,
+      "operation": "1000 INTEGER PK inserts with secondary index",
+      "engine": "sqlite-mem",
+      "iterations": 3,
+      "warmup": 0,
+      "opsPerSample": 1000,
+      "p50": 3.172542,
+      "p95": 4.666205,
+      "p99": 4.798975,
+      "mean": 3.703333,
+      "min": 3.105291,
+      "max": 4.832167,
+      "opsPerSec": 270027.0027,
+      "perOpMs": 0.003703,
+      "reliablePercentiles": false,
+      "memoryBefore": {
+        "heapUsed": 24613259,
+        "heapTotal": 67333120,
+        "rss": 196526080
+      },
+      "memoryAfter": {
+        "heapUsed": 26352297,
+        "heapTotal": 67382272,
+        "rss": 196657152
       }
     },
     {
@@ -927,29 +1179,29 @@
       "iterations": 3,
       "warmup": 0,
       "opsPerSample": 1,
-      "p50": 0.334209,
-      "p95": 1.933996,
-      "p99": 2.076199,
-      "mean": 0.90225,
-      "min": 0.260792,
-      "max": 2.11175,
-      "opsPerSec": 1108.339851,
-      "perOpMs": 0.90225,
+      "p50": 0.261875,
+      "p95": 1.198474,
+      "p99": 1.281728,
+      "mean": 0.607639,
+      "min": 0.2585,
+      "max": 1.302541,
+      "opsPerSec": 1645.714888,
+      "perOpMs": 0.607639,
       "reliablePercentiles": false,
       "layer": "engine",
       "memoryBefore": {
-        "heapUsed": 20057558,
-        "heapTotal": 63968256,
-        "rss": 184909824
+        "heapUsed": 26352297,
+        "heapTotal": 67416064,
+        "rss": 196673536
       },
       "memoryAfter": {
-        "heapUsed": 20057558,
-        "heapTotal": 64161792,
-        "rss": 185679872
+        "heapUsed": 26352297,
+        "heapTotal": 67593216,
+        "rss": 197296128
       },
       "extra": {
         "snapshotBytes": 18746,
-        "mbPerSec": 20.776939
+        "mbPerSec": 30.850571
       }
     },
     {
@@ -960,31 +1212,31 @@
       "iterations": 3,
       "warmup": 0,
       "opsPerSample": 1,
-      "p50": 0.287958,
-      "p95": 0.943608,
-      "p99": 1.001888,
-      "mean": 0.512083,
-      "min": 0.231833,
-      "max": 1.016458,
-      "opsPerSec": 1952.808431,
-      "perOpMs": 0.512083,
+      "p50": 0.283375,
+      "p95": 1.018038,
+      "p99": 1.083341,
+      "mean": 0.541917,
+      "min": 0.242708,
+      "max": 1.099667,
+      "opsPerSec": 1845.302168,
+      "perOpMs": 0.541917,
       "reliablePercentiles": false,
       "layer": "engine",
       "memoryBefore": {
-        "heapUsed": 20057558,
-        "heapTotal": 64240640,
-        "rss": 185942016
+        "heapUsed": 28016318,
+        "heapTotal": 67585024,
+        "rss": 197345280
       },
       "memoryAfter": {
-        "heapUsed": 20057558,
-        "heapTotal": 64534528,
-        "rss": 186925056
+        "heapUsed": 28016318,
+        "heapTotal": 67802112,
+        "rss": 197754880
       },
       "extra": {
         "snapshotBytes": 18746,
         "heapDelta": 0,
-        "rssDelta": 983040,
-        "mbPerSec": 36.607347
+        "rssDelta": 409600,
+        "mbPerSec": 34.592034
       }
     },
     {
@@ -995,25 +1247,25 @@
       "iterations": 1,
       "warmup": 0,
       "opsPerSample": 1,
-      "p50": 0.850916,
-      "p95": 0.850916,
-      "p99": 0.850916,
-      "mean": 0.850916,
-      "min": 0.850916,
-      "max": 0.850916,
-      "opsPerSec": 1175.204133,
-      "perOpMs": 0.850916,
+      "p50": 0.7895,
+      "p95": 0.7895,
+      "p99": 0.7895,
+      "mean": 0.7895,
+      "min": 0.7895,
+      "max": 0.7895,
+      "opsPerSec": 1266.624446,
+      "perOpMs": 0.7895,
       "reliablePercentiles": false,
       "layer": "engine",
       "memoryBefore": {
-        "heapUsed": 20057558,
-        "heapTotal": 64534528,
-        "rss": 186990592
+        "heapUsed": 28016318,
+        "heapTotal": 67802112,
+        "rss": 197787648
       },
       "memoryAfter": {
-        "heapUsed": 20057558,
-        "heapTotal": 64722944,
-        "rss": 187564032
+        "heapUsed": 28016318,
+        "heapTotal": 67941376,
+        "rss": 198066176
       }
     },
     {
@@ -1024,29 +1276,29 @@
       "iterations": 3,
       "warmup": 0,
       "opsPerSample": 1,
-      "p50": 1.5805,
-      "p95": 2.148512,
-      "p99": 2.199002,
-      "mean": 1.781681,
-      "min": 1.552917,
-      "max": 2.211625,
-      "opsPerSec": 561.267807,
-      "perOpMs": 1.781681,
+      "p50": 1.348375,
+      "p95": 2.001924,
+      "p99": 2.060018,
+      "mean": 1.520597,
+      "min": 1.138875,
+      "max": 2.074541,
+      "opsPerSec": 657.636441,
+      "perOpMs": 1.520597,
       "reliablePercentiles": false,
       "layer": "engine",
       "memoryBefore": {
-        "heapUsed": 21644993,
-        "heapTotal": 65894400,
-        "rss": 188547072
+        "heapUsed": 29328099,
+        "heapTotal": 72111104,
+        "rss": 202375168
       },
       "memoryAfter": {
-        "heapUsed": 29631783,
-        "heapTotal": 66120704,
-        "rss": 203145216
+        "heapUsed": 30589475,
+        "heapTotal": 72479744,
+        "rss": 217628672
       },
       "extra": {
         "snapshotBytes": 1051546,
-        "mbPerSec": 590.198917
+        "mbPerSec": 691.534969
       }
     },
     {
@@ -1057,31 +1309,31 @@
       "iterations": 3,
       "warmup": 0,
       "opsPerSample": 1,
-      "p50": 1.735166,
-      "p95": 2.245616,
-      "p99": 2.29099,
-      "mean": 1.862777,
-      "min": 1.550833,
-      "max": 2.302333,
-      "opsPerSec": 536.832815,
-      "perOpMs": 1.862777,
+      "p50": 1.326416,
+      "p95": 1.328441,
+      "p99": 1.328621,
+      "mean": 1.315055,
+      "min": 1.290083,
+      "max": 1.328666,
+      "opsPerSec": 760.424469,
+      "perOpMs": 1.315055,
       "reliablePercentiles": false,
       "layer": "engine",
       "memoryBefore": {
-        "heapUsed": 34358468,
-        "heapTotal": 66300928,
-        "rss": 204324864
+        "heapUsed": 40555980,
+        "heapTotal": 72944640,
+        "rss": 219398144
       },
       "memoryAfter": {
-        "heapUsed": 40006455,
-        "heapTotal": 67073024,
-        "rss": 209518592
+        "heapUsed": 40555980,
+        "heapTotal": 74173440,
+        "rss": 226361344
       },
       "extra": {
         "snapshotBytes": 1051546,
-        "heapDelta": 5647987,
-        "rssDelta": 5193728,
-        "mbPerSec": 564.5044
+        "heapDelta": 0,
+        "rssDelta": 6963200,
+        "mbPerSec": 799.621309
       }
     },
     {
@@ -1092,25 +1344,25 @@
       "iterations": 1,
       "warmup": 0,
       "opsPerSample": 1,
-      "p50": 4.255708,
-      "p95": 4.255708,
-      "p99": 4.255708,
-      "mean": 4.255708,
-      "min": 4.255708,
-      "max": 4.255708,
-      "opsPerSec": 234.978528,
-      "perOpMs": 4.255708,
+      "p50": 4.335875,
+      "p95": 4.335875,
+      "p99": 4.335875,
+      "mean": 4.335875,
+      "min": 4.335875,
+      "max": 4.335875,
+      "opsPerSec": 230.633955,
+      "perOpMs": 4.335875,
       "reliablePercentiles": false,
       "layer": "engine",
       "memoryBefore": {
-        "heapUsed": 44103743,
-        "heapTotal": 68044800,
-        "rss": 210518016
+        "heapUsed": 46698212,
+        "heapTotal": 74769408,
+        "rss": 226918400
       },
       "memoryAfter": {
-        "heapUsed": 46414335,
-        "heapTotal": 68061184,
-        "rss": 211714048
+        "heapUsed": 52060459,
+        "heapTotal": 74769408,
+        "rss": 227606528
       }
     },
     {
@@ -1121,24 +1373,24 @@
       "iterations": 1,
       "warmup": 0,
       "opsPerSample": 1,
-      "p50": 2.0175,
-      "p95": 2.0175,
-      "p99": 2.0175,
-      "mean": 2.0175,
-      "min": 2.0175,
-      "max": 2.0175,
-      "opsPerSec": 495.662949,
-      "perOpMs": 2.0175,
+      "p50": 2.007333,
+      "p95": 2.007333,
+      "p99": 2.007333,
+      "mean": 2.007333,
+      "min": 2.007333,
+      "max": 2.007333,
+      "opsPerSec": 498.173447,
+      "perOpMs": 2.007333,
       "reliablePercentiles": false,
       "memoryBefore": {
-        "heapUsed": 46414335,
-        "heapTotal": 68078592,
-        "rss": 211795968
+        "heapUsed": 52060459,
+        "heapTotal": 74769408,
+        "rss": 227672064
       },
       "memoryAfter": {
-        "heapUsed": 46414335,
-        "heapTotal": 68094976,
-        "rss": 211992576
+        "heapUsed": 52060459,
+        "heapTotal": 74785792,
+        "rss": 227852288
       }
     }
   ]

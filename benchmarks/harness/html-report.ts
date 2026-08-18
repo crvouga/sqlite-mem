@@ -27,6 +27,7 @@ const SECTION_ORDER: { id: string; title: string; match: (name: string) => boole
   { id: "tx", title: "Transactions", match: (n) => n.startsWith("tx/") },
   { id: "index", title: "Indexes", match: (n) => n.startsWith("index/") },
   { id: "join", title: "Joins", match: (n) => n.startsWith("join/") },
+  { id: "hotspot", title: "Hotspots", match: (n) => n.startsWith("hotspot/") },
   { id: "snapshot", title: "Snapshots", match: (n) => n.startsWith("snapshot/") },
 ];
 

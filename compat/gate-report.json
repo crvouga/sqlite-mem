@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-17T20:01:39.564Z",
+  "generatedAt": "2026-08-18T15:30:47.055Z",
   "referenceSqliteVersion": "3.51.0",
   "compileOptions": [
     "ATOMIC_INTRINSICS=1",
@@ -351,8 +351,11 @@
     "missingOracleModules": [],
     "memoryOnlyFunctions": [
       "generate_series",
+      "json_array_insert",
       "json_each",
-      "json_tree"
+      "json_tree",
+      "jsonb_array_insert",
+      "load_extension"
     ],
     "jsonOracleFunctions": [
       "->",

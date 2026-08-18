@@ -1,11 +1,16 @@
-import { isSqlJsonText, isSqlReal, type SqlValue } from "../types/value.ts";
+import { isSqlJsonText, isSqlReal, type QueryRow, type QueryValue, type SqlValue } from "../types/value.ts";
 
+/** Query result returned by {@link Statement.result}. */
 export interface ResultSet {
+  /** Result-column names, in SELECT order. Present even when `rows` is empty. */
   columns: string[];
-  rows: Record<string, SqlValue>[];
+  /** Named rows. Duplicate column names keep the last value. */
+  rows: QueryRow[];
   /** Positional rows preserve duplicate result-column names for internal use. */
-  values?: SqlValue[][];
+  values?: QueryValue[][];
+  /** Rows changed by the most recent mutating statement in this execution. */
   changes: number;
+  /** Rowid of the most recent INSERT in this execution. */
   lastInsertRowid: number | bigint;
 }
 
@@ -14,7 +19,7 @@ export function emptyResult(changes = 0, lastInsertRowid: number | bigint = 0): 
 }
 
 /** Export engine values to the public JS surface (SqlReal → number, SqlJsonText → string). */
-export function exportSqlValue(value: SqlValue): SqlValue {
+export function exportSqlValue(value: SqlValue): QueryValue {
   if (isSqlReal(value)) return value.value;
   if (isSqlJsonText(value)) return value.value;
   return value;
@@ -34,7 +39,7 @@ export function valuesToResult(
     values: keepValues ? values.map((row) => row.map(exportSqlValue)) : undefined,
     rows: named
       ? values.map((row) => {
-          const object: Record<string, SqlValue> = {};
+          const object: QueryRow = {};
           for (let index = 0; index < columns.length; index++) {
             object[columns[index]!] = exportSqlValue(row[index] ?? null);
           }

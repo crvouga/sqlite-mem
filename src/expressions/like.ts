@@ -11,7 +11,13 @@ function likeLiteral(char: string): string {
   return escapeRegexChar(char);
 }
 
-/** SQLite LIKE matching. ASCII letters are case-insensitive. */
+/**
+ * SQLite LIKE matching. ASCII letters are case-insensitive.
+ *
+ * @param text - Value to test.
+ * @param pattern - Pattern with `%` / `_` wildcards.
+ * @param escape - Optional single-character ESCAPE (or `null`).
+ */
 export function likeMatch(text: string, pattern: string, escape: string | null = null): boolean {
   if (escape !== null && [...escape].length !== 1) {
     throw new SqliteError("ESCAPE expression must be a single character", "other");
@@ -35,7 +41,12 @@ export function likeMatch(text: string, pattern: string, escape: string | null =
   return new RegExp(`${source}$`).test(text);
 }
 
-/** SQLite GLOB matching. GLOB is case-sensitive and uses Unix wildcards. */
+/**
+ * SQLite GLOB matching. GLOB is case-sensitive and uses Unix `*` / `?` wildcards.
+ *
+ * @param text - Value to test.
+ * @param pattern - GLOB pattern.
+ */
 export function globMatch(text: string, pattern: string): boolean {
   let source = "^";
   for (let i = 0; i < pattern.length; i++) {

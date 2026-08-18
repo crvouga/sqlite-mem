@@ -34,10 +34,11 @@ Oracle builtins (math, string extras, uuid, ieee754, …) and modules (FTS3/4/5,
 | Area | Status | Notes |
 | --- | --- | --- |
 | Core DML / SELECT / joins / CTE / UPSERT / RETURNING | VERIFIED | Contract + fuzz |
+| STRICT tables / indexes | VERIFIED | STRICT types; partial + expression indexes; leftmost prefix |
 | Expressions / operators / `->` `->>` / row values | VERIFIED | Row-value + precedence contracts |
 | Affinity / NULL / COLLATE | VERIFIED | |
-| Constraints / FK / triggers / views / ATTACH | VERIFIED | Deferred FK thinner → PARTIAL edges |
-| Windows (incl. ntile/cume_dist/percent_rank) | VERIFIED | EXCLUDE still thinner |
+| Constraints / FK / triggers / views / ATTACH | VERIFIED | Deferred FK, composite FK |
+| Windows (incl. ntile/cume_dist/percent_rank) | VERIFIED | EXCLUDE NO OTHERS/CURRENT ROW/GROUP/TIES |
 | JSON1 / JSONB / TVFs | VERIFIED | |
 | Math / string / date extras / uuid / ieee754 | VERIFIED | Scope-3 inventory |
 | FTS3 / FTS4 / FTS5 + MATCH | PARTIALLY VERIFIED | Differential FTS suite + fuzz vs 3.51.0; see FTS matrix below. Shadow-table change counters intentionally diverge. |
@@ -76,7 +77,7 @@ Reference: **SQLite 3.51.0** (`bun:sqlite`). Inventory: `bun run scripts/fts-ora
 | RTREE / dbstat / bytecode / tables_used | VERIFIED | dbstat synthetic pages; bytecode empty cursor |
 | ANALYZE / REINDEX / VACUUM | VERIFIED | `:memory:` observable parity |
 | EXPLAIN / INDEXED BY | PARTIALLY VERIFIED | Stub shapes / no-ops |
-| Prepared stmt schema invalidation | PARTIALLY VERIFIED | Thin |
+| Prepared stmt schema invalidation | VERIFIED | Re-prepare after ALTER/DROP; `tests/contract/api/schema-invalidation.test.ts` |
 | On-disk file format / C API | NOT APPLICABLE | |
 
 ## How to verify

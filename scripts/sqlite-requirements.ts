@@ -424,9 +424,14 @@ const SOURCE_SEED: Record<string, { status: CoverageStatus; evidence: string[]; 
     notes: "",
   },
   "lang_createindex.html": {
-    status: "PARTIALLY_VERIFIED",
-    evidence: ["tests/contract/indexes/"],
-    notes: "Partial/expression indexes thinner",
+    status: "VERIFIED",
+    evidence: [
+      "tests/contract/indexes/",
+      "tests/contract/indexes/partial.test.ts",
+      "tests/contract/indexes/expression.test.ts",
+      "tests/contract/indexes/prefix.test.ts",
+    ],
+    notes: "",
   },
   "lang_dropindex.html": {
     status: "VERIFIED",
@@ -539,9 +544,14 @@ const SOURCE_SEED: Record<string, { status: CoverageStatus; evidence: string[]; 
     notes: "FTS5 partial; other modules closing",
   },
   "foreignkeys.html": {
-    status: "PARTIALLY_VERIFIED",
-    evidence: ["tests/contract/foreign-keys/", "tests/fuzz/foreign-keys.test.ts"],
-    notes: "Deferred FK thinner",
+    status: "VERIFIED",
+    evidence: [
+      "tests/contract/foreign-keys/",
+      "tests/contract/foreign-keys/deferred.test.ts",
+      "tests/contract/foreign-keys/composite.test.ts",
+      "tests/fuzz/constraints.test.ts",
+    ],
+    notes: "",
   },
   "withoutrowid.html": {
     status: "VERIFIED",
@@ -549,9 +559,9 @@ const SOURCE_SEED: Record<string, { status: CoverageStatus; evidence: string[]; 
     notes: "",
   },
   "stricttables.html": {
-    status: "PARTIALLY_VERIFIED",
-    evidence: ["tests/contract/schema/"],
-    notes: "STRICT coverage expanding",
+    status: "VERIFIED",
+    evidence: ["tests/contract/schema/strict.test.ts", "tests/fuzz/constraints.test.ts"],
+    notes: "",
   },
   "gencol.html": {
     status: "VERIFIED",
@@ -559,19 +569,23 @@ const SOURCE_SEED: Record<string, { status: CoverageStatus; evidence: string[]; 
     notes: "",
   },
   "partialindex.html": {
-    status: "PARTIALLY_VERIFIED",
-    evidence: ["tests/contract/indexes/"],
+    status: "VERIFIED",
+    evidence: ["tests/contract/indexes/partial.test.ts"],
     notes: "",
   },
   "expridx.html": {
-    status: "PARTIALLY_VERIFIED",
-    evidence: ["tests/contract/indexes/"],
+    status: "VERIFIED",
+    evidence: ["tests/contract/indexes/expression.test.ts"],
     notes: "",
   },
   "windowfunctions.html": {
-    status: "PARTIALLY_VERIFIED",
-    evidence: ["tests/contract/window-functions/", "tests/fuzz/windows.test.ts"],
-    notes: "EXCLUDE/frame edges thinner",
+    status: "VERIFIED",
+    evidence: [
+      "tests/contract/window-functions/",
+      "tests/contract/window-functions/exclude.test.ts",
+      "tests/fuzz/windows.test.ts",
+    ],
+    notes: "",
   },
   "lang_with.html": {
     status: "VERIFIED",

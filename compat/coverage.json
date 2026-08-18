@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-08-17T20:01:39.534Z",
+  "generatedAt": "2026-08-18T15:30:47.024Z",
   "referenceSqliteVersion": "3.51.0",
   "counts": {
     "total": 3487,
     "notApplicable": 1586,
     "sqlBehavior": 1901,
-    "verified": 1194,
-    "partiallyVerified": 529,
+    "verified": 1372,
+    "partiallyVerified": 351,
     "unsupported": 178,
     "unknown": 0
   },
@@ -134,19 +134,22 @@
       "notes": ""
     },
     "R-00279-52283-49814-15354-28909-18424-55374-18430": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-00293-38883-59042-48634-16424-01088-43070-55397": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-00293-64994-39339-33419-11494-64597-05681-15697": {
       "status": "VERIFIED",
@@ -191,12 +194,14 @@
       "notes": "Schema/FK pragmas verified; storage pragmas N/A or no-op"
     },
     "R-00376-39212-00900-22873-65373-47922-05493-41094": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-00378-15189-28386-10298-40269-01090-46979-64293": {
       "status": "NOT_APPLICABLE",
@@ -366,11 +371,12 @@
       "notes": "FTS3/4 surface expanding toward oracle parity (matchinfo/offsets/snippet/query syntax)"
     },
     "R-00932-23802-62098-12819-52011-48588-05338-32758": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-00971-36933-64386-25480-59601-44057-12316-57384": {
       "status": "NOT_APPLICABLE",
@@ -378,12 +384,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/complete.html)"
     },
     "R-01060-48788-51013-07543-20121-01838-30879-37400": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-01080-23340-38639-20728-26521-10375-12428-21631": {
       "status": "NOT_APPLICABLE",
@@ -681,11 +689,12 @@
       "notes": "C API / storage / non-SQL surface (c3ref/aggregate_context.html)"
     },
     "R-01879-24612-45296-09386-15855-45568-07479-46348": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-01921-64245-04718-64212-38644-45300-05525-61121": {
       "status": "VERIFIED",
@@ -696,11 +705,12 @@
       "notes": "Operators covered; row-value/precedence edges expanding"
     },
     "R-01977-40534-32839-34523-14867-40621-38368-53470": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-01992-00519-59560-42589-34051-44285-27634-29157": {
       "status": "VERIFIED",
@@ -711,11 +721,12 @@
       "notes": "Oracle builtin inventory closing"
     },
     "R-01996-58977-34276-47341-41302-00217-64799-50366": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-02005-53466-64191-45009-56070-04146-49679-01840": {
       "status": "NOT_APPLICABLE",
@@ -1108,12 +1119,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/column_blob.html)"
     },
     "R-03108-63659-37525-03634-22905-61973-06931-63842": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-03145-46390-59121-11550-39703-00062-43990-26586": {
       "status": "NOT_APPLICABLE",
@@ -1164,12 +1177,14 @@
       "notes": "unixepoch/timediff pending"
     },
     "R-03353-05327-21191-28288-58549-30161-65035-16573": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-03364-08004-01846-16626-35041-21418-01059-33152": {
       "status": "PARTIALLY_VERIFIED",
@@ -1397,11 +1412,12 @@
       "notes": "C API / storage / non-SQL surface (fileformat2.html)"
     },
     "R-03919-01344-62529-26602-44436-50756-40442-48789": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-03922-41160-10406-40879-23599-49045-53405-25401": {
       "status": "NOT_APPLICABLE",
@@ -1441,12 +1457,14 @@
       "notes": ""
     },
     "R-04042-24825-64259-53667-46708-22366-11905-57675": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-04132-09474-00805-46196-04402-30131-02139-26149": {
       "status": "VERIFIED",
@@ -1508,27 +1526,32 @@
       "notes": "Unmapped SQL source: uri.html"
     },
     "R-04240-13860-65376-64948-20761-30630-14399-44960": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-04253-22539-00035-22201-40709-27368-32520-29417": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-04272-38653-14303-01704-38451-58113-36784-29823": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-04300-56712-32659-65159-49842-27130-29205-32160": {
       "status": "NOT_APPLICABLE",
@@ -1784,9 +1807,9 @@
       "notes": ""
     },
     "R-05254-00658-23742-34136-13538-61949-20472-35341": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -1974,17 +1997,19 @@
       "notes": "Affinity/storage-class contracts"
     },
     "R-05903-08460-38037-43122-07089-54739-62474-34030": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-05906-34301-40279-37243-33018-07128-06632-24411": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -2258,11 +2283,14 @@
       "notes": ""
     },
     "R-06718-34797-20809-29800-16443-15807-57069-06143": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/",
+        "tests/contract/indexes/partial.test.ts",
+        "tests/contract/indexes/expression.test.ts",
+        "tests/contract/indexes/prefix.test.ts"
       ],
-      "notes": "Partial/expression indexes thinner"
+      "notes": ""
     },
     "R-06726-07466-50674-60893-18596-18216-57915-63107": {
       "status": "VERIFIED",
@@ -2370,9 +2398,9 @@
       "notes": "Operators covered; row-value/precedence edges expanding"
     },
     "R-07154-34181-57164-55597-27085-41955-25905-44172": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -2401,12 +2429,14 @@
       "notes": "C API / storage / non-SQL surface (fileformat2.html)"
     },
     "R-07223-48323-28604-04641-30689-62184-47326-29698": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-07232-03261-48010-41283-49496-35316-10713-33982": {
       "status": "NOT_APPLICABLE",
@@ -2419,12 +2449,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/threadsafe.html)"
     },
     "R-07280-60510-42023-64617-40990-52816-04160-12840": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-07289-49223-41401-05780-36220-42267-14468-32307": {
       "status": "VERIFIED",
@@ -2665,12 +2697,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/vtab_distinct.html)"
     },
     "R-08013-37737-04179-14029-08100-20980-22992-19882": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-08023-12605-32642-43845-16740-17726-48491-51878": {
       "status": "NOT_APPLICABLE",
@@ -2908,12 +2942,14 @@
       "notes": "string_agg and FILTER edges pending full VERIFIED"
     },
     "R-08908-23439-37383-27763-09062-14229-58252-49666": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-08916-58393-39719-51162-04738-33368-03102-45258": {
       "status": "NOT_APPLICABLE",
@@ -2951,12 +2987,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/vtab_distinct.html)"
     },
     "R-09005-28791-60027-45340-35703-17892-19441-18649": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-09033-01493-08484-25490-18731-61378-37357-02599": {
       "status": "PARTIALLY_VERIFIED",
@@ -3025,12 +3063,14 @@
       "notes": "Unmapped SQL source: optoverview.html"
     },
     "R-09323-30470-62004-36090-30809-61331-17692-32313": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-09328-38790-35467-08457-46231-05327-56817-51584": {
       "status": "VERIFIED",
@@ -3072,12 +3112,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/file_control.html)"
     },
     "R-09564-22170-27375-05763-54488-45369-57253-27733": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-09593-03321-24060-42412-44512-07305-25128-61318": {
       "status": "VERIFIED",
@@ -3152,11 +3194,14 @@
       "notes": "Schema/FK pragmas verified; storage pragmas N/A or no-op"
     },
     "R-09773-40602-32968-36782-04559-37578-19507-63398": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/",
+        "tests/contract/indexes/partial.test.ts",
+        "tests/contract/indexes/expression.test.ts",
+        "tests/contract/indexes/prefix.test.ts"
       ],
-      "notes": "Partial/expression indexes thinner"
+      "notes": ""
     },
     "R-09782-32948-24767-08594-36498-62288-40921-54378": {
       "status": "NOT_APPLICABLE",
@@ -3239,12 +3284,14 @@
       "notes": "Unmapped SQL source: optoverview.html"
     },
     "R-10109-20452-53276-41872-63667-11760-57644-25670": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-10119-21526-34528-05557-36941-47440-26835-18777": {
       "status": "NOT_APPLICABLE",
@@ -3435,11 +3482,12 @@
       "notes": "C API / storage / non-SQL surface (c3ref/value_dup.html)"
     },
     "R-10844-63639-16825-02392-05522-65470-37861-17171": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-10863-13089-16518-46448-48155-27413-52501-54942": {
       "status": "VERIFIED",
@@ -3538,12 +3586,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/prepare.html)"
     },
     "R-11078-03945-63030-33506-24033-34573-31697-17195": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-11093-24211-58889-40188-52881-41669-64989-17738": {
       "status": "VERIFIED",
@@ -3566,11 +3616,14 @@
       "notes": ""
     },
     "R-11135-63542-29250-48049-02589-36558-61016-54500": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/",
+        "tests/contract/indexes/partial.test.ts",
+        "tests/contract/indexes/expression.test.ts",
+        "tests/contract/indexes/prefix.test.ts"
       ],
-      "notes": "Partial/expression indexes thinner"
+      "notes": ""
     },
     "R-11148-40995-48554-02818-10393-13608-40990-18433": {
       "status": "NOT_APPLICABLE",
@@ -3625,12 +3678,14 @@
       "notes": "RTREE module pending Scope-3 implementation"
     },
     "R-11255-19907-56460-39957-30226-19999-22429-23256": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-11278-45262-58259-06316-15595-38030-39158-45213": {
       "status": "NOT_APPLICABLE",
@@ -3825,12 +3880,14 @@
       "notes": "Schema/FK pragmas verified; storage pragmas N/A or no-op"
     },
     "R-11856-19836-24274-28109-29706-17487-59516-28752": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-11896-08162-39829-09724-10165-05972-28450-60411": {
       "status": "PARTIALLY_VERIFIED",
@@ -4092,12 +4149,14 @@
       "notes": ""
     },
     "R-12782-61841-54063-57500-26369-54791-20214-34360": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-12786-00766-63482-41386-10445-23868-47532-37384": {
       "status": "NOT_APPLICABLE",
@@ -4176,11 +4235,14 @@
       "notes": "string_agg and FILTER edges pending full VERIFIED"
     },
     "R-13057-33448-09671-56974-58075-51862-56508-46386": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/",
+        "tests/contract/indexes/partial.test.ts",
+        "tests/contract/indexes/expression.test.ts",
+        "tests/contract/indexes/prefix.test.ts"
       ],
-      "notes": "Partial/expression indexes thinner"
+      "notes": ""
     },
     "R-13091-00020-15519-35390-14824-01225-60609-32585": {
       "status": "NOT_APPLICABLE",
@@ -4294,12 +4356,14 @@
       "notes": "Operators covered; row-value/precedence edges expanding"
     },
     "R-13435-26311-61176-01189-39199-58705-21930-17615": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-13439-14752-32196-09382-64767-42844-00603-31803": {
       "status": "VERIFIED",
@@ -4448,12 +4512,14 @@
       "notes": ""
     },
     "R-13877-64542-39833-15687-62784-10394-38782-49019": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-13901-14007-64763-25986-03152-23899-30045-21244": {
       "status": "NOT_APPLICABLE",
@@ -4549,12 +4615,14 @@
       "notes": "Schema/FK pragmas verified; storage pragmas N/A or no-op"
     },
     "R-14208-23986-02817-62350-58798-64603-05852-18001": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-14213-41276-38760-54552-34093-20752-64281-40652": {
       "status": "NOT_APPLICABLE",
@@ -4660,12 +4728,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/vtab_rhs_value.html)"
     },
     "R-14553-34013-61751-37329-34569-35054-62588-04416": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-14560-62209-22846-15269-26800-65188-24586-57276": {
       "status": "NOT_APPLICABLE",
@@ -4839,9 +4909,9 @@
       "notes": "unixepoch/timediff pending"
     },
     "R-15250-32031-29902-43107-55645-15949-41885-09210": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -4918,12 +4988,14 @@
       "notes": "Schema/FK pragmas verified; storage pragmas N/A or no-op"
     },
     "R-15417-28014-30557-42534-17582-00197-65121-60035": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-15442-09728-53714-13219-50103-51559-23392-54573": {
       "status": "NOT_APPLICABLE",
@@ -5031,12 +5103,14 @@
       "notes": "Schema/FK pragmas verified; storage pragmas N/A or no-op"
     },
     "R-15741-50893-04622-59701-05174-07929-61978-12539": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-15753-04279-34093-62735-52476-02019-63320-45902": {
       "status": "VERIFIED",
@@ -5048,12 +5122,14 @@
       "notes": ""
     },
     "R-15796-47513-29721-16055-11683-21050-32207-60873": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-15800-25719-02234-49112-58438-56406-07161-16214": {
       "status": "PARTIALLY_VERIFIED",
@@ -5129,12 +5205,14 @@
       "notes": ""
     },
     "R-15958-50233-58629-08203-04879-28676-03150-11250": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-15968-48708-39759-44208-63382-65413-21684-48201": {
       "status": "NOT_APPLICABLE",
@@ -5186,19 +5264,24 @@
       "notes": ""
     },
     "R-16085-53730-63732-38499-15956-61706-03515-37986": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/",
+        "tests/contract/indexes/partial.test.ts",
+        "tests/contract/indexes/expression.test.ts",
+        "tests/contract/indexes/prefix.test.ts"
       ],
-      "notes": "Partial/expression indexes thinner"
+      "notes": ""
     },
     "R-16127-35442-25332-57824-03233-02546-37060-55461": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-16170-02914-14290-07150-03100-60317-35403-36262": {
       "status": "PARTIALLY_VERIFIED",
@@ -5474,11 +5557,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/changes.html)"
     },
     "R-17151-07205-10894-28299-62821-16887-02117-62221": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/",
+        "tests/contract/indexes/partial.test.ts",
+        "tests/contract/indexes/expression.test.ts",
+        "tests/contract/indexes/prefix.test.ts"
       ],
-      "notes": "Partial/expression indexes thinner"
+      "notes": ""
     },
     "R-17177-10067-30884-53677-27777-30779-31144-63091": {
       "status": "VERIFIED",
@@ -5496,11 +5582,12 @@
       "notes": "Schema/FK pragmas verified; storage pragmas N/A or no-op"
     },
     "R-17195-37504-02291-24232-45006-33803-26491-52044": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-17203-10061-39568-47821-02948-38975-34395-48032": {
       "status": "NOT_APPLICABLE",
@@ -5541,11 +5628,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/c_stmtstatus_counter.html)"
     },
     "R-17379-32951-58399-57501-33498-60036-41846-10214": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/",
+        "tests/contract/indexes/partial.test.ts",
+        "tests/contract/indexes/expression.test.ts",
+        "tests/contract/indexes/prefix.test.ts"
       ],
-      "notes": "Partial/expression indexes thinner"
+      "notes": ""
     },
     "R-17403-41821-06964-23183-41391-40881-28445-64765": {
       "status": "NOT_APPLICABLE",
@@ -5740,9 +5830,9 @@
       "notes": "C API / storage / non-SQL surface (c3ref/backup_finish.html)"
     },
     "R-17840-50075-33076-39937-50165-09009-15721-26614": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -5815,9 +5905,9 @@
       "notes": "Affinity/storage-class contracts"
     },
     "R-18088-57186-13089-35997-22868-17352-00310-65503": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -5827,11 +5917,12 @@
       "notes": "C API / storage / non-SQL surface (c3ref/enable_load_extension.html)"
     },
     "R-18141-03110-11368-12345-11263-65050-17384-54287": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-18143-12121-25249-36193-24562-40889-39176-48672": {
       "status": "NOT_APPLICABLE",
@@ -6308,12 +6399,14 @@
       "notes": "RTREE module pending Scope-3 implementation"
     },
     "R-19353-43643-11289-35798-30332-46906-60350-15505": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-19393-22085-63206-61334-35392-55321-46849-03619": {
       "status": "VERIFIED",
@@ -6394,11 +6487,12 @@
       "notes": "FTS3/4 surface expanding toward oracle parity (matchinfo/offsets/snippet/query syntax)"
     },
     "R-19582-19642-51467-45115-55963-42677-19295-17348": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-19604-19849-22831-12858-52721-48914-18931-47249": {
       "status": "NOT_APPLICABLE",
@@ -6482,12 +6576,14 @@
       "notes": "Schema/FK pragmas verified; storage pragmas N/A or no-op"
     },
     "R-19803-45884-64369-17915-53923-43638-05068-02663": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-19808-29370-64330-18475-42910-48751-21092-02221": {
       "status": "NOT_APPLICABLE",
@@ -6558,12 +6654,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/vtab_rhs_value.html)"
     },
     "R-19971-54976-54556-37696-16686-39038-59563-20085": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-19982-00724-51550-61529-52295-40817-37605-44623": {
       "status": "NOT_APPLICABLE",
@@ -6972,17 +7070,19 @@
       "notes": "Affinity/storage-class contracts"
     },
     "R-21599-16038-23557-29825-04044-13537-53990-06867": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-21637-36677-40497-35509-61399-46252-57328-58576": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -7014,9 +7114,9 @@
       "notes": "Unmapped SQL source: uri.html"
     },
     "R-21827-60920-49018-16791-65129-33759-13224-63617": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -7154,11 +7254,12 @@
       "notes": "C API / storage / non-SQL surface (c3ref/config.html)"
     },
     "R-22361-03044-33960-50539-23472-56447-56319-64487": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-22391-07186-37161-38876-45465-63159-33403-63078": {
       "status": "NOT_APPLICABLE",
@@ -7224,12 +7325,14 @@
       "notes": "C API / storage / non-SQL surface (fileformat2.html)"
     },
     "R-22567-44039-44321-46904-30045-11816-43845-22039": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-22568-45663-55668-47915-50757-16894-43976-31844": {
       "status": "NOT_APPLICABLE",
@@ -7484,12 +7587,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/value_blob.html)"
     },
     "R-23302-30956-02464-62581-38265-62787-52147-51200": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-23313-12651-48093-62761-39865-28601-55555-42424": {
       "status": "NOT_APPLICABLE",
@@ -7636,19 +7741,22 @@
       "notes": "EXPLAIN QUERY PLAN stub shapes"
     },
     "R-23682-59820-57074-21944-19735-61329-41044-60872": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-23696-45205-56139-29220-39057-53925-58417-44046": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-23702-41282-42393-06958-42086-21645-30380-61682": {
       "status": "UNSUPPORTED",
@@ -7744,12 +7852,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/auto_extension.html)"
     },
     "R-23980-48859-56951-38852-38346-56715-55568-02993": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-23984-49501-37243-56289-03587-60124-22633-25227": {
       "status": "PARTIALLY_VERIFIED",
@@ -7791,9 +7901,9 @@
       "notes": "C API / storage / non-SQL surface (fileformat2.html)"
     },
     "R-24086-08530-21252-40131-41317-48771-53823-31992": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -7833,12 +7943,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/create_function.html)"
     },
     "R-24179-60523-60164-40067-19292-39680-45687-45747": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-24188-24349-51458-56364-12806-43304-14352-46380": {
       "status": "VERIFIED",
@@ -7895,12 +8007,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/autovacuum_pages.html)"
     },
     "R-24401-52400-49114-60456-18821-28705-54480-01087": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-24408-11841-16708-30331-61955-39086-27640-21297": {
       "status": "VERIFIED",
@@ -7931,12 +8045,14 @@
       "notes": ""
     },
     "R-24450-46174-44304-25763-63471-62798-12121-54973": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-24454-61742-57320-38040-08939-30630-11445-30109": {
       "status": "VERIFIED",
@@ -7960,12 +8076,14 @@
       "notes": "EXPLAIN QUERY PLAN stub shapes"
     },
     "R-24499-57071-23351-26477-16690-35822-52475-36418": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-24505-23230-57666-22051-56312-29400-20176-42804": {
       "status": "NOT_APPLICABLE",
@@ -8050,12 +8168,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/open.html)"
     },
     "R-24676-09859-25258-06679-18327-03281-24955-00264": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-24691-27369-29687-09464-65253-51469-13435-14358": {
       "status": "NOT_APPLICABLE",
@@ -8068,12 +8188,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/index_info.html)"
     },
     "R-24728-13230-17441-17828-27985-11598-34826-53003": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-24731-45773-21654-50701-01955-60961-16210-17736": {
       "status": "VERIFIED",
@@ -8240,9 +8362,9 @@
       "notes": "C API / storage / non-SQL surface (c3ref/str.html)"
     },
     "R-25216-03908-32391-06837-09807-59608-58830-19572": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -8272,12 +8394,14 @@
       "notes": "Oracle builtin inventory closing"
     },
     "R-25384-39337-58415-17102-37697-27977-14467-00416": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-25451-61125-57795-23914-51441-34414-44666-54346": {
       "status": "NOT_APPLICABLE",
@@ -8341,11 +8465,14 @@
       "notes": "Operators covered; row-value/precedence edges expanding"
     },
     "R-25613-37547-39472-02780-29297-59051-40019-17427": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/",
+        "tests/contract/indexes/partial.test.ts",
+        "tests/contract/indexes/expression.test.ts",
+        "tests/contract/indexes/prefix.test.ts"
       ],
-      "notes": "Partial/expression indexes thinner"
+      "notes": ""
     },
     "R-25616-08788-18594-15704-08007-00569-12211-26573": {
       "status": "VERIFIED",
@@ -8880,9 +9007,9 @@
       "notes": "Schema/FK pragmas verified; storage pragmas N/A or no-op"
     },
     "R-27290-56511-04892-59250-62806-15127-45739-19284": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -8913,11 +9040,12 @@
       "notes": "C API / storage / non-SQL surface (c3ref/column_blob.html)"
     },
     "R-27365-32065-31789-31471-31645-57630-15850-26496": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-27380-17544-22852-64378-45230-22316-25696-47821": {
       "status": "PARTIALLY_VERIFIED",
@@ -8927,12 +9055,14 @@
       "notes": "Schema/FK pragmas verified; storage pragmas N/A or no-op"
     },
     "R-27383-10246-01655-25271-51755-59417-27078-62241": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-27438-53558-39373-64011-10542-64778-48166-54900": {
       "status": "VERIFIED",
@@ -8963,12 +9093,14 @@
       "notes": ""
     },
     "R-27484-01467-40660-08782-16756-57898-53117-01697": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-27484-38990-39416-37657-02655-32272-61477-41469": {
       "status": "NOT_APPLICABLE",
@@ -9203,12 +9335,14 @@
       "notes": "RTREE module pending Scope-3 implementation"
     },
     "R-28220-46694-36270-42674-38857-47778-22952-56853": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-28258-23166-61617-36220-57922-46020-57990-00363": {
       "status": "NOT_APPLICABLE",
@@ -9649,11 +9783,12 @@
       "notes": "C API / storage / non-SQL surface (c3ref/trace_v2.html)"
     },
     "R-29579-23096-56379-38525-03672-46829-05671-41323": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-29588-44058-56045-00722-36389-33824-35706-30523": {
       "status": "NOT_APPLICABLE",
@@ -9661,12 +9796,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/last_insert_rowid.html)"
     },
     "R-29604-30395-11418-33165-02079-38209-02467-57208": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-29609-10377-53436-28646-00070-22457-04173-55911": {
       "status": "VERIFIED",
@@ -9991,12 +10128,14 @@
       "notes": "string_agg and FILTER edges pending full VERIFIED"
     },
     "R-30323-21917-40561-21411-57538-63013-10240-64875": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-30347-18702-41681-51017-11561-03801-56644-21815": {
       "status": "VERIFIED",
@@ -10107,11 +10246,12 @@
       "notes": "Operators covered; row-value/precedence edges expanding"
     },
     "R-30732-36962-32140-22588-07980-22821-60699-49282": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-30791-11785-26457-12987-43722-30660-26434-24770": {
       "status": "NOT_APPLICABLE",
@@ -10801,12 +10941,14 @@
       "notes": "RTREE module pending Scope-3 implementation"
     },
     "R-32768-47925-14881-49153-08372-50935-16619-06911": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-32806-65233-63423-39928-44686-28712-07931-12350": {
       "status": "NOT_APPLICABLE",
@@ -10814,12 +10956,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/create_collation.html)"
     },
     "R-32809-14620-63808-12852-40065-57653-46928-34414": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-32811-57727-45748-41236-27648-12493-19068-34622": {
       "status": "VERIFIED",
@@ -10852,11 +10996,14 @@
       "notes": "Affinity/storage-class contracts"
     },
     "R-32925-06786-44484-40389-19544-51015-10010-30515": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/",
+        "tests/contract/indexes/partial.test.ts",
+        "tests/contract/indexes/expression.test.ts",
+        "tests/contract/indexes/prefix.test.ts"
       ],
-      "notes": "Partial/expression indexes thinner"
+      "notes": ""
     },
     "R-33035-16498-10379-54790-22685-33042-10966-12535": {
       "status": "NOT_APPLICABLE",
@@ -10930,12 +11077,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/reset.html)"
     },
     "R-33326-45252-38720-14593-54555-59144-23018-05599": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-33352-16228-19462-25047-13980-23357-27400-59118": {
       "status": "PARTIALLY_VERIFIED",
@@ -11054,12 +11203,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/unlock_notify.html)"
     },
     "R-33626-48418-46855-58211-38849-29467-54588-01790": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-33632-01248-54038-23553-34716-03139-59135-16451": {
       "status": "NOT_APPLICABLE",
@@ -11150,12 +11301,14 @@
       "notes": "Schema/FK pragmas verified; storage pragmas N/A or no-op"
     },
     "R-33883-28833-60318-48575-53923-47015-06615-40154": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-33917-24086-34361-61973-51178-03721-35954-00662": {
       "status": "VERIFIED",
@@ -11245,11 +11398,12 @@
       "notes": ""
     },
     "R-34136-00089-38264-11064-58519-06639-00881-26978": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-34146-30782-53907-40582-61923-47415-21722-12527": {
       "status": "NOT_APPLICABLE",
@@ -11535,11 +11689,12 @@
       "notes": "C API / storage / non-SQL surface (fileformat2.html)"
     },
     "R-34966-53902-34242-28054-07198-58256-53673-36317": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-34979-54336-33279-53576-25867-30233-28350-04331": {
       "status": "VERIFIED",
@@ -11618,12 +11773,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/blob_close.html)"
     },
     "R-35129-58141-36157-07998-30656-14308-25733-01656": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-35196-57110-30977-27033-46331-62759-56891-62679": {
       "status": "NOT_APPLICABLE",
@@ -11668,12 +11825,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/memory_highwater.html)"
     },
     "R-35290-16460-32571-10958-08768-45451-01146-58774": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-35325-25517-01545-24178-13996-21143-53189-45296": {
       "status": "VERIFIED",
@@ -11770,12 +11929,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/open.html)"
     },
     "R-35763-48267-24179-20441-32559-50420-39179-45580": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-35765-61623-59690-19582-04854-45693-22489-08520": {
       "status": "NOT_APPLICABLE",
@@ -11871,12 +12032,14 @@
       "notes": "RTREE module pending Scope-3 implementation"
     },
     "R-36018-21755-34988-08386-62029-36954-65009-29361": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-36043-10590-35190-29655-36320-51519-10161-16668": {
       "status": "NOT_APPLICABLE",
@@ -11952,9 +12115,9 @@
       "notes": "C API / storage / non-SQL surface (wal.html)"
     },
     "R-36357-08369-42604-06511-16723-17506-10955-34539": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -12050,9 +12213,9 @@
       "notes": "C API / storage / non-SQL surface (c3ref/mprintf.html)"
     },
     "R-36612-64789-14111-46629-37131-49911-14128-04823": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -12303,12 +12466,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/blob_open.html)"
     },
     "R-37672-59189-62965-02252-24561-10805-11427-09542": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-37687-21505-22371-30401-23060-65345-45987-08312": {
       "status": "PARTIALLY_VERIFIED",
@@ -12323,12 +12488,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/blob_open.html)"
     },
     "R-37736-42616-04169-53390-00856-45033-53695-63004": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-37760-36374-21935-46380-43039-31326-26713-65030": {
       "status": "NOT_APPLICABLE",
@@ -12429,12 +12596,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/bind_blob.html)"
     },
     "R-37997-42187-51725-59091-37072-50205-56712-26602": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-38023-18396-22713-13690-61527-29951-04231-55806": {
       "status": "VERIFIED",
@@ -12458,9 +12627,9 @@
       "notes": "RTREE module pending Scope-3 implementation"
     },
     "R-38062-30057-54968-60320-51568-47118-43997-50197": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -12513,11 +12682,12 @@
       "notes": ""
     },
     "R-38229-16527-29793-36324-34944-03946-52461-48816": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-38229-40159-56776-58417-62683-03427-34499-02992": {
       "status": "NOT_APPLICABLE",
@@ -12821,9 +12991,9 @@
       "notes": "C API / storage / non-SQL surface (c3ref/expanded_sql.html)"
     },
     "R-39082-45490-57705-20308-15536-26647-22917-12593": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -12879,9 +13049,9 @@
       "notes": "RTREE module pending Scope-3 implementation"
     },
     "R-39210-36906-47474-04238-18863-57364-16133-33806": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -12903,11 +13073,12 @@
       "notes": "C API / storage / non-SQL surface (fileformat2.html)"
     },
     "R-39255-30546-51738-15531-11992-13732-26407-08285": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-39265-04070-30004-05781-22531-14920-64985-48690": {
       "status": "VERIFIED",
@@ -13031,12 +13202,14 @@
       "notes": ""
     },
     "R-39692-12488-54491-44352-04912-13609-39585-46004": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-39719-17021-25795-58953-42832-28593-26146-38577": {
       "status": "NOT_APPLICABLE",
@@ -13113,11 +13286,14 @@
       "notes": ""
     },
     "R-40025-59984-53912-08799-37788-65154-58103-39921": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/",
+        "tests/contract/indexes/partial.test.ts",
+        "tests/contract/indexes/expression.test.ts",
+        "tests/contract/indexes/prefix.test.ts"
       ],
-      "notes": "Partial/expression indexes thinner"
+      "notes": ""
     },
     "R-40026-10531-12029-61961-20483-43769-01249-19476": {
       "status": "VERIFIED",
@@ -13551,12 +13727,14 @@
       "notes": ""
     },
     "R-41062-34431-24503-40012-23472-27163-07838-01416": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-41079-08948-19463-36063-08985-63659-05958-53275": {
       "status": "VERIFIED",
@@ -13785,12 +13963,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/c_limit_attached.html)"
     },
     "R-41784-13339-39195-36557-35011-50589-62735-17221": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-41795-40039-43827-16838-58364-41518-15809-62342": {
       "status": "NOT_APPLICABLE",
@@ -13798,9 +13978,9 @@
       "notes": "C API / storage / non-SQL surface (fileformat2.html)"
     },
     "R-41796-02552-46731-27208-23017-23175-41935-19333": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -13817,11 +13997,12 @@
       "notes": "Schema/FK pragmas verified; storage pragmas N/A or no-op"
     },
     "R-41881-38269-61239-25689-14129-18867-37202-03971": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-41898-15939-51576-48964-07633-48670-39877-19524": {
       "status": "NOT_APPLICABLE",
@@ -13849,9 +14030,9 @@
       "notes": "C API / storage / non-SQL surface (c3ref/blob_close.html)"
     },
     "R-41964-12887-53267-54582-29615-62168-19001-17157": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -13925,11 +14106,12 @@
       "notes": "Unmapped SQL source: vtab.html"
     },
     "R-42053-06220-45520-18434-62327-05125-05247-18783": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-42053-10634-10178-57084-38599-37696-52821-41019": {
       "status": "NOT_APPLICABLE",
@@ -14008,12 +14190,14 @@
       "notes": "unixepoch/timediff pending"
     },
     "R-42264-30503-59734-27182-09604-54439-24686-19729": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-42297-37851-22979-34861-45337-51350-47253-02521": {
       "status": "NOT_APPLICABLE",
@@ -14064,12 +14248,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/blob_read.html)"
     },
     "R-42412-59321-17229-61863-37154-26359-45547-07737": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-42413-48699-18180-28011-52485-52164-16827-39292": {
       "status": "UNSUPPORTED",
@@ -14195,11 +14381,12 @@
       "notes": "C API / storage / non-SQL surface (c3ref/bind_blob.html)"
     },
     "R-42858-58769-58822-33299-41637-22635-42274-51914": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-42868-39706-29794-00885-30480-27776-00308-11610": {
       "status": "NOT_APPLICABLE",
@@ -14265,12 +14452,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/open.html)"
     },
     "R-43040-62530-50072-37699-18765-48451-48404-22344": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-43042-22504-56439-09446-23422-01554-61314-54021": {
       "status": "PARTIALLY_VERIFIED",
@@ -14609,9 +14798,9 @@
       "notes": ""
     },
     "R-43696-56835-52509-34515-30380-28351-43291-45019": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -14664,19 +14853,22 @@
       "notes": "C API / storage / non-SQL surface (fileformat2.html)"
     },
     "R-43870-25292-29173-31012-48772-23978-21156-46728": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-43879-08025-52526-08970-15750-21422-30684-37873": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-43881-23456-20563-20957-51474-28716-20128-57454": {
       "status": "NOT_APPLICABLE",
@@ -14814,12 +15006,14 @@
       "notes": "RTREE module pending Scope-3 implementation"
     },
     "R-44261-39702-04875-31790-36524-45169-57836-16173": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-44270-63173-43365-51432-46246-26535-62506-06270": {
       "status": "UNSUPPORTED",
@@ -14842,12 +15036,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/wal_hook.html)"
     },
     "R-44295-13823-09058-27289-44091-57467-52153-35683": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-44324-41166-42942-47705-27184-58566-20473-14339": {
       "status": "VERIFIED",
@@ -14874,12 +15070,14 @@
       "notes": "Schema/FK pragmas verified; storage pragmas N/A or no-op"
     },
     "R-44355-00270-30749-42094-52510-11222-59749-40119": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-44364-00581-20291-58587-51533-44159-46989-51099": {
       "status": "UNSUPPORTED",
@@ -15071,11 +15269,12 @@
       "notes": "C API / storage / non-SQL surface (c3ref/pcache_methods2.html)"
     },
     "R-44991-05464-53731-06799-53286-51355-12803-56046": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-44992-52812-59111-17856-46428-55199-28475-08004": {
       "status": "NOT_APPLICABLE",
@@ -15306,12 +15505,14 @@
       "notes": "C API / storage / non-SQL surface (fileformat2.html)"
     },
     "R-45488-08504-64399-03603-60147-65359-06274-60393": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-45493-35653-32389-26460-18465-38474-56599-09288": {
       "status": "VERIFIED",
@@ -15339,9 +15540,9 @@
       "notes": "Schema/FK pragmas verified; storage pragmas N/A or no-op"
     },
     "R-45667-58607-22220-28108-32382-15512-20537-62688": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -15607,9 +15808,9 @@
       "notes": "Oracle builtin inventory closing"
     },
     "R-46455-06721-25633-38567-39133-09580-16982-03702": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -15676,12 +15877,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/status.html)"
     },
     "R-46649-58537-03180-36291-48705-13434-30415-43306": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-46656-45156-45910-65271-53395-31310-28369-14407": {
       "status": "NOT_APPLICABLE",
@@ -15820,12 +16023,14 @@
       "notes": "Operators covered; row-value/precedence edges expanding"
     },
     "R-47080-02069-19289-28177-02416-33406-46082-01364": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-47085-17460-48136-50298-50839-31630-41230-33764": {
       "status": "PARTIALLY_VERIFIED",
@@ -16147,20 +16352,24 @@
       "notes": "Operators covered; row-value/precedence edges expanding"
     },
     "R-47936-10044-12721-09990-49763-27309-53307-48514": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-47952-62498-54054-51429-18050-07399-51898-49231": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-47973-48020-37967-63330-01173-43664-55232-05863": {
       "status": "VERIFIED",
@@ -16205,12 +16414,14 @@
       "notes": "Operators covered; row-value/precedence edges expanding"
     },
     "R-48124-63225-09560-63618-32598-12840-01456-15525": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-48126-27717-31293-47858-22865-09722-12158-06374": {
       "status": "VERIFIED",
@@ -16272,12 +16483,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/c_dbconfig_defensive.html)"
     },
     "R-48270-44282-22791-02682-41212-30485-35514-10094": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-48313-35799-57609-24734-64937-33072-43085-04424": {
       "status": "NOT_APPLICABLE",
@@ -16320,12 +16533,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/blob_open.html)"
     },
     "R-48391-38472-46406-48874-31358-29787-61398-48182": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-48422-12154-41896-26820-42783-11801-54961-22024": {
       "status": "NOT_APPLICABLE",
@@ -16357,11 +16572,12 @@
       "notes": ":memory:"
     },
     "R-48533-46594-08674-01218-43796-46472-34581-15116": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-48560-31808-12822-42502-57159-22070-42910-14910": {
       "status": "NOT_APPLICABLE",
@@ -16394,11 +16610,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/hard_heap_limit64.html)"
     },
     "R-48616-47814-10585-42560-43373-45165-03302-15640": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/",
+        "tests/contract/indexes/partial.test.ts",
+        "tests/contract/indexes/expression.test.ts",
+        "tests/contract/indexes/prefix.test.ts"
       ],
-      "notes": "Partial/expression indexes thinner"
+      "notes": ""
     },
     "R-48666-10705-60913-59085-01718-56024-53514-10016": {
       "status": "NOT_APPLICABLE",
@@ -16534,11 +16753,12 @@
       "notes": "C API / storage / non-SQL surface (c3ref/close.html)"
     },
     "R-49037-06490-58039-52656-29480-55472-29071-52724": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-49045-42493-00753-52815-20675-33627-44655-32339": {
       "status": "NOT_APPLICABLE",
@@ -16581,12 +16801,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/wal_checkpoint_v2.html)"
     },
     "R-49178-21358-58489-31319-06651-33455-27209-45773": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-49203-06300-24971-00388-61998-23090-03169-09394": {
       "status": "NOT_APPLICABLE",
@@ -16783,11 +17005,12 @@
       "notes": "C API / storage / non-SQL surface (c3ref/c_config_covering_index_scan.html)"
     },
     "R-49895-22749-28747-51875-53183-63648-10463-26840": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-49920-60189-48669-35973-51094-40513-29191-34461": {
       "status": "NOT_APPLICABLE",
@@ -16894,11 +17117,14 @@
       "notes": "Schema/FK pragmas verified; storage pragmas N/A or no-op"
     },
     "R-50141-17598-64848-16921-53866-52555-58777-52662": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/",
+        "tests/contract/indexes/partial.test.ts",
+        "tests/contract/indexes/expression.test.ts",
+        "tests/contract/indexes/prefix.test.ts"
       ],
-      "notes": "Partial/expression indexes thinner"
+      "notes": ""
     },
     "R-50173-30557-65428-54259-43210-11188-24430-56909": {
       "status": "PARTIALLY_VERIFIED",
@@ -16934,11 +17160,14 @@
       "notes": "Operators covered; row-value/precedence edges expanding"
     },
     "R-50227-03668-59884-25860-05974-05725-11856-44463": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/",
+        "tests/contract/indexes/partial.test.ts",
+        "tests/contract/indexes/expression.test.ts",
+        "tests/contract/indexes/prefix.test.ts"
       ],
-      "notes": "Partial/expression indexes thinner"
+      "notes": ""
     },
     "R-50230-26466-58809-52102-21271-42089-25495-26496": {
       "status": "NOT_APPLICABLE",
@@ -17178,12 +17407,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/preupdate_blobwrite.html)"
     },
     "R-51039-44840-65130-09775-42940-11077-05048-04287": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-51070-59303-35224-08762-04161-61049-26155-15772": {
       "status": "VERIFIED",
@@ -17271,11 +17502,12 @@
       "notes": "C API / storage / non-SQL surface (c3ref/result_blob.html)"
     },
     "R-51280-49561-27340-30722-26024-36446-47802-45698": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-51285-50643-24260-37588-20138-27920-05712-56972": {
       "status": "UNSUPPORTED",
@@ -17635,12 +17867,14 @@
       "notes": "C API / storage / non-SQL surface (fileformat2.html)"
     },
     "R-52486-21352-15520-42418-18389-29845-28843-27004": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-52494-36749-63981-51564-54926-02873-46485-09219": {
       "status": "NOT_APPLICABLE",
@@ -17653,11 +17887,12 @@
       "notes": "C API / storage / non-SQL surface (c3ref/vfs.html)"
     },
     "R-52554-26776-48251-05833-19057-37824-14862-46518": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-52572-02078-29727-01284-61421-00978-11983-52043": {
       "status": "VERIFIED",
@@ -17739,11 +17974,12 @@
       "notes": "C API / storage / non-SQL surface (c3ref/open.html)"
     },
     "R-52777-21695-38206-28598-32008-52074-59855-17879": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-52786-44878-02459-51231-59841-41905-39578-10951": {
       "status": "NOT_APPLICABLE",
@@ -17840,18 +18076,20 @@
       "notes": "C API / storage / non-SQL surface (c3ref/c_dbstatus_options.html)"
     },
     "R-53045-50509-28028-29043-56897-58356-06470-19451": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-53080-41541-45026-17384-49917-00359-25749-28353": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-53084-07740-56303-11732-40527-47126-44561-51023": {
       "status": "VERIFIED",
@@ -18124,12 +18362,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/column_blob.html)"
     },
     "R-53968-51642-29002-32833-59790-62444-61146-02233": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-53994-11873-49794-19921-48320-57211-64823-29959": {
       "status": "NOT_APPLICABLE",
@@ -18191,12 +18431,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/create_function.html)"
     },
     "R-54142-41346-32014-56293-25636-63110-30822-28140": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-54172-54170-29331-23732-60109-43479-50710-53922": {
       "status": "NOT_APPLICABLE",
@@ -18282,9 +18524,9 @@
       "notes": "C API / storage / non-SQL surface (c3ref/db_cacheflush.html)"
     },
     "R-54611-06855-62690-60121-09688-57757-21462-60136": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -18483,11 +18725,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/table_column_metadata.html)"
     },
     "R-55137-26834-36059-41974-16460-01927-24032-61978": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/",
+        "tests/contract/indexes/partial.test.ts",
+        "tests/contract/indexes/expression.test.ts",
+        "tests/contract/indexes/prefix.test.ts"
       ],
-      "notes": "Partial/expression indexes thinner"
+      "notes": ""
     },
     "R-55138-13241-38479-09846-46068-29398-26502-36438": {
       "status": "VERIFIED",
@@ -18497,12 +18742,14 @@
       "notes": ":memory:"
     },
     "R-55147-47664-01653-03142-36497-30903-54815-06427": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-55189-15164-61309-44787-48881-65424-27276-43718": {
       "status": "NOT_APPLICABLE",
@@ -18722,12 +18969,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/exec.html)"
     },
     "R-55814-22637-16882-39129-49686-50158-19394-50709": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-55820-29984-60455-07962-21616-40941-09415-50372": {
       "status": "VERIFIED",
@@ -18780,12 +19029,14 @@
       "notes": "C API / storage / non-SQL surface (fileformat2.html)"
     },
     "R-56032-24923-44084-62651-61742-23069-00366-25575": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-56064-04001-25559-63693-43897-15444-07346-25115": {
       "status": "VERIFIED",
@@ -18992,12 +19243,14 @@
       "notes": "sqlite_stat1"
     },
     "R-56844-61705-36939-38835-21077-60167-01566-10120": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-56861-42673-10667-36418-55159-59166-26000-55286": {
       "status": "NOT_APPLICABLE",
@@ -19054,11 +19307,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/system_errno.html)"
     },
     "R-57025-62168-38373-42436-38968-34840-50734-33391": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/",
+        "tests/contract/indexes/partial.test.ts",
+        "tests/contract/indexes/expression.test.ts",
+        "tests/contract/indexes/prefix.test.ts"
       ],
-      "notes": "Partial/expression indexes thinner"
+      "notes": ""
     },
     "R-57047-10461-09824-05395-44122-51121-43183-19652": {
       "status": "VERIFIED",
@@ -19136,12 +19392,14 @@
       "notes": "C API / storage / non-SQL surface (wal.html)"
     },
     "R-57242-37005-56028-08872-40154-45403-20109-09312": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-57255-33789-60728-42833-30002-01027-59947-48122": {
       "status": "VERIFIED",
@@ -19287,12 +19545,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/vtab_distinct.html)"
     },
     "R-57765-12380-65473-27490-60483-53059-23435-27202": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-57773-31134-13859-63861-60262-03843-19674-02031": {
       "status": "VERIFIED",
@@ -19310,11 +19570,14 @@
       "notes": "Schema/FK pragmas verified; storage pragmas N/A or no-op"
     },
     "R-57876-22123-39728-45816-26959-17516-32294-11302": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/",
+        "tests/contract/indexes/partial.test.ts",
+        "tests/contract/indexes/expression.test.ts",
+        "tests/contract/indexes/prefix.test.ts"
       ],
-      "notes": "Partial/expression indexes thinner"
+      "notes": ""
     },
     "R-57880-35169-30628-02848-50703-50828-58750-28510": {
       "status": "PARTIALLY_VERIFIED",
@@ -19503,12 +19766,14 @@
       "notes": "Schema/FK pragmas verified; storage pragmas N/A or no-op"
     },
     "R-58428-36660-63931-61833-12651-58158-26648-39835": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-58433-37187-52219-35155-40508-43189-02693-26384": {
       "status": "VERIFIED",
@@ -19614,11 +19879,12 @@
       "notes": "C API / storage / non-SQL surface (c3ref/result_blob.html)"
     },
     "R-58828-53895-13815-04017-42542-10483-39276-05822": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-58835-30946-01453-54095-45782-49033-61690-21172": {
       "status": "NOT_APPLICABLE",
@@ -19739,11 +20005,12 @@
       "notes": "C API / storage / non-SQL surface (c3ref/c_source_id.html)"
     },
     "R-59216-33891-20715-29523-18605-08261-10809-30843": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-59218-44473-40361-49593-50972-37596-39041-04578": {
       "status": "NOT_APPLICABLE",
@@ -19966,9 +20233,9 @@
       "notes": "Schema/FK pragmas verified; storage pragmas N/A or no-op"
     },
     "R-59958-37183-05497-01446-42261-31297-62677-47395": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -20056,11 +20323,12 @@
       "notes": "C API / storage / non-SQL surface (wal.html)"
     },
     "R-60210-08703-54697-04139-16865-40143-01079-14563": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-60223-49197-47442-02320-11696-61949-31575-11697": {
       "status": "NOT_APPLICABLE",
@@ -20397,12 +20665,14 @@
       "notes": "Oracle builtin inventory closing"
     },
     "R-61362-32087-29784-51692-52137-61704-15338-45644": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-61376-43478-41054-59749-08806-37073-25549-48326": {
       "status": "VERIFIED",
@@ -20413,12 +20683,14 @@
       "notes": "Oracle builtin inventory closing"
     },
     "R-61376-57267-60176-57380-17573-65142-26150-27865": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-61413-50265-52071-27114-12254-11492-58681-53001": {
       "status": "NOT_APPLICABLE",
@@ -20475,12 +20747,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/vfs.html)"
     },
     "R-61616-46700-48571-17878-11289-09346-32706-45031": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-61726-11117-39197-35640-53612-54106-15944-36516": {
       "status": "NOT_APPLICABLE",
@@ -20505,12 +20779,14 @@
       "notes": ""
     },
     "R-61809-62207-01008-46404-05799-53014-10578-37094": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-61815-26679-56101-35658-51912-28874-35291-46177": {
       "status": "NOT_APPLICABLE",
@@ -20752,9 +21028,9 @@
       "notes": "Operators covered; row-value/precedence edges expanding"
     },
     "R-62671-45936-15699-15939-47274-39312-22685-45097": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },
@@ -20806,11 +21082,14 @@
       "notes": "RTREE module pending Scope-3 implementation"
     },
     "R-62804-28221-24652-30727-46370-42129-23035-01106": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/",
+        "tests/contract/indexes/partial.test.ts",
+        "tests/contract/indexes/expression.test.ts",
+        "tests/contract/indexes/prefix.test.ts"
       ],
-      "notes": "Partial/expression indexes thinner"
+      "notes": ""
     },
     "R-62839-07969-20835-12393-10949-34728-00422-57830": {
       "status": "PARTIALLY_VERIFIED",
@@ -20820,11 +21099,12 @@
       "notes": "Schema/FK pragmas verified; storage pragmas N/A or no-op"
     },
     "R-62842-02885-47183-08530-16131-50819-34642-24055": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-62860-04741-41366-30406-60752-17856-14374-30516": {
       "status": "NOT_APPLICABLE",
@@ -20925,12 +21205,14 @@
       "notes": "C API / storage / non-SQL surface (c3ref/blob_reopen.html)"
     },
     "R-63088-37469-41348-62985-35702-04852-27256-05198": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-63107-29542-42038-49029-17221-49854-37760-53513": {
       "status": "NOT_APPLICABLE",
@@ -21615,11 +21897,12 @@
       "notes": "Affinity/storage-class contracts"
     },
     "R-64842-30903-04494-11389-12737-16159-45438-00930": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/schema/"
+        "tests/contract/schema/strict.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "STRICT coverage expanding"
+      "notes": ""
     },
     "R-64844-34873-54978-44161-37358-50690-61472-16160": {
       "status": "VERIFIED",
@@ -21713,12 +21996,14 @@
       "notes": "C API / storage / non-SQL surface (fileformat2.html)"
     },
     "R-65058-57158-61886-52055-64360-05204-52569-52918": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
         "tests/contract/foreign-keys/",
-        "tests/fuzz/foreign-keys.test.ts"
+        "tests/contract/foreign-keys/deferred.test.ts",
+        "tests/contract/foreign-keys/composite.test.ts",
+        "tests/fuzz/constraints.test.ts"
       ],
-      "notes": "Deferred FK thinner"
+      "notes": ""
     },
     "R-65068-25814-18099-09241-35748-05178-29106-53953": {
       "status": "VERIFIED",
@@ -21772,9 +22057,9 @@
       "notes": "RTREE module pending Scope-3 implementation"
     },
     "R-65161-60989-13939-65119-57772-34659-43488-10354": {
-      "status": "PARTIALLY_VERIFIED",
+      "status": "VERIFIED",
       "evidence": [
-        "tests/contract/indexes/"
+        "tests/contract/indexes/partial.test.ts"
       ],
       "notes": ""
     },

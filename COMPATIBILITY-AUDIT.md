@@ -44,14 +44,13 @@ JSON / JSONB:
   VERIFIED
 
 Aggregates / windows:
-  VERIFIED — includes string_agg, ntile, cume_dist, percent_rank
-  (window EXCLUDE still thinner)
+  VERIFIED — includes string_agg, ntile, cume_dist, percent_rank, EXCLUDE
 
 CTEs / transactions / savepoints / constraints / FK / triggers:
-  VERIFIED (deferred FK thinner → PARTIAL edges)
+  VERIFIED (deferred FK + composite FK)
 
 Indexes / views / generated / STRICT / WITHOUT ROWID:
-  VERIFIED / PARTIAL per COMPATIBILITY.md
+  VERIFIED — partial/expression indexes, STRICT tables, leftmost prefix
 
 PRAGMAs:
   PARTIALLY VERIFIED — schema/FK; storage pragmas N/A or :memory: no-op
@@ -67,11 +66,11 @@ ANALYZE / REINDEX / VACUUM:
   VERIFIED (:memory: observable parity)
 
 Prepared statements / errors / snapshot:
-  PARTIAL / VERIFIED — schema invalidation thin; SQLM logical round-trip VERIFIED
+  VERIFIED — schema invalidation re-prepares; SQLM logical round-trip VERIFIED
 
-Differential tests:
-  Total: 656 under `bun test` (contract + fuzz + harness)
-  Passed: 656
+  Differential tests:
+  Total: 727 under `bun test` (contract + fuzz + harness)
+  Passed: 727
   Failed: 0
 
 Stateful / fuzz:
@@ -91,7 +90,6 @@ New incompatibilities found & fixed (this pass):
 Remaining known differences:
   Custom SQLM snapshots; deterministic random()/'now';
   EXPLAIN/INDEXED BY stubs/no-ops; some PRAGMA storage no-ops;
-  Window EXCLUDE / deferred FK / STRICT / prepared invalidation thinner;
   BigInt beyond Number.MAX_SAFE_INTEGER without bun safeIntegers;
   NOT APPLICABLE C API / on-disk / VFS surfaces.
 

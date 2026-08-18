@@ -9,7 +9,7 @@ import {
   executeDropTable,
   executeDropView,
 } from "./ddl.ts";
-import { executeDelete, executeInsert, executeUpdate } from "./dml.ts";
+import { checkDeferredForeignKeys, executeDelete, executeInsert, executeUpdate } from "./dml.ts";
 import type { ExecutionEnv } from "./env.ts";
 import { executePragma } from "./pragma.ts";
 import { emptyResult, type ResultSet, valuesToResult } from "./result.ts";
@@ -56,6 +56,7 @@ export function executeStatement(stmt: Statement, env: ExecutionEnv): ResultSet 
       env.transactions.begin();
       return emptyResult(0, env.state.lastInsertRowid);
     case "commit":
+      checkDeferredForeignKeys(env);
       env.transactions.commit();
       return emptyResult(0, env.state.lastInsertRowid);
     case "rollback":
@@ -110,6 +111,7 @@ function executeAnalyze(stmt: import("../ast/nodes.ts").AnalyzeStmt, env: Execut
         constraints: [],
         asSelect: null,
         withoutRowid: false,
+        strict: false,
       },
       "CREATE TABLE sqlite_stat1(tbl,idx,stat)",
     );

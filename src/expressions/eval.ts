@@ -366,6 +366,12 @@ function evalIn(left: SqlValue, values: SqlValue[], not: boolean): SqlValue {
   return booleanValue(not);
 }
 
+/**
+ * Evaluate a parsed SQL expression against `ctx` (columns, parameters, functions).
+ *
+ * @param expr - Expression AST node from {@link parse}.
+ * @param ctx - Column / parameter / function resolution.
+ */
 export function evalExpr(expr: Expr, ctx: EvalContext): SqlValue {
   switch (expr.type) {
     case "literal": {

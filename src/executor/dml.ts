@@ -1,12 +1,14 @@
-import type { DeleteStmt, IndexedColumn, InsertStmt, ResultColumn, SetItem, UpdateStmt } from "../ast/nodes.ts";
+import type { DeleteStmt, Expr, IndexedColumn, InsertStmt, ResultColumn, SetItem, UpdateStmt } from "../ast/nodes.ts";
 import { checkTableConstraints } from "../constraints/check.ts";
 import { SqliteError } from "../errors/index.ts";
+import { exprEquals } from "../expressions/equals.ts";
 import { evalExpr } from "../expressions/eval.ts";
 import type { Row, Rowid } from "../storage/row.ts";
 import { normalizeColumnName } from "../storage/row.ts";
 import { tryIndexedTableRows } from "../planner/access.ts";
 import type { Table } from "../storage/table.ts";
 import { normalizeForCollation } from "../types/collation.ts";
+import { applyStrictValue } from "../types/strict.ts";
 import { applyAffinity, compareSql, isTruthySql, type SqlValue } from "../types/value.ts";
 import type { Fts5Row, Fts5VirtualTable } from "../vtable/fts5.ts";
 import type { ExecutionEnv, ScopeRow } from "./env.ts";
@@ -15,13 +17,22 @@ import { executeSelect, scanFrom } from "./select.ts";
 import { fireDeleteTriggers, fireInsertTriggers, fireUpdateTriggers } from "./triggers.ts";
 import { executeFtsDelete, executeFtsInsert, executeFtsUpdate } from "./vtable.ts";
 
+function storeColumnValue(
+  table: Table,
+  column: { name: string; typeName: string | null; affinity: import("../types/value.ts").Affinity },
+  value: SqlValue,
+): SqlValue {
+  if (table.strict) return applyStrictValue(value, column.typeName ?? "", table.name, column.name);
+  return applyAffinity(value, column.affinity);
+}
+
 export function executeInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
   if (env.state.isVirtualTable(stmt.table)) {
     return executeVirtualInsert(stmt, env);
   }
   const fast = tryFastInsert(stmt, env);
   if (fast) return fast;
-  const table = env.state.getTable(stmt.table);
+  const table = env.state.getWritableTable(stmt.table);
   const columnNames = stmt.columns ?? table.columns.map((column) => column.name);
   const rowidIndexes = columnNames.map((name, index) => (isRowidName(name) ? index : -1)).filter((index) => index >= 0);
   if (rowidIndexes.length > 1) throw new SqliteError("duplicate column name: rowid", "other");
@@ -52,7 +63,7 @@ export function executeInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
         const column = table.columns[index]!;
         const suppliedIndex = suppliedIndexes[index]!;
         const value = suppliedIndex >= 0 ? (source[suppliedIndex] ?? null) : null;
-        values.set(column.nameLower ?? column.name.toLowerCase(), applyAffinity(value, column.affinity));
+        values.set(column.nameLower ?? column.name.toLowerCase(), storeColumnValue(table, column, value));
       }
       last = table.insert({ values }, { prepared: true, skipValidate: true });
       changes++;
@@ -74,7 +85,7 @@ export function executeInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
           : column.defaultExpr
             ? evalExpr(column.defaultExpr, env.createEvalContext())
             : null;
-      values.set(column.nameLower ?? column.name.toLowerCase(), applyAffinity(value, column.affinity));
+      values.set(column.nameLower ?? column.name.toLowerCase(), storeColumnValue(table, column, value));
     }
     for (const column of table.columns) {
       if (!column.generated) continue;
@@ -100,7 +111,7 @@ export function executeInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
             }),
         });
         const computed = evalExpr(column.generated.expr, genCtx);
-        values.set(normalizeColumnName(column.name), applyAffinity(computed, column.affinity));
+        values.set(normalizeColumnName(column.name), storeColumnValue(table, column, computed));
       } else {
         values.set(normalizeColumnName(column.name), null);
       }
@@ -111,9 +122,7 @@ export function executeInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
     const conflicts = conflictingRows(table, values, env);
     if (conflicts.length > 0) {
       if (stmt.upsert) {
-        const targetConflicts = stmt.upsert.targetColumns
-          ? conflictsMatchingTarget(table, values, env, stmt.upsert.targetColumns)
-          : conflicts;
+        const targetConflicts = conflictsForUpsert(table, values, env, stmt.upsert);
         if (targetConflicts.length === 0) {
           // Conflict is on a different unique constraint than the ON CONFLICT target.
           throw new SqliteError(
@@ -223,7 +232,7 @@ function tryFastInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet | null {
   }
   let table: Table;
   try {
-    table = env.state.getTable(plan.tableName);
+    table = env.state.getWritableTable(plan.tableName);
   } catch {
     return null;
   }
@@ -276,7 +285,7 @@ export function executeUpdate(stmt: UpdateStmt, env: ExecutionEnv): ResultSet {
   if (env.state.isVirtualTable(stmt.table)) {
     return executeVirtualUpdate(stmt, env);
   }
-  const table = env.state.getTable(stmt.table);
+  const table = env.state.getWritableTable(stmt.table);
   const alias = stmt.alias ?? stmt.table;
   const candidates: { row: Row; scope: ScopeRow }[] = [];
 
@@ -341,7 +350,7 @@ export function executeDelete(stmt: DeleteStmt, env: ExecutionEnv): ResultSet {
   if (env.state.isVirtualTable(stmt.table)) {
     return executeVirtualDelete(stmt, env);
   }
-  const table = env.state.getTable(stmt.table);
+  const table = env.state.getWritableTable(stmt.table);
   const selectedSource =
     stmt.where === null
       ? null
@@ -387,7 +396,7 @@ function evaluateSet(
     if (item.columns.length === 1) {
       const column = columnOf(table, item.columns[0]!);
       if (column.generated) throw new SqliteError(`cannot UPDATE generated column "${column.name}"`, "misuse");
-      updates.set(normalizeColumnName(column.name), evalExpr(item.expr, ctx));
+      updates.set(normalizeColumnName(column.name), storeColumnValue(table, column, evalExpr(item.expr, ctx)));
       continue;
     }
     if (item.expr.type !== "row" || item.expr.values.length !== item.columns.length) {
@@ -401,7 +410,7 @@ function evaluateSet(
       if (column.generated) throw new SqliteError(`cannot UPDATE generated column "${column.name}"`, "misuse");
       updates.set(
         normalizeColumnName(column.name),
-        evalExpr(item.expr.type === "row" ? item.expr.values[index]! : item.expr, ctx),
+        storeColumnValue(table, column, evalExpr(item.expr.type === "row" ? item.expr.values[index]! : item.expr, ctx)),
       );
     });
   }
@@ -436,7 +445,7 @@ function updateOne(
       });
       merged.set(
         normalizeColumnName(column.name),
-        applyAffinity(evalExpr(column.generated.expr, genCtx), column.affinity),
+        storeColumnValue(table, column, evalExpr(column.generated.expr, genCtx)),
       );
     }
     after = table.update(row.rowid, merged);
@@ -468,24 +477,27 @@ function validateRow(table: Table, row: Row, env: ExecutionEnv): void {
 }
 
 function addIndexes(table: Table, row: Row, env: ExecutionEnv): void {
-  const indexes = env.state.databaseForTable(table).indexes;
+  const db = env.state.databaseForTable(table);
   for (const name of table.indexes) {
-    const index = indexes.get(name.toLowerCase());
-    if (!index) continue;
+    const found = db.indexes.get(name.toLowerCase());
+    if (!found) continue;
+    const index = db.ensureWritableIndex(found);
     if (
       index.where &&
       isTruthySql(evalExpr(index.where, env.createEvalContext(scopeFor(table, row, table.name, env)))) !== true
     )
       continue;
-    index.store.insert(indexValues(index.columns, row), row.rowid, index.unique);
+    index.store.insert(indexValues(index.columns, row, env, table), row.rowid, index.unique);
   }
 }
 
 function removeIndexes(table: Table, row: Row, env: ExecutionEnv): void {
-  const indexes = env.state.databaseForTable(table).indexes;
+  const db = env.state.databaseForTable(table);
   for (const name of table.indexes) {
-    const index = indexes.get(name.toLowerCase());
-    if (index) index.store.remove(indexValues(index.columns, row), row.rowid);
+    const found = db.indexes.get(name.toLowerCase());
+    if (!found) continue;
+    const index = db.ensureWritableIndex(found);
+    index.store.remove(indexValues(index.columns, row, env, table), row.rowid);
   }
 }
 
@@ -536,6 +548,33 @@ function conflictsMatchingTarget(
   return conflictsForSets(table, values, matchingSets, env);
 }
 
+function conflictsForUpsert(
+  table: Table,
+  values: Map<string, SqlValue>,
+  env: ExecutionEnv,
+  upsert: NonNullable<InsertStmt["upsert"]>,
+): Row[] {
+  if (!upsert.targetColumns) return conflictingRows(table, values, env);
+  const exprs = upsert.targetExprs;
+  const hasExpr = exprs?.some((expr) => expr.type !== "column") ?? false;
+  if (hasExpr && exprs) {
+    const db = env.state.databaseForTable(table);
+    for (const indexName of table.indexes) {
+      const index = db.indexes.get(indexName.toLowerCase());
+      if (!index?.unique || index.columns.length !== exprs.length) continue;
+      const matches = index.columns.every((column, i) => {
+        const expr = exprs[i]!;
+        if (column.expr) return exprEquals(column.expr, expr);
+        return expr.type === "column" && expr.name.toLowerCase() === column.name.toLowerCase();
+      });
+      if (!matches) continue;
+      if (upsert.targetWhere && index.where && !exprEquals(upsert.targetWhere, index.where)) continue;
+      return conflictsForSets(table, values, [index.columns], env);
+    }
+  }
+  return conflictsMatchingTarget(table, values, env, upsert.targetColumns.filter(Boolean));
+}
+
 function uniqueColumnSets(table: Table, env: ExecutionEnv): IndexedColumn[][] {
   const sets: IndexedColumn[][] = [];
   const seen = new Set<string>();
@@ -548,7 +587,7 @@ function uniqueColumnSets(table: Table, env: ExecutionEnv): IndexedColumn[][] {
 
   for (const indexName of table.indexes) {
     const index = env.state.databaseForTable(table).indexes.get(indexName.toLowerCase());
-    if (index?.unique && !index.where) remember(index.columns);
+    if (index?.unique) remember(index.columns);
   }
 
   // INTEGER PRIMARY KEY / rowid uniqueness (no autoindex).
@@ -585,9 +624,7 @@ function conflictsForSets(
 
   const db = env.state.databaseForTable(table);
   for (const columns of sets) {
-    const desired = columns.map((column) =>
-      normalizeForCollation(values.get(normalizeColumnName(column.name)) ?? null, column.collate ?? "BINARY"),
-    );
+    const desired = indexValuesFromMap(columns, values, table, env);
     if (desired.some((value) => value === null)) continue;
 
     // INTEGER PRIMARY KEY / rowid map.
@@ -604,7 +641,7 @@ function conflictsForSets(
     let usedIndex = false;
     for (const indexName of table.indexes) {
       const index = db.indexes.get(indexName.toLowerCase());
-      if (!index?.unique || index.where) continue;
+      if (!index?.unique) continue;
       if (index.columns.length !== columns.length) continue;
       if (
         !index.columns.every((column, i) => normalizeColumnName(column.name) === normalizeColumnName(columns[i]!.name))
@@ -612,6 +649,7 @@ function conflictsForSets(
         continue;
       }
       usedIndex = true;
+      if (index.where && !indexWhereMatches(index.where, values, table, env)) continue;
       for (const rowid of index.store.lookup(desired)) {
         const row = table.get(rowid);
         if (row) push(row);
@@ -622,44 +660,88 @@ function conflictsForSets(
 
     // Slow fallback: full scan (should be rare once autoindexes exist).
     for (const row of table.scan()) {
-      const existing = indexValues(columns, row);
+      const existing = indexValues(columns, row, env, table);
       if (desired.every((value, index) => compareSql(value, existing[index] ?? null) === 0)) push(row);
     }
   }
   return found;
 }
 
-function indexValues(columns: IndexedColumn[], row: Row): SqlValue[] {
-  return columns.map((column) =>
-    normalizeForCollation(row.values.get(normalizeColumnName(column.name)) ?? null, column.collate ?? "BINARY"),
-  );
+function indexValues(columns: IndexedColumn[], row: Row, env?: ExecutionEnv, table?: Table): SqlValue[] {
+  if (!env || !table) {
+    return columns.map((column) =>
+      normalizeForCollation(row.values.get(normalizeColumnName(column.name)) ?? null, column.collate ?? "BINARY"),
+    );
+  }
+  const ctx = env.createEvalContext(scopeFor(table, row, table.name, env));
+  return columns.map((column) => {
+    const raw = column.expr ? evalExpr(column.expr, ctx) : (row.values.get(normalizeColumnName(column.name)) ?? null);
+    return normalizeForCollation(raw, column.collate ?? "BINARY");
+  });
+}
+
+function indexValuesFromMap(
+  columns: IndexedColumn[],
+  values: Map<string, SqlValue>,
+  table: Table,
+  env: ExecutionEnv,
+): SqlValue[] {
+  const fake: Row = { rowid: 0, values };
+  return indexValues(columns, fake, env, table);
+}
+
+function indexWhereMatches(where: Expr, values: Map<string, SqlValue>, table: Table, env: ExecutionEnv): boolean {
+  const fake: Row = { rowid: 0, values };
+  return isTruthySql(evalExpr(where, env.createEvalContext(scopeFor(table, fake, table.name, env)))) === true;
 }
 
 function checkForeignKeys(table: Table, row: Row, env: ExecutionEnv): void {
   if (!env.state.foreignKeysEnabled) return;
-  const references: { columns: string[]; table: string; refColumns: string[] | null }[] = [];
   for (const constraint of table.constraints) {
-    if (constraint.type === "foreign_key")
-      references.push({ columns: constraint.columns, table: constraint.refTable, refColumns: constraint.refColumns });
+    if (constraint.type !== "foreign_key") continue;
+    if (fkIsDeferred(constraint, env)) continue;
+    assertForeignKeySatisfied(row, constraint, env);
   }
-  for (const reference of references) {
-    const values = reference.columns.map((name) => row.values.get(normalizeColumnName(name)) ?? null);
-    if (values.some((value) => value === null)) continue;
-    const parent = env.state.getTable(reference.table);
-    const parentColumns =
-      reference.refColumns ?? parent.columns.filter((column) => column.primaryKey).map((column) => column.name);
-    if (
-      ![...parent.scan()].some((candidate) =>
-        values.every((value, index) => {
-          const parentColumn = parentColumns[index];
-          return (
-            parentColumn !== undefined &&
-            compareSql(value, candidate.values.get(normalizeColumnName(parentColumn)) ?? null) === 0
-          );
-        }),
-      )
-    ) {
-      throw new SqliteError("FOREIGN KEY constraint failed", "constraint_foreign", "SQLITE_CONSTRAINT_FOREIGNKEY");
+}
+
+function fkIsDeferred(
+  constraint: Extract<Table["constraints"][number], { type: "foreign_key" }>,
+  env: ExecutionEnv,
+): boolean {
+  return env.transactions.inTransaction && constraint.initiallyDeferred;
+}
+
+function assertForeignKeySatisfied(
+  row: Row,
+  constraint: Extract<Table["constraints"][number], { type: "foreign_key" }>,
+  env: ExecutionEnv,
+): void {
+  const values = constraint.columns.map((name) => row.values.get(normalizeColumnName(name)) ?? null);
+  if (values.some((value) => value === null)) return;
+  const parent = env.state.getTable(constraint.refTable);
+  const parentColumns =
+    constraint.refColumns ?? parent.columns.filter((column) => column.primaryKey).map((column) => column.name);
+  if (
+    ![...parent.scan()].some((candidate) =>
+      values.every((value, index) => {
+        const parentColumn = parentColumns[index];
+        return (
+          parentColumn !== undefined &&
+          compareSql(value, candidate.values.get(normalizeColumnName(parentColumn)) ?? null) === 0
+        );
+      }),
+    )
+  ) {
+    throw new SqliteError("FOREIGN KEY constraint failed", "constraint_foreign", "SQLITE_CONSTRAINT_FOREIGNKEY");
+  }
+}
+
+export function checkDeferredForeignKeys(env: ExecutionEnv): void {
+  if (!env.state.foreignKeysEnabled) return;
+  for (const table of env.state.tables.values()) {
+    for (const constraint of table.constraints) {
+      if (constraint.type !== "foreign_key" || !constraint.initiallyDeferred) continue;
+      for (const row of table.scan()) assertForeignKeySatisfied(row, constraint, env);
     }
   }
 }
@@ -694,8 +776,9 @@ function applyReferentialDelete(parent: Table, row: Row, env: ExecutionEnv): num
         } else if (constraint.onDelete === "SET DEFAULT") {
           const updated = updateOne(child, candidate, defaultUpdates(child, constraint.columns, env), env);
           changes += 1 + updated.cascaded;
-        } else
+        } else if (!fkIsDeferred(constraint, env)) {
           throw new SqliteError("FOREIGN KEY constraint failed", "constraint_foreign", "SQLITE_CONSTRAINT_FOREIGNKEY");
+        }
       }
     }
   }
@@ -738,7 +821,7 @@ function applyReferentialUpdate(parent: Table, before: Row, after: Row, env: Exe
         } else if (constraint.onUpdate === "SET DEFAULT") {
           const updated = updateOne(child, candidate, defaultUpdates(child, constraint.columns, env), env);
           changes += 1 + updated.cascaded;
-        } else {
+        } else if (!fkIsDeferred(constraint, env)) {
           throw new SqliteError("FOREIGN KEY constraint failed", "constraint_foreign", "SQLITE_CONSTRAINT_FOREIGNKEY");
         }
       }

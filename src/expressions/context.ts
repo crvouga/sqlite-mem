@@ -3,6 +3,7 @@ import type { FunctionContext, FunctionRegistry } from "../functions/registry.ts
 import type { SqlValue, StorageClass } from "../types/value.ts";
 import type { FtsMatchCursor } from "../vtable/fts5.ts";
 
+/** Column / parameter / function resolution used by {@link evalExpr}. */
 export interface EvalContext {
   resolveColumn(table: string | null, name: string): SqlValue;
   resolveStorageClass?(table: string | null, name: string): StorageClass;

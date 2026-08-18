@@ -1,6 +1,7 @@
 import { appSpecs } from "./app.ts";
 import { compareAllSpecs } from "./compare-js.ts";
 import { indexSpecs, joinSpecs, parserSpecs, startupSpecs, transactionSpecs } from "./engine-ops.ts";
+import { hotspotSpecs } from "./hotspots.ts";
 import { ftsSpecs, jsonSpecs } from "./json-fts.ts";
 import { largeSpecs } from "./large.ts";
 import { microSpecs } from "./micro.ts";
@@ -20,6 +21,7 @@ export function allSpecs(): BenchSpec[] {
     ...transactionSpecs(),
     ...indexSpecs(),
     ...joinSpecs(),
+    ...hotspotSpecs(),
     ...snapshotSpecs(),
   ];
 }

@@ -14,7 +14,13 @@ import { evalExpr } from "../expressions/eval.ts";
 import { evaluateTableFunction } from "../functions/table-valued.ts";
 import { buildSqliteMaster, buildSqliteSchema } from "../schema/catalog.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
-import { tryIndexedTableRows, tryJoinEqualityKeys, tryJoinProbe, whereFullyCovered } from "../planner/access.ts";
+import {
+  tryIndexedOrder,
+  tryIndexedTableRows,
+  tryJoinEqualityKeys,
+  tryJoinProbe,
+  whereFullyCovered,
+} from "../planner/access.ts";
 import { serializeIndexKey } from "../indexes/index.ts";
 import type { Row } from "../storage/row.ts";
 import type { Table } from "../storage/table.ts";
@@ -140,6 +146,7 @@ function executeWith(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalContext):
 function executeSelectCore(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalContext): ResultSet {
   let scopes: ScopeRow[];
   let skipWhere = false;
+  let skipOrder = false;
   if (stmt.from && stmt.where) {
     const indexed = tryIndexedTableRows(stmt.from, stmt.where, env);
     if (indexed) {
@@ -148,6 +155,28 @@ function executeSelectCore(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalCon
     } else {
       scopes = scanFrom(stmt.from, env, parent);
     }
+  } else if (stmt.from && stmt.orderBy.length === 1 && stmt.orderBy[0]) {
+    let take: number | undefined;
+    if (stmt.limit) {
+      const ctx = env.createEvalContext(null, parent);
+      const limitValue = toInteger(evalExpr(stmt.limit.limit, ctx));
+      const offsetValue = stmt.limit.offset ? toInteger(evalExpr(stmt.limit.offset, ctx)) : 0;
+      if (limitValue !== null && offsetValue !== null) {
+        const offset = Math.max(0, Number(offsetValue));
+        const limit = Number(limitValue);
+        take = limit < 0 ? undefined : offset + limit;
+      }
+    }
+    const ordered = tryIndexedOrder(
+      stmt.from,
+      { expr: stmt.orderBy[0].expr, dir: stmt.orderBy[0].dir ?? "ASC" },
+      env,
+      take,
+    );
+    if (ordered) {
+      scopes = scopesFromTableRows(ordered.table, ordered.rows, ordered.alias, env, parent);
+      skipOrder = true;
+    } else scopes = scanFrom(stmt.from, env, parent);
   } else {
     scopes = stmt.from ? scanFrom(stmt.from, env, parent) : [{ cells: [] }];
   }
@@ -234,7 +263,7 @@ function executeSelectCore(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalCon
       return true;
     });
   }
-  if (stmt.orderBy.length > 0) {
+  if (stmt.orderBy.length > 0 && !skipOrder) {
     output.sort((left, right) => compareOutput(left, right, stmt.orderBy, columns, env, parent));
   }
   if (stmt.limit) {
@@ -782,8 +811,9 @@ function windowValue(
     }
   }
   if (expr.func.type === "aggregate") {
-    const [start, end] = frameBounds(spec, index, partition.length, currentCtx, defaultFrameEnd);
-    return aggregateValue(expr.func, partition.slice(start, end + 1), env, parent);
+    const [start, end] = frameBounds(spec, index, partition.length, currentCtx, defaultFrameEnd, orderKeys);
+    const framed = frameRows(partition, start, end, index, orderKeys, spec.frame?.exclude ?? null);
+    return aggregateValue(expr.func, framed, env, parent);
   }
   const name = expr.func.name.toLowerCase();
   const args = expr.func.args === "*" ? [] : expr.func.args;
@@ -805,12 +835,14 @@ function windowValue(
     const target = name === "lag" ? index - offset : index + offset;
     return values[target]?.[0] ?? evaluated[2] ?? null;
   }
-  const [start, end] = frameBounds(spec, index, partition.length, currentCtx, defaultFrameEnd);
-  if (name === "first_value") return values[start]?.[0] ?? null;
-  if (name === "last_value") return values[end]?.[0] ?? null;
+  const [start, end] = frameBounds(spec, index, partition.length, currentCtx, defaultFrameEnd, orderKeys);
+  const framed = frameRows(partition, start, end, index, orderKeys, spec.frame?.exclude ?? null);
+  const framedValues = framed.map((row) => args.map((arg) => evalExpr(arg, env.createEvalContext(row, parent))));
+  if (name === "first_value") return framedValues[0]?.[0] ?? null;
+  if (name === "last_value") return framedValues[framedValues.length - 1]?.[0] ?? null;
   if (name === "nth_value") {
-    const target = start + Number(toInteger(evaluated[1] ?? null) ?? 0) - 1;
-    return target >= start && target <= end ? (values[target]?.[0] ?? null) : null;
+    const target = Number(toInteger(evaluated[1] ?? null) ?? 0) - 1;
+    return target >= 0 && target < framedValues.length ? (framedValues[target]?.[0] ?? null) : null;
   }
   if (name === "ntile") {
     const buckets = Math.max(1, Number(toInteger(evaluated[0] ?? 1) ?? 1));
@@ -866,11 +898,17 @@ function frameBounds(
   length: number,
   ctx: EvalContext,
   defaultFrameEnd: number,
+  orderKeys: SqlValue[][],
 ): [number, number] {
   if (!spec.frame) return [0, spec.orderBy.length > 0 ? defaultFrameEnd : Math.max(0, length - 1)];
+  const isRangeLike = spec.frame.type === "RANGE" || spec.frame.type === "GROUPS";
+  let peerFirst = index;
+  if (isRangeLike && spec.orderBy.length > 0) {
+    while (peerFirst > 0 && rowsEqual(orderKeys[peerFirst]!, orderKeys[peerFirst - 1]!)) peerFirst--;
+  }
   const bound = (
     item: WindowSpec["frame"] extends infer _ ? NonNullable<WindowSpec["frame"]>["start"] : never,
-    _start: boolean,
+    isStart: boolean,
   ): number => {
     switch (item.kind) {
       case "unbounded_preceding":
@@ -878,6 +916,7 @@ function frameBounds(
       case "unbounded_following":
         return Math.max(0, length - 1);
       case "current_row":
+        if (isRangeLike) return isStart ? peerFirst : defaultFrameEnd;
         return index;
       case "preceding":
         return Math.max(0, index - Number(toInteger(evalExpr(item.expr, ctx)) ?? 0));
@@ -886,6 +925,28 @@ function frameBounds(
     }
   };
   return [bound(spec.frame.start, true), bound(spec.frame.end, false)];
+}
+
+function frameRows(
+  partition: ScopeRow[],
+  start: number,
+  end: number,
+  index: number,
+  orderKeys: SqlValue[][],
+  exclude: "no_others" | "current_row" | "group" | "ties" | null,
+): ScopeRow[] {
+  let peerFirst = index;
+  let peerLast = index;
+  while (peerFirst > 0 && rowsEqual(orderKeys[peerFirst]!, orderKeys[peerFirst - 1]!)) peerFirst--;
+  while (peerLast + 1 < partition.length && rowsEqual(orderKeys[peerLast]!, orderKeys[peerLast + 1]!)) peerLast++;
+  const rows: ScopeRow[] = [];
+  for (let i = Math.max(0, start); i <= end && i < partition.length; i++) {
+    if (exclude === "current_row" && i === index) continue;
+    if (exclude === "group" && i >= peerFirst && i <= peerLast) continue;
+    if (exclude === "ties" && i >= peerFirst && i <= peerLast && i !== index) continue;
+    rows.push(partition[i]!);
+  }
+  return rows;
 }
 
 function compareScopes(

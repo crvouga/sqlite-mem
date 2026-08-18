@@ -21,10 +21,25 @@ function requireFile(rel: string): void {
   }
 }
 
+async function requireJsdoc(rel: string, needles: string[]): Promise<void> {
+  const abs = join(root, rel);
+  if (!existsSync(abs)) return;
+  const text = await Bun.file(abs).text();
+  for (const needle of needles) {
+    if (!text.includes(needle)) {
+      fail(
+        `${rel} is missing JSDoc ${JSON.stringify(needle)}. Keep comments on the source declarations and do not set removeComments.`,
+      );
+    }
+  }
+}
+
 console.log("verify-package: checking build outputs…");
 
 requireFile("dist/index.js");
 requireFile("dist/index.d.ts");
+requireFile("dist/api/database.d.ts");
+requireFile("dist/api/statement.d.ts");
 requireFile("LICENSE");
 requireFile("README.md");
 requireFile("package.json");
@@ -56,6 +71,57 @@ if (!pkg.publishConfig?.access) {
   fail('package.json must set publishConfig.access (expected "public")');
 }
 
+console.log("verify-package: checking JSDoc in declaration emit…");
+await requireJsdoc("dist/api/database.d.ts", ["Pure TypeScript in-memory SQLite", "@example", "@param", "@throws"]);
+await requireJsdoc("dist/api/statement.d.ts", ["Prepared SQL statement", "@param", "@throws"]);
+
+console.log("verify-package: checking published TypeScript types…");
+const dtsFiles = [...new Bun.Glob("**/*.d.ts").scanSync({ cwd: join(root, "dist") })].map((rel) => `dist/${rel}`);
+if (dtsFiles.length === 0) {
+  fail("No .d.ts files under dist/");
+}
+const tsSpecifier = /(?:from|import)\s*(?:\(\s*)?["'][^"']+\.ts["']/;
+for (const rel of dtsFiles) {
+  const text = await Bun.file(join(root, rel)).text();
+  if (tsSpecifier.test(text)) {
+    fail(`${rel} contains .ts import specifiers; consumers cannot resolve those paths`);
+  }
+}
+
+const indexDts = await Bun.file(join(root, "dist/index.d.ts")).text();
+for (const exported of [
+  "Database",
+  "Statement",
+  "SqliteError",
+  "BindValue",
+  "QueryRow",
+  "QueryValue",
+  "ErrorCategory",
+  "ParsedStatement",
+  "RunResult",
+  "SqlJsonText",
+  "EvalContext",
+]) {
+  if (!indexDts.includes(exported)) {
+    fail(`dist/index.d.ts is missing public type ${exported}`);
+  }
+}
+
+const databaseDts = await Bun.file(join(root, "dist/api/database.d.ts")).text();
+for (const leaked of ["readonly state", "readonly prng", "readonly transactions", "now: Clock", "assertOpen("]) {
+  if (databaseDts.includes(leaked)) {
+    fail(`dist/api/database.d.ts still publishes internal member (${leaked}); enable stripInternal`);
+  }
+}
+
+const statementDts = await Bun.file(join(root, "dist/api/statement.d.ts")).text();
+if (!/\bprivate constructor\b/.test(statementDts)) {
+  fail("dist/api/statement.d.ts must keep Statement's constructor private so consumers use Database.prepare");
+}
+if (/\bcreateStatement\b/.test(statementDts) || /\bstatic create\b/.test(statementDts)) {
+  fail("dist/api/statement.d.ts still publishes Statement construction helpers; mark them @internal");
+}
+
 if (errors.length > 0) {
   console.error("");
   console.error("verify-package FAILED — fix the issues above before publishing.");
@@ -85,7 +151,15 @@ try {
 }
 
 const files = packEntries[0]?.files?.map((f) => f.path) ?? [];
-const requiredInTarball = ["dist/index.js", "dist/index.d.ts", "package.json", "LICENSE", "README.md"];
+const requiredInTarball = [
+  "dist/index.js",
+  "dist/index.d.ts",
+  "dist/api/database.d.ts",
+  "dist/api/statement.d.ts",
+  "package.json",
+  "LICENSE",
+  "README.md",
+];
 for (const needed of requiredInTarball) {
   if (!files.some((p) => p === needed || p.endsWith(`/${needed}`))) {
     fail(`npm tarball is missing ${needed}. Check package.json "files" and the build output.`);
@@ -102,6 +176,24 @@ console.log("verify-package: running publint…");
 const publint = await $`bunx publint`.cwd(root).nothrow();
 if (publint.exitCode !== 0) {
   fail("publint reported packaging problems — see output above");
+  console.error("");
+  console.error("verify-package FAILED.");
+  process.exit(1);
+}
+
+console.log("verify-package: typechecking package consumers (NodeNext)…");
+const packageTypes = await $`bun run typecheck:package`.cwd(root).nothrow();
+if (packageTypes.exitCode !== 0) {
+  fail("Published .d.ts failed consumer typecheck (tsc -p tsconfig.package.json)");
+  console.error("");
+  console.error("verify-package FAILED.");
+  process.exit(1);
+}
+
+console.log("verify-package: running arethetypeswrong…");
+const attw = await $`bunx --bun attw --pack . --profile esm-only`.cwd(root).nothrow();
+if (attw.exitCode !== 0) {
+  fail("arethetypeswrong reported type packaging problems — see output above");
   console.error("");
   console.error("verify-package FAILED.");
   process.exit(1);

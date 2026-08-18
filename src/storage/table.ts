@@ -2,6 +2,7 @@ import type { Expr, TableConstraint } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
 import { serializeIndexKey } from "../indexes/index.ts";
 import { compareWithCollation, normalizeForCollation } from "../types/collation.ts";
+import { applyStrictValue } from "../types/strict.ts";
 import type { Affinity, SqlValue } from "../types/value.ts";
 import { affinityFromTypeName, applyAffinity, cloneSqlValue, compareSql } from "../types/value.ts";
 import type { Row, Rowid, RowValues } from "./row.ts";
@@ -44,6 +45,7 @@ export interface TableOptions {
   indexes?: string[];
   originalSql?: string | null;
   withoutRowid?: boolean;
+  strict?: boolean;
 }
 
 export class Table {
@@ -55,11 +57,13 @@ export class Table {
   indexes: string[];
   originalSql: string | null;
   withoutRowid: boolean;
+  strict: boolean;
   /** Clustered PK key string → row for WITHOUT ROWID tables. */
   clusteredRows: Map<string, Row>;
   private scanCache: Row[] | null = null;
   /** Lazy covering hashes: column nameLower → serializeIndexKey → rowids. */
   private equalityHashes: Map<string, Map<string, Rowid[]>> | null = null;
+  frozen = false;
 
   constructor(name: string, columns: ColumnInfo[], options: TableOptions = {}) {
     this.name = name;
@@ -70,6 +74,7 @@ export class Table {
     this.indexes = [...(options.indexes ?? [])];
     this.originalSql = options.originalSql ?? null;
     this.withoutRowid = options.withoutRowid ?? false;
+    this.strict = options.strict ?? false;
     this.clusteredRows = new Map();
     this.scanCache = null;
   }
@@ -112,7 +117,7 @@ export class Table {
 
   /** True when the table has no user constraints that DML must enforce beyond hidden rowid. */
   isUnconstrained(): boolean {
-    if (this.withoutRowid || this.indexes.length > 0 || this.constraints.length > 0) return false;
+    if (this.withoutRowid || this.strict || this.indexes.length > 0 || this.constraints.length > 0) return false;
     for (const column of this.columns) {
       if (column.notNull || column.primaryKey || column.unique || column.generated || column.defaultExpr) return false;
     }
@@ -141,7 +146,7 @@ export class Table {
   }
 
   ensureEqualityHash(columnLower: string): boolean {
-    if (this.rows.size < EQUALITY_HASH_MIN_ROWS) return false;
+    if (this.frozen || this.rows.size < EQUALITY_HASH_MIN_ROWS) return false;
     const column = this.columns.find((item) => item.nameLower === columnLower);
     if (!column) return false;
     this.equalityHashes ??= new Map();
@@ -195,6 +200,7 @@ export class Table {
   }
 
   insert(input: InsertRow | RowValues, options?: InsertOptions): Rowid {
+    this.assertMutable();
     const supplied = isInsertRow(input) ? input : { values: input };
     const values = options?.prepared
       ? supplied.values instanceof Map
@@ -247,6 +253,7 @@ export class Table {
   }
 
   update(rowid: Rowid, updates: RowValues): Row | undefined {
+    this.assertMutable();
     const key = canonicalRowid(rowid);
     const existing = this.rows.get(key);
     if (!existing) return undefined;
@@ -293,6 +300,7 @@ export class Table {
   }
 
   delete(rowid: Rowid): boolean {
+    this.assertMutable();
     const key = canonicalRowid(rowid);
     const existing = this.rows.get(key);
     if (!existing) return false;
@@ -319,11 +327,20 @@ export class Table {
       indexes: this.indexes,
       originalSql: this.originalSql,
       withoutRowid: this.withoutRowid,
+      strict: this.strict,
     });
     copy.nextRowid = this.nextRowid;
     for (const [rowid, row] of this.rows) copy.rows.set(rowid, cloneRow(row));
     for (const [clusterKey, row] of this.clusteredRows) copy.clusteredRows.set(clusterKey, cloneRow(row));
     return copy;
+  }
+
+  freeze(): void {
+    this.frozen = true;
+  }
+
+  private assertMutable(): void {
+    if (this.frozen) throw new SqliteError("internal: cannot mutate a frozen table", "other");
   }
 
   /** Rebuild clustered storage after snapshot decode or bulk load. */
@@ -344,7 +361,12 @@ export class Table {
     const result = new Map<string, SqlValue>();
     for (const column of this.columns) {
       const key = normalizeColumnName(column.name);
-      result.set(key, applyAffinity(cloneSqlValue(supplied.get(key) ?? null), column.affinity));
+      result.set(
+        key,
+        this.strict
+          ? applyStrictValue(cloneSqlValue(supplied.get(key) ?? null), column.typeName ?? "", this.name, column.name)
+          : applyAffinity(cloneSqlValue(supplied.get(key) ?? null), column.affinity),
+      );
     }
     return result;
   }

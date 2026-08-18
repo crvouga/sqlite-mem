@@ -34,7 +34,11 @@
       "preset": "recommended",
       "complexity": {
         "noForEach": "off",
-        "noUselessSwitchCase": "off"
+        "noUselessSwitchCase": "off",
+        "noUselessContinue": "error"
+      },
+      "correctness": {
+        "noUnusedFunctionParameters": "error"
       },
       "style": {
         "noNonNullAssertion": "off",

@@ -22,10 +22,10 @@ const current = (await currentFile.json()) as BenchReport;
 const basePlatform = baseline.environment.platform;
 const currentPlatform = current.environment.platform;
 if (basePlatform && currentPlatform && basePlatform !== currentPlatform) {
-  console.log(
-    `Skipping regression gate: baseline platform=${basePlatform} current=${currentPlatform}. Refresh benchmarks/results/ci-baseline.json from CI to enable the gate.`,
+  console.error(
+    `Baseline platform=${basePlatform} current=${currentPlatform}. Re-record benchmarks/results/ci-baseline.json on ${currentPlatform} (CI is linux). The regression gate fails closed on a platform mismatch.`,
   );
-  process.exit(0);
+  process.exit(1);
 }
 const slowerThan = Number(process.env.BENCH_REGRESSION_FACTOR ?? 2.5);
 const regressions = compareReports(baseline, current, slowerThan);

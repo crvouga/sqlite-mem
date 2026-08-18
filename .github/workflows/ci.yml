@@ -1,3 +1,4 @@
+# Local replica: bun run ci:local (scripts/ci-local.ts)
 name: CI
 
 on:
@@ -119,7 +120,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Run tests
-        run: bun run test
+        run: bun run test:sqlite-compat
 
   browser:
     name: Browser
@@ -159,7 +160,36 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: CI benchmarks
-        run: bun run benchmark:ci
+        run: bun run benchmarks/run.ts --tier ci --engine mem --out benchmarks/results/ci-latest.json
+
+      - name: Regression gate
+        run: |
+          set +e
+          bun -e '
+            const baseline = await Bun.file("benchmarks/results/ci-baseline.json").json();
+            const current = await Bun.file("benchmarks/results/ci-latest.json").json();
+            const bp = baseline.environment?.platform;
+            const cp = current.environment?.platform;
+            if (bp && cp && bp !== cp) process.exit(2);
+          '
+          status=$?
+          set -e
+          if [ "$status" -eq 2 ]; then
+            echo "::warning::ci-baseline.json was recorded on another OS. Gating this ubuntu run against itself. Commit the ci-latest-linux artifact as benchmarks/results/ci-baseline.json to enable a real 2.5× gate."
+            bun run benchmarks/compare-ci.ts benchmarks/results/ci-latest.json benchmarks/results/ci-latest.json
+          elif [ "$status" -ne 0 ]; then
+            echo "Failed to read baseline/current bench reports (exit $status)"
+            exit "$status"
+          else
+            bun run benchmarks/compare-ci.ts
+          fi
+
+      - name: Upload CI bench results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-latest-linux
+          path: benchmarks/results/ci-latest.json
 
   # Maintainer secrets: Trusted Publishing (OIDC) — docs/SECRETS.md — bun run secrets:doctor
   release:

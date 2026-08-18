@@ -219,7 +219,7 @@ export function compareSqliteSpecs(): BenchSpec[] {
     return prepare(engine, "SELECT small.id, large.label FROM small JOIN large ON large.k = small.k");
   };
 
-  return coreOps({
+  const sqliteCore = coreOps({
     prefix: "compare/sqlite",
     engines: "compare-sqlite",
     createUsers,
@@ -228,6 +228,54 @@ export function compareSqliteSpecs(): BenchSpec[] {
     insertSql: "INSERT INTO users(id, email, name, created_at) VALUES (?,?,?,?)",
     lookupSql: "SELECT id, name FROM users WHERE id = ?",
   });
+
+  const extra: BenchSpec[] = [];
+  for (const { n, tiers } of SIZES) {
+    extra.push(
+      spec({
+        name: `compare/sqlite/range-gt/${n}`,
+        operation: "indexed created_at > ?",
+        datasetSize: n,
+        tiers,
+        engines: "compare-sqlite",
+        layer: "engine",
+        warmup: 1,
+        iterations: n >= 1000 ? 8 : 12,
+        setup: async (engine) => {
+          await fillUsers(engine, n);
+          await exec(engine, "CREATE INDEX idx_users_created ON users(created_at)");
+          return prepare(engine, "SELECT id FROM users WHERE created_at > ?");
+        },
+        fn: async (_engine, ctx) => {
+          await stmtAll(ctx as BenchStatement, 1_700_000_000 + Math.floor(n * 0.8));
+        },
+      }),
+      spec({
+        name: `compare/sqlite/index-prefix/${n}`,
+        operation: "composite index prefix",
+        datasetSize: n,
+        tiers,
+        engines: "compare-sqlite",
+        layer: "engine",
+        warmup: 1,
+        iterations: n >= 1000 ? 8 : 12,
+        setup: async (engine) => {
+          await exec(engine, "CREATE TABLE events (id INTEGER PRIMARY KEY, a INTEGER NOT NULL, b INTEGER NOT NULL)");
+          await exec(engine, "CREATE INDEX idx_events_ab ON events(a, b)");
+          const ins = await prepare(engine, "INSERT INTO events(id, a, b) VALUES (?,?,?)");
+          await tx(engine, async () => {
+            for (let i = 1; i <= n; i++) await stmtRun(ins, i, Math.floor(i / 10), i % 10);
+          });
+          return prepare(engine, "SELECT id FROM events WHERE a = ?");
+        },
+        fn: async (_engine, ctx) => {
+          await stmtAll(ctx as BenchStatement, Math.floor(n / 20));
+        },
+      }),
+    );
+  }
+
+  return [...sqliteCore, ...extra];
 }
 
 /** Both comparison tracks. */

@@ -37,6 +37,7 @@ export type BinaryOp =
 
 export type UnaryOp = "+" | "-" | "~" | "NOT";
 
+/** Parsed SQL expression AST (literals, operators, functions, subqueries, …). */
 export type Expr =
   | LiteralExpr
   | NullExpr
@@ -145,6 +146,7 @@ export interface FrameSpec {
   type: "ROWS" | "RANGE" | "GROUPS";
   start: FrameBound;
   end: FrameBound;
+  exclude: "no_others" | "current_row" | "group" | "ties" | null;
 }
 
 export type FrameBound =
@@ -337,6 +339,7 @@ export interface InsertStmt {
 
 export interface UpsertClause {
   targetColumns: string[] | null;
+  targetExprs: Expr[] | null;
   targetWhere: Expr | null;
   action: "nothing" | { set: SetItem[]; where: Expr | null };
 }
@@ -376,6 +379,7 @@ export interface CreateTableStmt {
   constraints: TableConstraint[];
   asSelect: SelectStmt | null;
   withoutRowid: boolean;
+  strict: boolean;
 }
 
 export interface ColumnDef {
@@ -397,6 +401,8 @@ export type ColumnConstraint =
       columns: string[] | null;
       onDelete: FkAction | null;
       onUpdate: FkAction | null;
+      deferrable: boolean;
+      initiallyDeferred: boolean;
     }
   | { type: "generated"; expr: Expr; stored: boolean };
 
@@ -412,12 +418,16 @@ export type TableConstraint =
       onDelete: FkAction | null;
       onUpdate: FkAction | null;
       name: string | null;
+      deferrable: boolean;
+      initiallyDeferred: boolean;
     };
 
 export interface IndexedColumn {
   name: string;
   collate: string | null;
   order: "ASC" | "DESC" | null;
+  /** Present when the index key is an expression rather than a bare column. */
+  expr?: Expr | null;
 }
 
 export type ConflictAction = "ROLLBACK" | "ABORT" | "FAIL" | "IGNORE" | "REPLACE";

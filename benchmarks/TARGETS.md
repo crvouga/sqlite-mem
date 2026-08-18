@@ -26,7 +26,7 @@ Targets were set **after** measuring the unoptimized baseline on 2026-08-17, not
 | --- | --- | --- | --- |
 | Point lookups/sec (PK, 1000 rows) | ~600 | > 20,000 | PASS (~86k) |
 | Prepared executes/sec | ~640 | > 20,000 | PASS (~114k) |
-| Inserts/sec (1000 in a transaction) | ~1,100 | ≥ baseline (insert path not rewritten) | PASS (~1,090) |
+| Inserts/sec (1000 in a transaction) | ~1,100 | ≥ baseline (insert path not rewritten) | SUPERSEDED — INTEGER PK + secondary index ~237k/sec on Bun (`hotspot/insert-pk/1000`) |
 
 ## Snapshots (1 MB payload DB, mobile)
 
@@ -51,6 +51,18 @@ Targets were set **after** measuring the unoptimized baseline on 2026-08-17, not
 Chrome `performance.memory` on this profile is quantized (~10 MB) and is not a reliable peak gauge. Bun heap deltas for 1 MB snapshot export stay on the order of a few MB after the growable `Uint8Array` writer (previously a `number[]` byte builder). Target: **no multi-copy `number[]` snapshot buffer**. PASS.
 
 Hydration adopts decoded state (no extra `DatabaseState.clone()`). Target: **peak amplification from an extra full clone on restore = removed**. PASS.
+
+## Hotspot targets (Bun, after production pass)
+
+Measured on darwin arm64 Bun 1.3.14; CI gate uses linux numbers from `ci-baseline.json`.
+
+| Workload | Target | Status |
+| --- | --- | --- |
+| Indexed `WHERE created_at > ?` / 1000 | not scan-class; <10× bun:sqlite | PASS vs unindexed scan (~5× faster) |
+| Leftmost prefix `INDEX(a,b)` / 1000 | not scan-class | PASS |
+| `ORDER BY indexed LIMIT 50` / 1000 | not scan-class | PASS (index walk + LIMIT) |
+| `BEGIN` on 1000-row DB | not a full row clone | PASS (~0.03 ms) |
+| 1000 INTEGER PK + secondary index inserts | ≥10× ~3,200/sec | PASS (~237k/sec) |
 
 ## How to re-measure
 

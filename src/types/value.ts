@@ -1,9 +1,9 @@
-/** SQLite storage classes / SQL values used throughout the engine. */
-
+/** SQLite storage class of a {@link SqlValue} (`null` / `integer` / `real` / `text` / `blob`). */
 export type StorageClass = "null" | "integer" | "real" | "text" | "blob";
 
 /** Integer-valued REAL that must not collapse to the integer storage class. */
 export class SqlReal {
+  /** IEEE float payload (`-0` already canonicalized to `+0`). */
   readonly value: number;
   constructor(value: number) {
     this.value = canonicalizeNumber(value);
@@ -19,6 +19,7 @@ export class SqlReal {
 /** SQLite JSON subtype (74 / 'J') — text that nested JSON APIs treat as JSON, not a string. */
 export const JSON_SUBTYPE = 74;
 
+/** TEXT value with SQLite JSON subtype 74 — nested JSON APIs treat it as JSON, not a string. */
 export class SqlJsonText {
   readonly value: string;
   readonly subtype = JSON_SUBTYPE;
@@ -33,8 +34,25 @@ export class SqlJsonText {
   }
 }
 
+/** A SQLite value: NULL, integer/real, text, blob, or a typed REAL/JSON wrapper. */
 export type SqlValue = null | number | bigint | string | Uint8Array | SqlReal | SqlJsonText;
 
+/**
+ * A value as it appears in query result rows.
+ * {@link SqlReal} and {@link SqlJsonText} wrappers are unwrapped at the JS API surface.
+ */
+export type QueryValue = null | number | bigint | string | Uint8Array;
+
+/** A result row keyed by column name. Duplicate SELECT names keep the last value. */
+export type QueryRow = Record<string, QueryValue>;
+
+/**
+ * Values accepted by bind slots (`?`, `?NNN`, `:name`, `@name`, `$name`).
+ * Booleans become integer 0/1; {@link ArrayBuffer} is copied as a BLOB.
+ */
+export type BindValue = SqlValue | boolean | ArrayBuffer;
+
+/** Column type affinity from a declared type name (SQLite affinity rules). */
 export type Affinity = "TEXT" | "NUMERIC" | "INTEGER" | "REAL" | "BLOB";
 
 /** Canonicalize IEEE `-0` to `+0` for cross-runtime determinism. */
@@ -42,18 +60,22 @@ export function canonicalizeNumber(value: number): number {
   return Object.is(value, -0) ? 0 : value;
 }
 
+/** Wrap `value` as {@link SqlReal} so it stays REAL even when it is an integer. */
 export function asSqlReal(value: number): SqlReal {
   return new SqlReal(value);
 }
 
+/** `true` when `value` is a {@link SqlReal} wrapper. */
 export function isSqlReal(value: SqlValue): value is SqlReal {
   return value instanceof SqlReal;
 }
 
+/** `true` when `value` is a {@link SqlJsonText} wrapper. */
 export function isSqlJsonText(value: SqlValue): value is SqlJsonText {
   return value instanceof SqlJsonText;
 }
 
+/** Wrap `value` as {@link SqlJsonText} (JSON subtype 74). */
 export function asSqlJsonText(value: string): SqlJsonText {
   return new SqlJsonText(value);
 }
@@ -75,6 +97,7 @@ export function numberValueOf(value: number | bigint | SqlReal): number {
   return value;
 }
 
+/** SQLite storage class of `value` (`null` / `integer` / `real` / `text` / `blob`). */
 export function storageClassOf(value: SqlValue): StorageClass {
   if (value === null) return "null";
   if (value instanceof SqlReal) return "real";
@@ -87,6 +110,7 @@ export function storageClassOf(value: SqlValue): StorageClass {
   return "blob";
 }
 
+/** SQLite `typeof()` string for `value`. */
 export function typeofSql(value: SqlValue): string {
   const sc = storageClassOf(value);
   if (sc === "null") return "null";
@@ -107,6 +131,7 @@ export function affinityFromTypeName(typeName: string | null | undefined): Affin
   return "NUMERIC";
 }
 
+/** Apply column {@link Affinity} conversion rules to `value`. */
 export function applyAffinity(value: SqlValue, affinity: Affinity): SqlValue {
   if (value === null) return null;
 
@@ -139,6 +164,7 @@ export function applyAffinity(value: SqlValue, affinity: Affinity): SqlValue {
   }
 }
 
+/** Parse `value` as a number, or `null` when it is not numeric. */
 export function coerceToNumber(value: SqlValue): number | null {
   if (value === null) return null;
   if (value instanceof SqlReal) return value.value;
@@ -160,6 +186,7 @@ export function coerceToNumber(value: SqlValue): number | null {
   return null;
 }
 
+/** Truncate `value` toward zero as an integer, or `null` when it is not numeric. */
 export function toInteger(value: SqlValue): number | bigint | null {
   if (value === null) return null;
   if (typeof value === "bigint") return value;
@@ -173,6 +200,7 @@ export function toInteger(value: SqlValue): number | bigint | null {
   return null;
 }
 
+/** SQLite `=` / `IS` equality for two non-NULL values (`NULL = NULL` is false here). */
 export function sqlValueEquals(a: SqlValue, b: SqlValue): boolean {
   if (a === null || b === null) return false;
   if (a instanceof Uint8Array && b instanceof Uint8Array) {
@@ -259,14 +287,17 @@ function comparisonClass(v: SqlValue): number {
   return 3;
 }
 
+/** UTF-8 encode `s` (SQLite TEXT → BLOB). */
 export function utf8Encode(s: string): Uint8Array {
   return new TextEncoder().encode(s);
 }
 
+/** UTF-8 decode `b` (SQLite BLOB → TEXT). */
 export function utf8Decode(b: Uint8Array): string {
   return new TextDecoder().decode(b);
 }
 
+/** Deep-copy blobs and REAL/JSON wrappers; primitives are returned as-is. */
 export function cloneSqlValue(v: SqlValue): SqlValue {
   if (v instanceof Uint8Array) return new Uint8Array(v);
   if (v instanceof SqlReal) return new SqlReal(v.value);

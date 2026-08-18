@@ -5,9 +5,15 @@ import { defaultFunctionRegistry, type FunctionRegistry } from "../functions/reg
 import type { DatabaseState } from "../storage/database-state.ts";
 import type { Rowid } from "../storage/row.ts";
 import type { TransactionManager } from "../transactions/manager.ts";
-import type { SqlValue } from "../types/value.ts";
-import { type Affinity, canonicalizeNumber, storageClassOf } from "../types/value.ts";
 import type { ResultSet } from "./result.ts";
+import {
+  type Affinity,
+  canonicalizeNumber,
+  SqlJsonText,
+  SqlReal,
+  type SqlValue,
+  storageClassOf,
+} from "../types/value.ts";
 
 export interface Cell {
   table: string | null;
@@ -243,6 +249,7 @@ export function toSqlValue(value: unknown): SqlValue {
     return canonicalizeNumber(value);
   }
   if (typeof value === "boolean") return value ? 1 : 0;
+  if (value instanceof SqlReal || value instanceof SqlJsonText) return value;
   if (value instanceof Uint8Array) return new Uint8Array(value);
   if (value instanceof ArrayBuffer) return new Uint8Array(value);
   throw new SqliteError(`unsupported bind value: ${typeof value}`, "datatype_mismatch");

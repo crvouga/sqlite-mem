@@ -14,13 +14,19 @@ const MAGIC = utf8Encode("SQLM");
 const VERSION = 2;
 const VERSION_V1 = 1;
 
+/** PRNG + clock captured alongside schema/rows in a v2 snapshot. */
 export interface SnapshotRuntime {
+  /** Unsigned 64-bit {@link Prng} state. */
   prngState: bigint;
+  /** Clock instant as milliseconds since Unix epoch. */
   nowMs: number;
 }
 
+/** Result of {@link decodeDatabaseState}. */
 export interface DecodedSnapshot {
+  /** Restored catalog and table data. */
   state: DatabaseState;
+  /** Present for v2 snapshots; `null` for v1 (schema/rows only). */
   runtime: SnapshotRuntime | null;
 }
 
@@ -189,6 +195,7 @@ interface TableMeta {
   indexes: string[];
   originalSql: string | null;
   withoutRowid?: boolean;
+  strict?: boolean;
 }
 
 interface IndexMeta {
@@ -200,6 +207,11 @@ interface IndexMeta {
   originalSql: string | null;
 }
 
+/**
+ * Encode catalog, rows, and runtime into a sqlite-mem snapshot blob (not a `.sqlite` file).
+ *
+ * Prefer {@link Database.snapshot} unless you are serializing engine state directly.
+ */
 export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRuntime): Uint8Array {
   const writer = new Writer();
   writer.raw(MAGIC);
@@ -218,6 +230,7 @@ export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRunti
       indexes: [...table.indexes].sort(compareNames),
       originalSql: table.originalSql,
       withoutRowid: table.withoutRowid || undefined,
+      strict: table.strict || undefined,
     });
     writer.value(table.nextRowid);
     const rows = [...table.rows.values()].sort((a, b) => compareRowids(a.rowid, b.rowid));
@@ -248,6 +261,11 @@ export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRunti
   return writer.finish();
 }
 
+/**
+ * Decode a blob from {@link encodeDatabaseState} / {@link Database.snapshot}.
+ *
+ * @throws {SqliteError} If the magic, version, or payload is invalid.
+ */
 export function decodeDatabaseState(snapshot: Uint8Array): DecodedSnapshot {
   const reader = new Reader(snapshot);
   const magic = reader.raw(4);
@@ -271,6 +289,7 @@ export function decodeDatabaseState(snapshot: Uint8Array): DecodedSnapshot {
       indexes: meta.indexes,
       originalSql: meta.originalSql,
       withoutRowid: meta.withoutRowid ?? false,
+      strict: meta.strict ?? false,
     });
     table.nextRowid = asRowid(reader.value());
     const rowCount = reader.u32();

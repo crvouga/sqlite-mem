@@ -11,6 +11,7 @@
     "skipLibCheck": true,
     "declaration": true,
     "declarationMap": true,
+    "removeComments": false,
     "sourceMap": true,
     "outDir": "dist",
     "rootDir": "src",

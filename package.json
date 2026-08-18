@@ -11,11 +11,13 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     }
   },
   "files": [
     "dist",
+    "AGENTS.md",
     "COMPATIBILITY.md",
     "COMPATIBILITY-AUDIT.md",
     "README.md",
@@ -55,12 +57,14 @@
     "fts-surface": "bun run scripts/fts-oracle-surface.ts",
     "requirements": "bun run scripts/sqlite-requirements.ts",
     "typecheck": "tsc --noEmit",
+    "typecheck:package": "tsc --noEmit -p tsconfig.package.json",
     "format": "biome format --write .",
     "format:check": "biome format .",
-    "lint": "biome lint .",
-    "lint:fix": "biome lint --write .",
+    "lint": "biome lint --error-on-warnings .",
+    "lint:fix": "biome lint --write --error-on-warnings .",
     "clean": "rm -rf dist",
     "check": "bun run format:check && bun run lint && bun run typecheck && bun run test:sqlite-compat",
+    "ci:local": "bun run scripts/ci-local.ts",
     "commitlint": "commitlint --edit",
     "verify-package": "bun run scripts/verify-package.ts",
     "release:preflight": "bun run scripts/release-preflight.ts",
@@ -73,6 +77,7 @@
     "gh": "open https://github.com/crvouga/sqlite-mem/actions"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
     "@biomejs/biome": "^2.5.8",
     "@commitlint/cli": "^21.2.2",
     "@commitlint/config-conventional": "^21.2.2",

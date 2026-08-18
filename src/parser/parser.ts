@@ -861,10 +861,14 @@ export class Parser {
     if (!this.match("ON")) return null;
     this.expect("CONFLICT");
     let targetColumns: string[] | null = null;
+    let targetExprs: Expr[] | null = null;
     if (this.match("LPAREN")) {
       targetColumns = [];
+      targetExprs = [];
       do {
-        targetColumns.push(this.parseIdent());
+        const expr = this.parseExprPrec(PREC.ADD);
+        targetExprs.push(expr);
+        targetColumns.push(expr.type === "column" ? expr.name : "");
       } while (this.match("COMMA"));
       this.expect("RPAREN");
     }
@@ -873,14 +877,14 @@ export class Parser {
 
     this.expect("DO");
     if (this.match("NOTHING")) {
-      return { targetColumns, targetWhere, action: "nothing" };
+      return { targetColumns, targetExprs, targetWhere, action: "nothing" };
     }
     this.expect("UPDATE");
     this.expect("SET");
     const set = this.parseSetItems();
     let where: Expr | null = null;
     if (this.match("WHERE")) where = this.parseExpr();
-    return { targetColumns, targetWhere, action: { set, where } };
+    return { targetColumns, targetExprs, targetWhere, action: { set, where } };
   }
 
   private parseSetItems(): SetItem[] {
@@ -1080,6 +1084,7 @@ export class Parser {
         constraints: [],
         asSelect,
         withoutRowid: false,
+        strict: false,
       };
     }
 
@@ -1095,13 +1100,31 @@ export class Parser {
     } while (this.match("COMMA"));
     this.expect("RPAREN");
     let withoutRowid = false;
-    if (this.match("WITHOUT")) {
-      const word = this.parseIdent();
-      if (word.toUpperCase() !== "ROWID") this.syntaxError("expected ROWID after WITHOUT");
-      withoutRowid = true;
+    let strict = false;
+    while (!this.at("SEMI") && !this.at("EOF")) {
+      if (this.match("WITHOUT")) {
+        const word = this.parseIdent();
+        if (word.toUpperCase() !== "ROWID") this.syntaxError("expected ROWID after WITHOUT");
+        withoutRowid = true;
+      } else {
+        const word = this.parseIdent();
+        if (word.toUpperCase() !== "STRICT") this.syntaxError(`unexpected table option ${word}`);
+        strict = true;
+      }
+      this.match("COMMA");
     }
 
-    return { type: "create_table", ifNotExists, temp, name, columns, constraints, asSelect: null, withoutRowid };
+    return {
+      type: "create_table",
+      ifNotExists,
+      temp,
+      name,
+      columns,
+      constraints,
+      asSelect: null,
+      withoutRowid,
+      strict,
+    };
   }
 
   private parseColumnDef(): ColumnDef {
@@ -1252,7 +1275,8 @@ export class Parser {
       this.expect("RPAREN");
     }
     const { onDelete, onUpdate } = this.parseFkActions();
-    return { type: "references", table, columns, onDelete, onUpdate };
+    const { deferrable, initiallyDeferred } = this.parseDeferrable();
+    return { type: "references", table, columns, onDelete, onUpdate, deferrable, initiallyDeferred };
   }
 
   private parseTableConstraint(): TableConstraint {
@@ -1300,7 +1324,18 @@ export class Parser {
         this.expect("RPAREN");
       }
       const { onDelete, onUpdate } = this.parseFkActions();
-      return { type: "foreign_key", columns, refTable, refColumns, onDelete, onUpdate, name };
+      const { deferrable, initiallyDeferred } = this.parseDeferrable();
+      return {
+        type: "foreign_key",
+        columns,
+        refTable,
+        refColumns,
+        onDelete,
+        onUpdate,
+        name,
+        deferrable,
+        initiallyDeferred,
+      };
     }
     this.syntaxError("expected table constraint");
   }
@@ -1308,13 +1343,22 @@ export class Parser {
   private parseIndexedColumns(): IndexedColumn[] {
     const cols: IndexedColumn[] = [];
     do {
-      const name = this.parseIdent();
+      const expr = this.parseExprPrec(PREC.ADD);
       let collate: string | null = null;
+      let inner = expr;
+      if (inner.type === "collate") {
+        collate = inner.collation;
+        inner = inner.expr;
+      }
       if (this.match("COLLATE")) collate = this.parseIdent();
       let order: "ASC" | "DESC" | null = null;
       if (this.match("ASC")) order = "ASC";
       else if (this.match("DESC")) order = "DESC";
-      cols.push({ name, collate, order });
+      if (inner.type === "column" && inner.table === null) {
+        cols.push({ name: inner.name, collate, order });
+      } else {
+        cols.push({ name: "", collate, order, expr: inner });
+      }
     } while (this.match("COMMA"));
     return cols;
   }
@@ -1360,6 +1404,24 @@ export class Parser {
       else this.syntaxError("expected ON DELETE or ON UPDATE");
     }
     return { onDelete, onUpdate };
+  }
+
+  private parseDeferrable(): { deferrable: boolean; initiallyDeferred: boolean } {
+    let deferrable = false;
+    let initiallyDeferred = false;
+    if (this.match("NOT")) {
+      this.expect("DEFERRABLE");
+    } else if (this.match("DEFERRABLE")) {
+      deferrable = true;
+    }
+    if (this.match("INITIALLY")) {
+      if (this.match("DEFERRED")) initiallyDeferred = true;
+      else {
+        this.expect("IMMEDIATE");
+        initiallyDeferred = false;
+      }
+    }
+    return { deferrable, initiallyDeferred: deferrable && initiallyDeferred };
   }
 
   private parseOrConflict(): ConflictAction | null {
@@ -2040,14 +2102,20 @@ export class Parser {
       end = { kind: "current_row" };
     }
 
-    this.match("EXCLUDE");
-    if (this.at("CURRENT")) this.match("CURRENT");
-    if (this.at("ROW")) this.match("ROW");
-    if (this.at("TIES")) this.match("TIES");
-    if (this.at("OTHERS")) this.match("OTHERS");
-    if (this.at("GROUP")) this.match("GROUP");
+    let exclude: FrameSpec["exclude"] = null;
+    if (this.match("EXCLUDE")) {
+      if (this.match("NO")) {
+        this.expect("OTHERS");
+        exclude = "no_others";
+      } else if (this.match("CURRENT")) {
+        this.expect("ROW");
+        exclude = "current_row";
+      } else if (this.match("GROUP")) exclude = "group";
+      else if (this.match("TIES")) exclude = "ties";
+      else this.syntaxError("expected EXCLUDE CURRENT ROW, GROUP, TIES, or NO OTHERS");
+    }
 
-    return { type, start, end };
+    return { type, start, end, exclude };
   }
 
   private parseFrameBound(precedingSide: boolean): FrameBound {

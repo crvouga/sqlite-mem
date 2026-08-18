@@ -5,10 +5,22 @@ Pure TypeScript, completely in-memory SQLite implementation aiming for **full SQ
 - Runs in modern browsers and Node.js / Bun
 - **Zero** WASM, native bindings, workers, or filesystem dependencies
 - Entire database stored in memory
+- **Synchronous** ESM-only API (no Promises, no `require`)
 - **Verified against SQLite 3.51.0** (`bun:sqlite`) via differential contracts + fail-closed gate
 - Intentional differences: deterministic `random()` / `'now'` by default, and a custom snapshot format (not `.sqlite` files)
 
-See [COMPATIBILITY.md](COMPATIBILITY.md) for the matrix and [COMPATIBILITY-AUDIT.md](COMPATIBILITY-AUDIT.md) for the audit report.
+See [COMPATIBILITY.md](COMPATIBILITY.md) for the matrix and [COMPATIBILITY-AUDIT.md](COMPATIBILITY-AUDIT.md) for the audit report. Agents contributing to this repo: start with [AGENTS.md](AGENTS.md).
+
+## Documentation
+
+| Doc | For |
+| --- | --- |
+| [README.md](README.md) | Install, API, pitfalls (this file) |
+| [AGENTS.md](AGENTS.md) | Architecture, how to change code, test/compat gates |
+| [COMPATIBILITY.md](COMPATIBILITY.md) | Feature matrix + verify commands |
+| [COMPATIBILITY-AUDIT.md](COMPATIBILITY-AUDIT.md) | Audit evidence |
+| [docs/SECRETS.md](docs/SECRETS.md) | npm / CI publish setup |
+| [benchmarks/PERFORMANCE.md](benchmarks/PERFORMANCE.md) | Performance notes |
 
 ## Install
 
@@ -17,6 +29,8 @@ bun add @crvouga/sqlite-mem
 # or
 npm install @crvouga/sqlite-mem
 ```
+
+Requires Node.js ≥ 20 or Bun ≥ 1.1. The published package is **ESM only** (`import` from `@crvouga/sqlite-mem`).
 
 ## Usage
 
@@ -42,28 +56,110 @@ const db2 = new Database();
 db2.restore(snap);
 ```
 
+All methods are **synchronous** — do not `await` them. Browser and Node/Bun share the same in-memory JS surface (no filesystem; `ATTACH` opens a new empty in-memory schema, not a file).
+
 ## API
 
 ```ts
+import { Database, SqliteError } from "@crvouga/sqlite-mem";
+
+interface DatabaseOptions {
+  seed?: number | bigint;           // default 1 — PRNG for random() / randomblob()
+  now?: Date | (() => Date);        // default 2000-01-01T00:00:00.000Z
+  prng?: Prng;                      // optional; overrides seed
+}
+
 interface Database {
-  // seed default 1; now default 2000-01-01T00:00:00.000Z
-  constructor(options?: { seed?: number | bigint; now?: Date | (() => Date) });
-  exec(sql: string, params?: unknown[]): void;
-  query<T = Record<string, unknown>>(sql: string, params?: unknown[]): T[];
+  constructor(options?: DatabaseOptions);
+  exec(sql: string, params?: BindValue[]): void;
+  query<T = QueryRow>(sql: string, params?: BindValue[]): T[];
   prepare(sql: string): Statement;
   transaction<T>(fn: () => T): T;
   snapshot(): Uint8Array;
   restore(snapshot: Uint8Array): void;
   close(): void;
+  readonly changes: number;
+  readonly lastInsertRowid: number | bigint;
 }
 
 interface Statement {
-  bind(...params: unknown[]): Statement;
-  run(...params: unknown[]): { changes: number; lastInsertRowid: number | bigint };
-  all<T = Record<string, unknown>>(...params: unknown[]): T[];
-  get<T = Record<string, unknown>>(...params: unknown[]): T | undefined;
+  bind(...params: BindValue[]): Statement;
+  run(...params: BindValue[]): RunResult;
+  all<T = QueryRow>(...params: BindValue[]): T[];
+  get<T = QueryRow>(...params: BindValue[]): T | undefined;
+  result(...params: BindValue[]): ResultSet; // includes columns when zero rows
+}
+
+interface RunResult {
+  changes: number;
+  lastInsertRowid: number | bigint;
+}
+
+interface ResultSet {
+  columns: string[];
+  rows: QueryRow[];
+  values?: QueryValue[][];
+  changes: number;
+  lastInsertRowid: number | bigint;
+}
+
+class SqliteError extends Error {
+  readonly category: ErrorCategory; // syntax, no_such_table, constraint_unique, misuse, …
+  readonly sqliteCode?: string;
 }
 ```
+
+Stick to `Database`, `Statement`, and `SqliteError` for application code. The package also exports lower-level helpers (`parse`, `tokenize`, `evalExpr`, snapshot codec pieces, `SqlValue` utilities) for advanced use.
+
+### Method semantics
+
+| Method | Behavior |
+| --- | --- |
+| `exec(sql, params?)` | Runs all semicolon-separated statements; **discards** row results (`void`). Read `db.changes` / `db.lastInsertRowid` afterward if needed. |
+| `query(sql, params?)` | Same parse/run; returns rows of the **last** statement that has columns. Earlier SELECTs in a multi-statement script are dropped. |
+| `prepare(sql)` | Parses immediately; AST is reused. `run` / `all` / `get` / `result` with args override prior `bind()`. |
+| `transaction(fn)` | If idle: `BEGIN` → `fn()` → `COMMIT`, or `ROLLBACK` + rethrow. If already in a transaction: nested savepoint. Nested SQL `BEGIN` still errors. |
+| `snapshot` / `restore` | Custom binary format (see below). |
+| `close()` | Idempotent; rolls back an open transaction; further ops throw `misuse`. |
+
+SQL `BEGIN` / `COMMIT` / `ROLLBACK` / `SAVEPOINT` / `RELEASE` are first-class. Empty SQL throws `misuse` (`empty statement`).
+
+### Parameter binding
+
+Supported styles: `?`, `?NNN`, `:name`, `@name`, `$name`.
+
+- The JS API takes a **positional array** (or rest args) only — there is **no** `bind({ name: value })`.
+- Named parameters occupy slots in **first-occurrence order**; repeated names share one slot.
+- Prefixes are part of the name: `@x`, `$x`, and `:x` are **three different** parameters.
+- Names are lowercased for lookup (`:Left` ≡ `:left`).
+- Bindable: `null`, `string`, finite `number`, `bigint`, `boolean` → `0`/`1`, `Uint8Array` / `ArrayBuffer`.
+- Rejected: `undefined`, `Date`, plain objects, `NaN` / `Infinity`.
+
+```ts
+db.query(`SELECT ? AS a, :name AS b`, [1, "Alice"]);
+db.prepare(`SELECT @id AS id`).bind(42).get();
+```
+
+### Returned JavaScript types
+
+| SQL storage | JS value | Notes |
+| --- | --- | --- |
+| NULL | `null` | Never `undefined` |
+| INTEGER | `number` or `bigint` | `bigint` when outside `Number.MAX_SAFE_INTEGER` |
+| REAL | `number` | Including integer-valued reals (`1.0` → `1`); use SQL `typeof()` to distinguish from INTEGER |
+| TEXT | `string` | JSON subtype unwrapped to string |
+| BLOB | `Uint8Array` | |
+
+Duplicate column names collapse in row objects (last write wins). Use `stmt.result().values` for positional cells.
+
+### Snapshots
+
+- Format magic `SQLM` — **not** a portable `.sqlite` file and not loadable by the SQLite CLI.
+- Round-trips ordinary tables, views, indexes, change counters, PRNG state, and clock.
+- **Not** encoded: triggers, ATTACH’d schemas, virtual tables (FTS / RTREE / …), `userVersion`.
+- Cannot `restore()` while a transaction is open.
+- `restore()` replaces `now` with a fixed clock from the snapshot (a live `() => Date` is overwritten).
+- Equivalent databases produce byte-identical snapshots (schema/rows sorted).
 
 ## Determinism
 
@@ -86,12 +182,43 @@ SQLITE_MEM_FUZZ_SEED=12345 bun test tests/fuzz
 SQLITE_MEM_FUZZ_SEED=12345 SQLITE_MEM_FUZZ_PATH='0:1' bun test tests/fuzz  # exact replay
 ```
 
+## Compatibility notes for integrators
+
+Goal: drop-in SQL behavior vs SQLite **3.51.0**. Full matrix: [COMPATIBILITY.md](COMPATIBILITY.md).
+
+**Intentional differences:** custom `SQLM` snapshots; seeded `random()` / fixed `'now'`; no C API / on-disk DB / VFS.
+
+**Know these thin or partial areas** (do not assume full oracle fidelity):
+
+- FTS3/4/5 — largely implemented; shadow-table change counters intentionally diverge; some edges partial
+- `EXPLAIN` / `EXPLAIN QUERY PLAN` — stub shapes, not real bytecode
+- `INDEXED BY` / `NOT INDEXED` — parsed and discarded
+- Unknown `PRAGMA` succeeds with an empty result (SQLite-like); storage/journal/WAL pragmas N/A or no-op
+
+## Common pitfalls
+
+1. **Do not `await`** — the API is sync.
+2. **No named-object binds** — use positional arrays in declaration order.
+3. **Multi-statement `query`** returns only the last result set with columns.
+4. **`exec` returns `void`** — use `db.changes` / `stmt.run()` for counters.
+5. **`'now'` is not wall-clock** unless you pass `{ now: () => new Date() }`. Default is year 2000.
+6. **`random()` is seeded**, not OS entropy; snapshots restore the PRNG.
+7. **Snapshots are not `.sqlite` files** and do not round-trip FTS / triggers / ATTACH.
+8. **No better-sqlite3 extras** — no `iterate`, `pluck`/`raw`, `safeIntegers` option, `pragma()` helper, `loadExtension`, or SQLite-file `serialize()`.
+9. **Do not bind `Date` objects** — store unixepoch integers or ISO text.
+10. **Do not use `Number.isInteger` for SQL REAL vs INTEGER** — use SQL `typeof()`.
+
+Working examples beyond this README: `tests/contract/api/`, `tests/contract/parameters/`, `tests/browser/run.ts`.
+
 ## Development
 
-Requires [Bun](https://bun.sh).
+Requires [Bun](https://bun.sh). For architecture, change checklists, and how to add contract tests, see **[AGENTS.md](AGENTS.md)**.
+
+Parity is proven only by differential contracts against real SQLite (`bun:sqlite`). Isolated internal unit tests are not SQLite compatibility proof.
 
 ```bash
 bun install
+bun run ci:local             # same gates as GitHub Actions CI (except publish)
 bun run check                # format + lint + typecheck + sqlite-compat suite
 bun run format               # write Biome formatting
 bun run lint                 # Biome lint
@@ -102,7 +229,7 @@ bun run build
 bun run test:browser         # Playwright smoke (Chrome/Firefox/Safari)
 ```
 
-Contract tests compare the pure TypeScript engine against real SQLite (`bun:sqlite`). See [COMPATIBILITY.md](./COMPATIBILITY.md).
+See [COMPATIBILITY.md](./COMPATIBILITY.md).
 
 ## Releasing
 
@@ -137,8 +264,7 @@ PR titles must also follow Conventional Commits (enforced in CI). Prefer squash 
 Local checks:
 
 ```bash
-bunx commitlint --last --verbose
-bun run build && bun run verify-package
+bun run ci:local             # commitlint + quality + tests + browser + benchmarks
 # dry-run needs a GitHub token for API calls; CI publish uses Trusted Publishing (no NPM_TOKEN)
 bun run release:dry-run
 ```

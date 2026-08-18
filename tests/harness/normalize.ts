@@ -50,8 +50,11 @@ export function normalizeErrorMessageForCompare(message: string): string {
   if (lower.startsWith("foreign key constraint failed")) {
     return "FOREIGN KEY constraint failed";
   }
-  if (lower.includes("datatype mismatch")) {
-    return "datatype mismatch";
+  if (lower.includes("cannot store") && lower.includes("column")) {
+    return "cannot store value in STRICT column";
+  }
+  if (lower.startsWith("unknown datatype")) {
+    return "unknown datatype";
   }
   if (/selects to the left and right of .+ do not have the same number of result columns/.test(lower)) {
     return "compound select column count mismatch";
@@ -64,6 +67,9 @@ export function normalizeErrorMessageForCompare(message: string): string {
   }
   if (lower.startsWith("no such table")) {
     return "no such table";
+  }
+  if (lower.startsWith("datatype mismatch")) {
+    return "datatype mismatch";
   }
   return msg;
 }
@@ -85,6 +91,8 @@ export function categorizeErrorMessage(message: string): ErrorCategory {
   if (/cannot start a transaction|cannot commit|cannot rollback|no transaction is active/.test(msg)) {
     return "transaction";
   }
+  if (/cannot store .+ value in .+ column/.test(msg)) return "datatype_mismatch";
+  if (/unknown datatype/.test(msg)) return "other";
   if (/datatype mismatch|type mismatch/.test(msg)) return "datatype_mismatch";
   if (/unsupported|not supported|not yet implemented/.test(msg)) return "unsupported";
   if (/misuse|bad parameter|api misuse/.test(msg)) return "misuse";
@@ -217,24 +225,6 @@ function normalizedValuesEqual(a: NormalizedValue, b: NormalizedValue, rowid = f
   }
 }
 
-function uniquePreserve(names: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const name of names) {
-    if (seen.has(name)) continue;
-    seen.add(name);
-    out.push(name);
-  }
-  return out;
-}
-
-function uniqueNamesCompatible(a: string[], b: string[]): boolean {
-  const ua = uniquePreserve(a);
-  const ub = uniquePreserve(b);
-  if (ua.length !== ub.length) return false;
-  return ua.every((name, index) => name === ub[index]);
-}
-
 function positionalRowsEqual(a: NormalizedResult, b: NormalizedResult, realEpsilon?: number): boolean {
   if (a.rows.length !== b.rows.length) return false;
   for (let r = 0; r < a.rows.length; r++) {
@@ -295,9 +285,9 @@ export function deepCompareResults(
   }
 
   if (na.columns.length !== nb.columns.length) {
-    // bun:sqlite collapses duplicate column headers in columnNames while values() retains
-    // full width. Accept unique-preserving name lists when positional values still match.
-    if (!uniqueNamesCompatible(na.columns, nb.columns) || !positionalRowsEqual(na, nb, realEpsilon)) {
+    // bun:sqlite may collapse duplicate headers or keep stale prepared columnNames after
+    // ALTER while values() still returns the full width. Prefer positional values.
+    if (!positionalRowsEqual(na, nb, realEpsilon)) {
       return { equal: false, reason: "column count mismatch" };
     }
   } else {

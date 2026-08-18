@@ -29,7 +29,8 @@ export class TransactionManager {
     if (this.inTransaction) {
       throw new SqliteError("cannot start a transaction within a transaction", "transaction", "SQLITE_ERROR");
     }
-    this.transactionSnapshot = this.state.clone();
+    this.state.freezeShared();
+    this.transactionSnapshot = this.state.cloneShallow();
     this.transactionPrngState = this.prng.getState();
     this.savepoints = [];
     this.startedBySavepoint = false;
@@ -41,6 +42,7 @@ export class TransactionManager {
     this.transactionPrngState = null;
     this.savepoints = [];
     this.startedBySavepoint = false;
+    this.state.thawShared();
   }
 
   rollback(savepoint?: string): void {
@@ -49,7 +51,7 @@ export class TransactionManager {
       const index = this.findSavepoint(savepoint);
       const snapshot = this.savepoints[index];
       if (!snapshot) throw new SqliteError(`no such savepoint: ${savepoint}`, "transaction", "SQLITE_ERROR");
-      this.state.replaceWith(snapshot.state);
+      this.state.replaceWith(snapshot.state, { adopt: true });
       this.prng.setState(snapshot.prngState);
       this.savepoints.splice(index + 1);
       return;
@@ -60,23 +62,27 @@ export class TransactionManager {
     if (!snapshot || prngState === null) {
       throw new SqliteError("cannot rollback - no transaction is active", "transaction", "SQLITE_ERROR");
     }
-    this.state.replaceWith(snapshot);
+    this.state.replaceWith(snapshot, { adopt: true });
     this.prng.setState(prngState);
     this.transactionSnapshot = null;
     this.transactionPrngState = null;
     this.savepoints = [];
     this.startedBySavepoint = false;
+    this.state.thawShared();
   }
 
   savepoint(name: string): void {
     if (!this.inTransaction) {
-      this.transactionSnapshot = this.state.clone();
+      this.state.freezeShared();
+      this.transactionSnapshot = this.state.cloneShallow();
       this.transactionPrngState = this.prng.getState();
       this.startedBySavepoint = true;
+    } else {
+      this.state.freezeShared();
     }
     this.savepoints.push({
       name,
-      state: this.state.clone(),
+      state: this.state.cloneShallow(),
       prngState: this.prng.getState(),
     });
   }
@@ -89,6 +95,7 @@ export class TransactionManager {
       this.transactionSnapshot = null;
       this.transactionPrngState = null;
       this.startedBySavepoint = false;
+      this.state.thawShared();
     }
   }
 

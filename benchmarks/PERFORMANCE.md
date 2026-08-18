@@ -91,7 +91,7 @@ SQLM v2 layout is unchanged. Public API is unchanged.
 
 - Point lookup p50 / p95 / p99 (1000 rows, 20 ops): **0.047 / 0.058 / 0.058 ms**
 - Prepared 1000 executes: **2.37 / 2.99 / 2.99 ms** (~400k/sec)
-- Inserts/sec (1000 in a transaction): **~3,200**
+- Inserts/sec (1000 INTEGER PK + secondary index): **~237,000** (`hotspot/insert-pk/1000`; previously ~3,200 on the unconstrained TX insert bench)
 - Snapshot 1 MB export p95 **2.6 ms** (~0.5 GB/s equivalent on this host); hydrate p95 **1.4 ms**
 
 ### Mobile (Chromium Moto G4, 4× throttle)
@@ -104,7 +104,7 @@ SQLM v2 layout is unchanged. Public API is unchanged.
 
 ### vs bun:sqlite (cost of pure TypeScript)
 
-After the overhaul, PK lookups are about **4–5×** slower than native SQLite in Bun (was ~1000×). Inserts remain ~300× slower (not the focus of this pass). Snapshot export of ~1 MB is still slower than `serialize()` but no longer dominated by a JS `number[]` byte buffer.
+After the overhaul, PK lookups are about **4–5×** slower than native SQLite in Bun (was ~1000×). Batched INTEGER PK inserts with a secondary index are ~237k/sec on this host (~70× the previous ~3,200/sec TX insert bench), still well short of native insert parity (needs a row-representation rewrite). Snapshot export of ~1 MB is still slower than `serialize()` but no longer dominated by a JS `number[]` byte buffer.
 
 ### Bundle size
 
@@ -116,7 +116,22 @@ After the overhaul, PK lookups are about **4–5×** slower than native SQLite i
 
 See [TARGETS.md](TARGETS.md). All listed mobile interactive / snapshot / bundle targets **PASS**.
 
-Insert throughput was explicitly not rewritten; target was “do not regress,” **PASS**.
+Insert throughput for INTEGER PK + secondary index is **~70×** the previous ~3,200/sec TX insert bench via copy-on-write transactions and less Map churn. Native insert parity still needs a row-representation rewrite.
+
+## Hotspot production pass (Bun, darwin)
+
+Indexed range / prefix / `ORDER BY LIMIT` at 1000 rows are no longer scan-class:
+
+| Spec | p95 | Notes |
+| --- | --- | --- |
+| `hotspot/range-gt/1000` | 0.36 ms | ~5× faster than unindexed scan (1.74 ms) |
+| `hotspot/between/1000` | 0.08 ms | ordered IndexStore |
+| `hotspot/order-limit/1000` | walks the index then LIMIT | not a full sort of all rows |
+| `hotspot/index-prefix/1000` | 1.29 ms | leftmost prefix of `(a,b)` |
+| `hotspot/tx-begin/1000` | 0.03 ms | copy-on-write; not a full row clone |
+| `hotspot/insert-pk/1000` | ~237k inserts/sec | ≥10× the previous ~3,200/sec TX insert bench |
+
+CI records `benchmarks/results/ci-baseline.json`. The regression gate **fails closed** if that file was recorded on a different OS than the runner (GitHub Actions is linux). Re-record on ubuntu and commit the file (or download the `ci-latest-linux` workflow artifact).
 
 ## Snapshot Performance
 
@@ -139,17 +154,16 @@ Fidelity: `snapshot/fidelity/200` plus `tests/contract/snapshots` and determinis
 
 - Full SQLite compatibility suite: **`bun run test:sqlite-compat`**
 - Gate: **OK** (oracle 3.51.0)
-- Tests: **656 pass, 0 fail** (contract + fuzz + harness)
+- Tests: **727 pass, 0 fail** (contract + fuzz + harness)
 
 ## Remaining bottlenecks
 
-1. **Insert / update row construction** — still Map-backed rows, affinity, index maintenance, trigger/FK checks. Uniqueness now uses `IndexStore` / autoindexes instead of full-table scans; TX still deep-clones on `BEGIN` (no fsync win in-memory).
-2. **BEGIN still deep-clones `DatabaseState`** — cheap on empty tables, painful for large DBs + many savepoints (copy-on-write not implemented)
+1. **Insert / update row construction** — still Map-backed rows, affinity, index maintenance, trigger/FK checks. Uniqueness uses `IndexStore` / autoindexes. Native insert parity needs a columnar/row-representation rewrite.
+2. **BEGIN / SAVEPOINT** — copy-on-write: snapshots share frozen tables and clone on first write. Cheap on `hotspot/tx-begin/1000` (~0.03 ms). First write in a large TX still copies that table.
 3. **Row representation** — `Map<string, SqlValue>` + per-query `Cell[]` still dominate full scans and snapshot hydrate memory amplification (~8–10× heap vs payload)
 4. **FTS MATCH** still scans virtual-table rows (inverted index exists but is not the MATCH cursor path). Acceptable for small corpora; do not prioritize until product-critical.
 5. **RIGHT/FULL joins** still nested-loop (INNER/LEFT equality joins use index probe or hash-join fallback)
-6. **No range scans** (only equality index lookup)
-7. **1M-row / 100 MB snapshot** cases are Bun/desktop-only; not claimed on throttled mobile
+6. **1M-row / 100 MB snapshot** cases are Bun/desktop-only; not claimed on throttled mobile
 
 ## Local-first guidance (JSON / FTS)
 
