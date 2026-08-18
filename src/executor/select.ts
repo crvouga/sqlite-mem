@@ -1075,6 +1075,9 @@ function validateProjectedColumns(stmt: SelectStmt, sample: ScopeRow, env: Execu
       case "unary":
         recurse(expr.expr);
         break;
+      case "is_bool":
+        recurse(expr.expr);
+        break;
       case "binary":
         recurse(expr.left);
         recurse(expr.right);
@@ -1141,6 +1144,10 @@ function expressionName(expr: Expr): string {
   if (expr.type === "binary") {
     return `${expressionName(expr.left)} ${expr.op} ${expressionName(expr.right)}`;
   }
+  if (expr.type === "is_bool") {
+    const sense = expr.sense ? "TRUE" : "FALSE";
+    return `${expressionName(expr.expr)} IS${expr.not ? " NOT" : ""} ${sense}`;
+  }
   return expr.type;
 }
 
@@ -1149,6 +1156,8 @@ function replaceSpecial(expr: Expr, evaluate: (expr: AggregateExpr | WindowExpr)
   const recurse = (item: Expr) => replaceSpecial(item, evaluate);
   switch (expr.type) {
     case "unary":
+      return { ...expr, expr: recurse(expr.expr) };
+    case "is_bool":
       return { ...expr, expr: recurse(expr.expr) };
     case "binary":
       return { ...expr, left: recurse(expr.left), right: recurse(expr.right) };

@@ -111,6 +111,7 @@ const IDENT_KEYWORDS: ReadonlySet<TokenKind> = new Set<TokenKind>([
   "FOREIGN",
   "FROM",
   "FULL",
+  "FALSE",
   "GENERATED",
   "GLOB",
   "GROUP",
@@ -185,6 +186,7 @@ const IDENT_KEYWORDS: ReadonlySet<TokenKind> = new Set<TokenKind>([
   "TO",
   "TRANSACTION",
   "TRIGGER",
+  "TRUE",
   "UNBOUNDED",
   "UNION",
   "UNIQUE",
@@ -1715,6 +1717,14 @@ export class Parser {
           continue;
         }
         const not = this.match("NOT");
+        if (this.match("TRUE")) {
+          left = { type: "is_bool", expr: left, not, sense: true };
+          continue;
+        }
+        if (this.match("FALSE")) {
+          left = { type: "is_bool", expr: left, not, sense: false };
+          continue;
+        }
         const right = this.parseIsRhs();
         left = { type: "binary", op: not ? "IS NOT" : "IS", left, right };
         continue;

@@ -300,6 +300,8 @@ function explicitCollation(expr: Expr): string | null {
     case "unary":
     case "cast":
       return explicitCollation(expr.expr);
+    case "is_bool":
+      return explicitCollation(expr.expr);
     case "binary":
       return explicitCollation(expr.left) ?? explicitCollation(expr.right);
     case "between":
@@ -345,6 +347,8 @@ function inheritedCollation(expr: Expr, ctx: EvalContext): string | null {
       );
     case "unary":
     case "cast":
+      return inheritedCollation(expr.expr, ctx);
+    case "is_bool":
       return inheritedCollation(expr.expr, ctx);
     default:
       return null;
@@ -398,6 +402,13 @@ export function evalExpr(expr: Expr, ctx: EvalContext): SqlValue {
       if (expr.op === "+") return asNumber(numberValue(value));
       if (expr.op === "-") return asNumber(-numberValue(value));
       return ~integerValue(value);
+    }
+    case "is_bool": {
+      const truth = isTruthySql(evalExpr(expr.expr, ctx));
+      if (!expr.not && expr.sense) return booleanValue(truth === true);
+      if (!expr.not && !expr.sense) return booleanValue(truth === false);
+      if (expr.not && expr.sense) return booleanValue(truth !== true);
+      return booleanValue(truth !== false);
     }
     case "binary":
       return evalBinary(expr.op, expr.left, expr.right, ctx);

@@ -16,6 +16,13 @@ export function exprEquals(left: Expr, right: Expr): boolean {
       );
     case "unary":
       return right.type === "unary" && left.op === right.op && exprEquals(left.expr, right.expr);
+    case "is_bool":
+      return (
+        right.type === "is_bool" &&
+        left.not === right.not &&
+        left.sense === right.sense &&
+        exprEquals(left.expr, right.expr)
+      );
     case "binary":
       return (
         right.type === "binary" &&

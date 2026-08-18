@@ -93,6 +93,7 @@ export type TokenKind =
   | "FOREIGN"
   | "FROM"
   | "FULL"
+  | "FALSE"
   | "GENERATED"
   | "GLOB"
   | "GROUP"
@@ -167,6 +168,7 @@ export type TokenKind =
   | "TO"
   | "TRANSACTION"
   | "TRIGGER"
+  | "TRUE"
   | "UNBOUNDED"
   | "UNION"
   | "UNIQUE"
@@ -256,6 +258,7 @@ const KEYWORDS: Record<string, TokenKind> = {
   FOREIGN: "FOREIGN",
   FROM: "FROM",
   FULL: "FULL",
+  FALSE: "FALSE",
   GENERATED: "GENERATED",
   GLOB: "GLOB",
   GROUP: "GROUP",
@@ -330,6 +333,7 @@ const KEYWORDS: Record<string, TokenKind> = {
   TO: "TO",
   TRANSACTION: "TRANSACTION",
   TRIGGER: "TRIGGER",
+  TRUE: "TRUE",
   UNBOUNDED: "UNBOUNDED",
   UNION: "UNION",
   UNIQUE: "UNIQUE",

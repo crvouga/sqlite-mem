@@ -47,6 +47,7 @@ export type Expr =
   | BetweenExpr
   | InExpr
   | LikeExpr
+  | IsBoolExpr
   | FunctionExpr
   | AggregateExpr
   | WindowExpr
@@ -86,6 +87,15 @@ export interface BinaryExpr {
   op: BinaryOp;
   left: Expr;
   right: Expr;
+}
+
+/** `expr IS [NOT] TRUE` / `expr IS [NOT] FALSE` (truthiness, not equality to 1/0). */
+export interface IsBoolExpr {
+  type: "is_bool";
+  expr: Expr;
+  not: boolean;
+  /** `true` for TRUE, `false` for FALSE. */
+  sense: boolean;
 }
 
 export interface BetweenExpr {

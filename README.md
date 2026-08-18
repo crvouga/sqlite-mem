@@ -218,6 +218,8 @@ Goal: drop-in SQL behavior vs SQLite **3.51.0**. Full matrix: [COMPATIBILITY.md]
 - `INDEXED BY` / `NOT INDEXED` — parsed and discarded
 - Unknown statement `PRAGMA` succeeds with an empty result (SQLite-like). All oracle-exposed `pragma_*` eponymous TVFs are supported (`SELECT * FROM pragma_table_info('t')`, bare `FROM pragma_database_list`, …), including **correlated** args such as `FROM table_list AS tl, pragma_table_info(tl.name) AS p` (Kysely SQLite introspector). Storage/journal getters return bun `:memory:`-compatible defaults.
 
+**Also supported (oracle-parity):** boolean literals **`TRUE` / `FALSE`** (any case → integers `1` / `0`) and **`IS [NOT] TRUE` / `IS [NOT] FALSE`** (SQLite truthiness, including NULL). A column named `true`/`false` shadows the literal.
+
 ## Common pitfalls
 
 1. **Do not `await`** — the API is sync.

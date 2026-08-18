@@ -181,8 +181,14 @@ export class ExecutionEnv {
           if (table === null) return !cell.hiddenByUsing;
           return (cell.tableLower ?? cell.table?.toLowerCase()) === tableKey;
         });
-        if (matches.length === 0)
+        if (matches.length === 0) {
+          // SQLite: bare TRUE/FALSE are integer 1/0 unless a same-named column is in scope.
+          if (table === null) {
+            if (key === "true") return 1;
+            if (key === "false") return 0;
+          }
           throw new SqliteError(`no such column: ${table ? `${table}.` : ""}${name}`, "no_such_column");
+        }
         if (matches.length > 1 && table === null) throw new SqliteError(`ambiguous column name: ${name}`, "other");
         return matches[0]!.value;
       },
@@ -195,8 +201,10 @@ export class ExecutionEnv {
           if (table === null) return !cell.hiddenByUsing;
           return (cell.tableLower ?? cell.table?.toLowerCase()) === tableKey;
         });
-        if (matches.length === 0)
+        if (matches.length === 0) {
+          if (table === null && (key === "true" || key === "false")) return "integer";
           throw new SqliteError(`no such column: ${table ? `${table}.` : ""}${name}`, "no_such_column");
+        }
         if (matches.length > 1 && table === null) throw new SqliteError(`ambiguous column name: ${name}`, "other");
         const cell = matches[0]!;
         return cell.affinity === "REAL" && typeof cell.value === "number" ? "real" : storageClassOf(cell.value);
