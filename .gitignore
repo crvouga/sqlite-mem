@@ -10,9 +10,7 @@ test-results/
 .env
 .env.*
 compat/requirements.raw.html
-compat/coverage.json
 compat/gate-report.json
-compat/requirements.json
 benchmarks/results/*.json
 benchmarks/results/*.html
 !benchmarks/results/schema.example.json

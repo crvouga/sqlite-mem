@@ -53,7 +53,7 @@
     "benchmark:ci": "bun run benchmarks/run.ts --tier ci --engine mem --out benchmarks/results/ci-latest.json && bun run benchmarks/compare-ci.ts",
     "benchmark:bundle": "bun run build && bun run benchmarks/bundle.ts",
     "benchmark:report": "bun run benchmarks/report-html.ts",
-    "test:sqlite-compat": "bun run scripts/sqlite-requirements.ts && bun run scripts/sqlite-compat-gate.ts && bun test tests/contract tests/fuzz tests/harness",
+    "test:sqlite-compat": "bun run scripts/sqlite-compat-gate.ts && bun test tests/contract tests/fuzz tests/harness",
     "inventory": "bun run scripts/sqlite-inventory.ts",
     "fts-surface": "bun run scripts/fts-oracle-surface.ts",
     "requirements": "bun run scripts/sqlite-requirements.ts",
