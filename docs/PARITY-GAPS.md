@@ -237,13 +237,12 @@ Not in the original 13 app-code areas, but high likelihood of breaking a drop-in
 - [ ] **`total_changes()`** asserted as `>= 2` not exact ([`tests/contract/functions/scope3-builtins.test.ts`](../tests/contract/functions/scope3-builtins.test.ts))
 - [ ] **Conflict oracles** `OR ABORT` / `OR FAIL` / `OR ROLLBACK` — **LIKELY DIVERGENCE:** parsed into AST modes; executor throws the same UNIQUE error for all of them. IGNORE/REPLACE covered. FAIL vs ABORT (statement vs transaction) and ROLLBACK of the tx are not distinguished
 - [ ] **Triggers:** only AFTER INSERT + WHEN + DROP tested. BEFORE / `UPDATE OF` / `RAISE()` **implemented**, untested. **LIKELY DIVERGENCE:** INSTEAD OF can be created on views but is **never fired**; DML on views goes to `getWritableTable` → `no_such_table`. `recursive_triggers` PRAGMA missing (recursion always on, depth 1000). `last_insert_rowid` inside AFTER INSERT sees the **previous** value (`recordChange` runs after triggers)
-- [ ] **PRAGMA surface:** tested: `foreign_keys`, `table_info`, `database_list`, `user_version`, unknown→empty. **Implemented, untested:** `table_xinfo`, `index_list`, `index_info`, `foreign_key_list`, `schema_version`. **Missing (silent empty, SQLite would return rows):** `recursive_triggers`, `defer_foreign_keys`, `integrity_check` (oracle returns `'ok'`), `case_sensitive_like`, `foreign_key_check`
+- [x] **PRAGMA surface + `pragma_*` TVFs** — all oracle-exposed `pragma_*` eponymous TVFs registered ([`tests/contract/pragma/tvf.test.ts`](../tests/contract/pragma/tvf.test.ts)); statement getters share [`pragma-engine`](../src/executor/pragma-engine.ts). Remaining: `case_sensitive_like` (no oracle TVF); statement-form writers for storage pragmas still mostly no-op/empty
 - [ ] **RETURNING** on UPSERT; `RETURNING` excluded columns / `old`/`new` names
 - [ ] **UPDATE … FROM** — one inner join; missing multi-match, LEFT FROM, correlated
 - [ ] **`NOT IN (SELECT …)` NULL trap** — high-likelihood app SQL; only list-form `NOT IN` is tested ([`tests/contract/null/edges.test.ts`](../tests/contract/null/edges.test.ts)); `IN (SELECT)` is tested without NULL
 - [ ] **Comma joins** `FROM a, b WHERE …` — parser treats comma as CROSS JOIN; only JSON TVF `FROM t, json_each(…)` is tested
 - [ ] **`USING` multi-column**; NATURAL FULL
-- [ ] **`pragma_*` TVFs** (`pragma_table_info()`, `pragma_function_list()`) — not implemented; inventory uses oracle `pragma_function_list` directly and ignores memory TVFs
 - [ ] Coverage hygiene: `uri.html` is UNSUPPORTED but mission says NOT APPLICABLE; `dbstat.html` UNSUPPORTED while the module exists; `fts5.html` / `json1.html` / `windowfunctions.html` / `lang_with.html` / `rowvalue.html` / `expridx.html` / `nulls.html` are absent from the sqlite.org dump so they never appear in `coverage.json`; `undoredo.html` / `whynotgit.html` are not dialect; stale VERIFIED notes in `coverage.json` vs current `SOURCE_SEED`
 
 ---
@@ -266,7 +265,7 @@ Not in the original 13 app-code areas, but high likelihood of breaking a drop-in
 | `create_virtual_table` | PARTIAL | fts/*, modules/scope3 | documented FTS/RTREE partials |
 | `begin` / `commit` / `rollback` | COVERED | transactions | `BEGIN DEFERRED/IMMEDIATE/EXCLUSIVE` parsed; `mode` unused in executor (in-memory locking N/A — still need success parity) |
 | `savepoint` / `release` | COVERED | savepoints, transactions | |
-| `pragma` | THIN | pragma/* | see P0 PRAGMA list |
+| `pragma` | COVERED–THIN | pragma/* | TVFs covered; some statement writers still no-op |
 | `attach` / `detach` | COVERED–THIN | attach | temp vs main same name; ATTACH file N/A |
 | `analyze` / `reindex` / `vacuum` | THIN | misc/analyze-vacuum | VACUUM INTO parsed then **ignored**; REINDEX collation |
 | `explain` | PARTIAL (documented) | errors/unsupported | stub shapes |
@@ -306,26 +305,25 @@ Inventory gate: 0 missing oracle **names**. Behavioral contracts are a small sub
 | Window | THIN | see §3 | |
 | UUID | GAP | name in inventory only | `uuid()` / `uuid_str` / `uuid_blob` vs oracle (seeded PRNG vs random) |
 | FTS aux | PARTIAL | fts suite | matchinfo formats |
-| TVF | THIN | json_each/tree differential; generate_series ISOLATED | pragma_* TVFs absent |
+| TVF | COVERED–THIN | json_each/tree + pragma_* differential; generate_series ISOLATED | generate_series needs parity |
 
 ### PRAGMA map
 
 | PRAGMA | Engine | Differential |
 | --- | --- | --- |
-| `foreign_keys` | yes | yes |
-| `table_info` | yes | yes |
-| `database_list` | yes | yes |
-| `user_version` | yes | yes |
-| unknown → empty | yes | yes |
-| `table_xinfo` | yes | no |
-| `index_list` / `index_info` | yes | no |
-| `foreign_key_list` | yes | no |
-| `schema_version` | yes | no |
-| `recursive_triggers` | no (empty) | no |
-| `defer_foreign_keys` | no (empty) | no |
-| `integrity_check` | no (empty) | no |
-| `case_sensitive_like` | no (empty) | no |
-| `foreign_key_check` | no (empty) | no |
+| `foreign_keys` | yes | yes (statement + TVF) |
+| `table_info` / `table_xinfo` | yes | yes (statement + TVF) |
+| `database_list` | yes | yes (bare + `()` TVF) |
+| `user_version` / `schema_version` | yes | yes (get; set statement) |
+| `index_list` / `index_info` / `index_xinfo` | yes | yes (TVF) |
+| `foreign_key_list` / `foreign_key_check` | yes | yes (TVF) |
+| `table_list` / `collation_list` | yes | yes (TVF) |
+| `integrity_check` / `quick_check` | yes (`'ok'`) | yes (TVF) |
+| storage getters (`page_size`, `journal_mode`, …) | yes (bun `:memory:` defaults) | yes (sampled) |
+| `function_list` / `module_list` / `pragma_list` / `compile_options` | yes | shape / presence (content may differ) |
+| all other oracle `pragma_*` TVFs | yes | resolve smoke test |
+| unknown statement → empty | yes | yes |
+| `case_sensitive_like` | no (empty; no oracle TVF) | no |
 
 ---
 
@@ -446,10 +444,11 @@ Keep these listed rather than treating them as parity bugs:
 - Seeded `random()` / fixed `'now'` by default
 - No C API / on-disk DB / VFS
 - EXPLAIN stubs; INDEXED BY no-op
-- Unknown PRAGMA returns empty result
+- Unknown statement `PRAGMA` returns empty result (SQLite-like); `pragma_*` eponymous TVFs are implemented
 - FTS shadow-table `changes()` divergence
 - BigInt vs bun:sqlite without `safeIntegers`
 - `ATTACH` opens an empty in-memory schema, not a file
+- `pragma_compile_options` / `pragma_function_list` row *sets* reflect sqlite-mem (not bun’s native build)
 
 Candidates to **add** to COMPATIBILITY.md if probes confirm (do not document until a contract fails or we decide not to implement):
 
@@ -459,12 +458,10 @@ Candidates to **add** to COMPATIBILITY.md if probes confirm (do not document unt
 - `timediff` calendar arithmetic
 - Comparison affinity
 - `WITH` on UPDATE/DELETE/INSERT VALUES
-- `pragma_*` table-valued functions
 - `INTERSECT ALL` / `EXCEPT ALL` (parser never consumes `ALL` after INTERSECT/EXCEPT)
 - Plain INTEGER PRIMARY KEY never reuses rowids (AUTOINCREMENT-like)
 - INSTEAD OF triggers never fire; cannot INSERT into views
 - `OR ABORT` / `OR FAIL` / `OR ROLLBACK` identical to default abort
-- `PRAGMA integrity_check` silent-empty vs `'ok'`
 - VACUUM INTO parsed then ignored (`:memory:` no-op)
 
 ---

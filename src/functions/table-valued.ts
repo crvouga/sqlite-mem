@@ -3,16 +3,18 @@ import { SqliteError } from "../errors/index.ts";
 import type { ExecutionEnv, ScopeRow } from "../executor/env.ts";
 import { evalExpr } from "../expressions/eval.ts";
 import { jsonEachRows, jsonTreeRows } from "../json/tvf.ts";
-import { type SqlValue, toInteger } from "../types/value.ts";
+import { toInteger } from "../types/value.ts";
+import { ensurePragmaTvfsRegistered } from "./pragma-tvf.ts";
+import {
+  getTableValuedFunction,
+  hasRegisteredTableValuedFunction,
+  listRegisteredTableValuedFunctions,
+  registerTableValuedFunction,
+  type TableValuedResult,
+} from "./table-valued-registry.ts";
 
-export interface TableValuedResult {
-  columns: string[];
-  rows: ScopeRow[];
-}
-
-type TableValuedFn = (args: SqlValue[], alias: string | null, env: ExecutionEnv) => TableValuedResult;
-
-const registry = new Map<string, TableValuedFn>();
+export type { TableValuedResult };
+export { registerTableValuedFunction };
 
 const JSON_TVF_COLUMNS = ["key", "value", "type", "atom", "id", "parent", "fullkey", "path"] as const;
 
@@ -34,7 +36,7 @@ function jsonTvfResult(
   };
 }
 
-registry.set("generate_series", (args, alias) => {
+registerTableValuedFunction("generate_series", (args, alias) => {
   if (args.length < 2 || args.length > 3) {
     throw new SqliteError("wrong number of arguments to function generate_series()", "misuse");
   }
@@ -66,14 +68,14 @@ registry.set("generate_series", (args, alias) => {
   return { columns: ["value"], rows };
 });
 
-registry.set("json_each", (args, alias) => {
+registerTableValuedFunction("json_each", (args, alias) => {
   if (args.length < 1 || args.length > 2) {
     throw new SqliteError("wrong number of arguments to function json_each()", "misuse");
   }
   return jsonTvfResult(alias, "json_each", jsonEachRows(args[0]!, args[1]));
 });
 
-registry.set("json_tree", (args, alias) => {
+registerTableValuedFunction("json_tree", (args, alias) => {
   if (args.length < 1 || args.length > 2) {
     throw new SqliteError("wrong number of arguments to function json_tree()", "misuse");
   }
@@ -92,12 +94,19 @@ export function evaluateTableFunction(
   scope?: ScopeRow | null,
   parent?: import("../expressions/context.ts").EvalContext,
 ): TableValuedResult {
-  const fn = registry.get(name.toLowerCase());
+  ensurePragmaTvfsRegistered();
+  const fn = getTableValuedFunction(name);
   if (!fn) throw new SqliteError(`no such table-valued function: ${name}`, "no_such_table");
   const values = args.map((arg) => evalExpr(arg, env.createEvalContext(scope ?? null, parent)));
   return fn(values, alias, env);
 }
 
 export function listTableValuedFunctions(): string[] {
-  return [...registry.keys()].sort();
+  ensurePragmaTvfsRegistered();
+  return listRegisteredTableValuedFunctions();
+}
+
+export function hasTableValuedFunction(name: string): boolean {
+  ensurePragmaTvfsRegistered();
+  return hasRegisteredTableValuedFunction(name);
 }

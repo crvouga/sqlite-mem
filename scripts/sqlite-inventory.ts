@@ -13,6 +13,7 @@ import { jsonAggregateFunctions, jsonScalarFunctions } from "../src/functions/js
 import { mathFunctions } from "../src/functions/math.ts";
 import { getScalarFunctions } from "../src/functions/scalar.ts";
 import { listTableValuedFunctions } from "../src/functions/table-valued.ts";
+import { PRAGMA_TVF_NAMES } from "../src/executor/pragma-engine.ts";
 import { windowFunctions } from "../src/functions/window.ts";
 
 const OPERATOR_FUNCS = ["->", "->>", "like", "glob", "match", "regexp"] as const;
@@ -78,10 +79,16 @@ export function buildInventoryReport() {
   const missingClean = [...oracleNames].filter((n) => !memNames.has(n)).sort();
   const presentClean = [...oracleNames].filter((n) => memNames.has(n)).sort();
 
+  const tvfs = new Set(listTableValuedFunctions());
   const missingModules = modules.filter((m) => {
-    if (m.startsWith("pragma_")) return false;
-    return !MEMORY_MODULES.includes(m);
+    if (MEMORY_MODULES.includes(m)) return false;
+    if (tvfs.has(m)) return false;
+    return true;
   });
+  for (const base of PRAGMA_TVF_NAMES) {
+    const name = `pragma_${base}`;
+    if (!tvfs.has(name)) missingModules.push(name);
+  }
 
   const extra = [...memNames].filter((n) => !oracleNames.has(n)).sort();
 

@@ -11,7 +11,8 @@ import type {
 import { SqliteError } from "../errors/index.ts";
 import type { EvalContext } from "../expressions/context.ts";
 import { evalExpr } from "../expressions/eval.ts";
-import { evaluateTableFunction } from "../functions/table-valued.ts";
+import { isPragmaTvfName } from "../functions/pragma-tvf.ts";
+import { evaluateTableFunction, hasTableValuedFunction } from "../functions/table-valued.ts";
 import { buildSqliteMaster, buildSqliteSchema } from "../schema/catalog.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
 import {
@@ -479,6 +480,11 @@ export function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext
     return evaluateTableFunction(item.name, item.args, item.alias, env).rows;
   }
 
+  // Eponymous pragma_* virtual tables may be referenced without parentheses.
+  if (item.type === "table" && isPragmaTvfName(item.name) && hasTableValuedFunction(item.name.toLowerCase())) {
+    return evaluateTableFunction(item.name, [], item.alias, env, null, parent).rows;
+  }
+
   const alias = item.alias ?? item.name;
   const qualified = item.schema ? `${item.schema}.${item.name}` : item.name;
   const db = env.state.databaseForSchema(item.schema, qualified);
@@ -670,6 +676,14 @@ function shapeOf(item: FromItem, env: ExecutionEnv): ScopeRow["cells"] {
         : item.name.toLowerCase() === "json_each" || item.name.toLowerCase() === "json_tree"
           ? ["key", "value", "type", "atom", "id", "parent", "fullkey", "path"]
           : evaluateTableFunction(item.name, item.args, item.alias, env).columns;
+    return columns.map((name) => ({
+      table: item.alias ?? item.name,
+      name,
+      value: null,
+    }));
+  }
+  if (item.type === "table" && isPragmaTvfName(item.name) && hasTableValuedFunction(item.name.toLowerCase())) {
+    const columns = evaluateTableFunction(item.name, [], item.alias, env).columns;
     return columns.map((name) => ({
       table: item.alias ?? item.name,
       name,

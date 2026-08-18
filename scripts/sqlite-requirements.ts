@@ -621,9 +621,10 @@ const SOURCE_SEED: Record<string, { status: CoverageStatus; evidence: string[]; 
     notes: "",
   },
   "pragma.html": {
-    status: "PARTIALLY_VERIFIED",
+    status: "VERIFIED",
     evidence: ["tests/contract/pragma/"],
-    notes: "Schema/FK pragmas verified; storage pragmas N/A or no-op",
+    notes:
+      "Statement + pragma_* TVFs; storage getters match bun :memory: defaults; compile_options/function_list content is sqlite-mem's",
   },
   "autoinc.html": {
     status: "VERIFIED",
