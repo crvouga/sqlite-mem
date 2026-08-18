@@ -86,7 +86,7 @@ Reference: **SQLite 3.51.0** (`bun:sqlite`). Inventory: `bun run scripts/fts-ora
 bun run test:sqlite-compat   # requirements + gate + contract/fuzz/harness
 bun run inventory            # oracle function/module inventory
 bun run requirements         # refresh SQLite.org requirements + coverage
-bun run test:browser         # Playwright smoke (not the SQL oracle)
+bun run build && bun run verify-package  # ESM browser build + isomorphic pack gates
 ```
 
 Do not treat isolated unit tests of internal modules as proof of SQLite compatibility. The differential matrix runner is authoritative for SQL behavior; `test:sqlite-compat` is the release gate.

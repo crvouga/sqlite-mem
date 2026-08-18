@@ -2,17 +2,15 @@
 
 ## Environment
 
-- Browser: Chromium 151.0.7922.34 (Playwright)
-- Device/profile: desktop (unthrottled) and **Moto G4 + 4× CPU throttle** (low-end mobile proxy)
-- CPU: host Darwin arm64; mobile numbers use Chromium CPU throttling, not a physical phone
-- Memory: Bun `process.memoryUsage()`; Chromium `performance.memory` (quantized, limited)
-- Runtime: Bun 1.3.14 (benchmarks + `bun:sqlite` 3.51.0 oracle); browser ESM bundle of sqlite-mem (no WASM)
+- Historical mobile proxy numbers (below): Chromium + `Moto G4` + **4× CPU throttle** (recorded before browser harness removal)
+- CPU: host Darwin arm64 for local Bun benches; CI gate uses linux `ci-baseline.json`
+- Memory: Bun `process.memoryUsage()`
+- Runtime: Bun 1.3.14 (benchmarks + `bun:sqlite` 3.51.0 oracle); shipped artifact is a browser ESM bundle (no WASM)
 
 Commands:
 
 ```bash
 bun run benchmark
-bun run benchmark:browser
 bun run benchmark:bun
 bun run benchmark:ci
 ```

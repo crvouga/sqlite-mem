@@ -107,9 +107,8 @@ Hot / large files: `parser/parser.ts`, `executor/select.ts`, `executor/dml.ts`.
 | `tests/fuzz/` | fast-check property tests (seeded); same two backends |
 | `tests/harness/` | Compare/normalize helpers + harness unit tests |
 | `tests/adapters/` | Wrappers for sqlite-mem and `bun:sqlite` |
-| `tests/browser/` | Playwright smoke only — **not** the SQL oracle |
 
-Examples of public API usage: `tests/contract/api/`, `tests/browser/run.ts`, `tests/contract/parameters/`, `tests/contract/determinism/`.
+Examples of public API usage: `tests/contract/api/`, `tests/contract/parameters/`, `tests/contract/determinism/`, `examples/react-vite`.
 
 ### Fuzz replay
 
@@ -148,7 +147,6 @@ bun run typecheck
 bun run test:sqlite-compat
 bun test                     # contract + fuzz + harness
 bun run build
-bun run test:browser         # Playwright smoke
 ```
 
 ## PR and commits

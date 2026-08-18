@@ -482,7 +482,7 @@ Do not treat these as Goal 1.1 work. They are scoped so the next session can int
 - [ ] SQLM unknown version — **implemented** (`unsupported sqlite-mem snapshot version`, category `unsupported`); no test
 - [ ] SQLM round-trip matrix across corpus types
 - [ ] CI Node 20/22/24 matrix — tests run on **Bun 1.3.14 only**; Node is used for semantic-release, not the differential suite
-- [ ] Playwright large-dataset + CPU-throttled page (browser smoke exists; not this path)
+- [ ] Large-dataset + CPU-throttled browser page (optional manual; isomorphic pack is gated by `verify-package`)
 - [ ] Doc-claims test mapping README/COMPATIBILITY sentences to named tests
 
 ---

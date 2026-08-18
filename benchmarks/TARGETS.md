@@ -4,7 +4,7 @@ Targets were set **after** measuring the unoptimized baseline on 2026-08-17, not
 
 ## Target hardware / runtime
 
-- Low-end mobile browser proxy: Chromium 151 + Playwright `Moto G4` + **4× CPU throttle**
+- Historical low-end mobile proxy (targets below): Chromium + `Moto G4` + **4× CPU throttle** (measured once; not re-run in CI)
 - Interactive local-first DB: schema with users/projects/tasks, **100–1000 rows** hot working set
 - Snapshots: **~1 MB** hydrate/export as the critical mobile path (larger sizes are Bun/desktop)
 
@@ -69,7 +69,6 @@ Measured on darwin arm64 Bun 1.3.14; CI gate uses linux numbers from `ci-baselin
 ```bash
 bun run benchmark          # Bun, default tier
 bun run benchmark:ci       # small suite + 2.5× p95 gate vs committed baseline
-bun run benchmark:browser  # Chromium desktop + throttled Moto G4
 bun run benchmark:bun      # full tier + bun:sqlite comparison
 bun run benchmark:bundle   # dist sizes
 ```

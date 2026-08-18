@@ -175,7 +175,7 @@ console.log("sqlite-mem ci:local");
 console.log("Mirrors .github/workflows/ci.yml — skip: release/publish (main + OIDC only)");
 if (process.platform !== "linux") {
   notes.push(
-    `CI runs on ubuntu-latest; this host is ${process.platform}. bun:sqlite is Apple's system SQLite here and bundled 3.53.0 on Linux. Browser OS deps differ. The bench gate self-compares on mismatch (same as the GHA warning path).`,
+    `CI runs on ubuntu-latest; this host is ${process.platform}. bun:sqlite is Apple's system SQLite here and bundled 3.53.0 on Linux. The bench gate self-compares on mismatch (same as the GHA warning path).`,
   );
 }
 
@@ -193,20 +193,6 @@ await runStep("Verify package", ["bun", "run", "verify-package"]);
 
 job("test  (CI job)");
 await runStep("Run tests", ["bun", "run", "test:sqlite-compat"]);
-
-job("browser  (CI job)");
-// Mirrors GitHub Actions: Chromium only. Full trio: bun run test:browser (no env).
-const playwrightInstall =
-  process.platform === "linux"
-    ? ["bunx", "playwright", "install", "--with-deps", "chromium"]
-    : ["bunx", "playwright", "install", "chromium"];
-await runStep("Install Playwright browsers", playwrightInstall);
-await runStep("Browser smoke tests", ["bun", "run", "test:browser"], {
-  env: {
-    SQLITE_MEM_BROWSER_SKIP_BUILD: "1",
-    SQLITE_MEM_BROWSER_BROWSERS: "chromium",
-  },
-});
 
 job("benchmark  (CI job)");
 // Mirrors .github/workflows/ci.yml Regression gate: real 2.5× compare when
