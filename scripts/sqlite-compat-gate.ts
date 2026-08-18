@@ -10,6 +10,13 @@ import { buildInventoryReport } from "./sqlite-inventory.ts";
 const ROOT = join(import.meta.dir, "..");
 const COMPAT = join(ROOT, "compat");
 
+/**
+ * bun:sqlite is not one SQLite binary across platforms (oven-sh/bun#31247):
+ * - macOS: dlopens Apple's `/usr/lib/libsqlite3.dylib` (3.51.0 on macOS 26)
+ * - Linux/Windows bun 1.3.14: statically linked amalgamation 3.53.0
+ */
+const EXPECTED_ORACLE_VERSIONS = new Set(["3.51.0", "3.53.0"]);
+
 interface CoverageFile {
   counts: {
     total: number;
@@ -51,8 +58,13 @@ function main(): void {
   }
 
   const inventory = buildInventoryReport();
-  if (inventory.referenceSqliteVersion !== "3.51.0") {
-    failures.push(`Unexpected oracle version ${inventory.referenceSqliteVersion} (expected 3.51.0)`);
+  console.log(
+    `oracle bun:sqlite ${inventory.referenceSqliteVersion} (bun ${Bun.version} ${process.platform}/${process.arch})`,
+  );
+  if (!EXPECTED_ORACLE_VERSIONS.has(inventory.referenceSqliteVersion)) {
+    failures.push(
+      `Unexpected oracle version ${inventory.referenceSqliteVersion} (allowed: ${[...EXPECTED_ORACLE_VERSIONS].join(", ")})`,
+    );
   }
   if (inventory.missingOracleFunctions.length > 0) {
     failures.push(

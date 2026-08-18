@@ -175,7 +175,7 @@ console.log("sqlite-mem ci:local");
 console.log("Mirrors .github/workflows/ci.yml — skip: release/publish (main + OIDC only)");
 if (process.platform !== "linux") {
   notes.push(
-    `CI runs on ubuntu-latest; this host is ${process.platform}. Browser OS deps differ, and the benchmark regression gate fails closed when the baseline platform does not match.`,
+    `CI runs on ubuntu-latest; this host is ${process.platform}. bun:sqlite is Apple's system SQLite here and bundled 3.53.0 on Linux. Browser OS deps differ, and the benchmark regression gate fails closed when the baseline platform does not match.`,
   );
 }
 
