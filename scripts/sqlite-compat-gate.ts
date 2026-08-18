@@ -34,6 +34,11 @@ function main(): void {
     );
   } else {
     const coverage = JSON.parse(readFileSync(coveragePath, "utf8")) as CoverageFile;
+    if (coverage.counts.total < 500 || coverage.counts.sqlBehavior < 1) {
+      failures.push(
+        `compat coverage is empty or incomplete (total=${coverage.counts.total}, sqlBehavior=${coverage.counts.sqlBehavior})`,
+      );
+    }
     if (coverage.counts.unknown > 0) {
       failures.push(`${coverage.counts.unknown} SQL_BEHAVIOR requirements still unknown`);
     }

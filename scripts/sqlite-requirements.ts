@@ -798,9 +798,11 @@ function mergeCoverage(
   return out;
 }
 
-async function loadHtml(): Promise<string> {
+const MIN_REQUIREMENTS = 500;
+
+async function loadHtml(forceNetwork = false): Promise<string> {
   const vendored = join(COMPAT, "requirements.raw.html");
-  if (existsSync(vendored)) {
+  if (!forceNetwork && existsSync(vendored)) {
     return readFileSync(vendored, "utf8");
   }
   const res = await fetch(REQUIREMENTS_URL);
@@ -811,29 +813,52 @@ async function loadHtml(): Promise<string> {
   return html;
 }
 
+function loadCommittedRequirements(path: string): Requirement[] | null {
+  if (!existsSync(path)) return null;
+  try {
+    const data = JSON.parse(readFileSync(path, "utf8")) as { requirements?: Requirement[] };
+    const list = data.requirements;
+    if (!Array.isArray(list) || list.length < MIN_REQUIREMENTS) return null;
+    return list;
+  } catch {
+    return null;
+  }
+}
+
 async function main(): Promise<void> {
   mkdirSync(COMPAT, { recursive: true });
+  const requirementsPath = join(COMPAT, "requirements.json");
 
-  // Prefer previously fetched markdown dump if HTML parse is thin
-  const agentDump =
-    "/Users/chrisvouga/.cursor/projects/Users-chrisvouga-sqlite-mem/agent-tools/11967057-51ca-408c-acaa-982fed22e7dc.txt";
-  let html: string;
-  if (existsSync(agentDump)) {
-    html = readFileSync(agentDump, "utf8");
-  } else {
-    html = await loadHtml();
+  let requirements = parseRequirementsHtml(await loadHtml());
+  if (requirements.length < MIN_REQUIREMENTS) {
+    // Live sqlite.org HTML shape drifts; retry a forced network fetch once.
+    try {
+      requirements = parseRequirementsHtml(await loadHtml(true));
+    } catch (err) {
+      console.error(`Live requirements fetch failed: ${err instanceof Error ? err.message : err}`);
+    }
   }
 
-  let requirements = parseRequirementsHtml(html);
-  if (requirements.length < 500) {
-    // Retry live fetch
-    html = await loadHtml();
-    requirements = parseRequirementsHtml(html);
+  if (requirements.length < MIN_REQUIREMENTS) {
+    const committed = loadCommittedRequirements(requirementsPath);
+    if (committed) {
+      console.error(
+        `Parsed ${requirements.length} requirements from HTML; falling back to committed compat/requirements.json (${committed.length})`,
+      );
+      requirements = committed;
+    }
   }
 
   console.error(`Parsed ${requirements.length} requirements`);
 
-  const requirementsPath = join(COMPAT, "requirements.json");
+  if (requirements.length < MIN_REQUIREMENTS) {
+    console.error(
+      `ERROR: expected at least ${MIN_REQUIREMENTS} SQLite.org requirements, got ${requirements.length}. ` +
+        "Vendor a parseable dump as compat/requirements.raw.html or restore compat/requirements.json.",
+    );
+    process.exit(1);
+  }
+
   writeFileSync(
     requirementsPath,
     JSON.stringify(
