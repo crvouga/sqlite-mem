@@ -44,6 +44,6 @@ test("jsonb_array_insert roundtrips through json()", () => {
     null;
   oracle.close();
   if (hasArrayInsert) {
-    parity("jsonb_array_insert", [], `SELECT json(jsonb_array_insert('[1,2,3]','$[1]','new'))`);
+    parity("jsonb_array_insert", [], `SELECT json(jsonb_array_insert('[1,2,3]', '$[1]', 'new')) AS v`);
   }
 }

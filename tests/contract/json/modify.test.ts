@@ -47,7 +47,7 @@ test("json_array_insert rejects a path that is not an array index", () => {
     oracle.prepare("select 1 as ok from pragma_function_list() where name = 'json_array_insert' limit 1").get() != null;
   oracle.close();
   if (hasArrayInsert) {
-    parity("json_array_insert middle", [], `SELECT json_array_insert('[1,2,3]','$[1]','new')`);
-    parity("json_array_insert nested", [], `SELECT json_array_insert('{"a":[1,2,3]}','$.a[0]','new')`);
+    parity("json_array_insert middle", [], `SELECT json_array_insert('[1,2,3]', '$[1]', 'new') AS v`);
+    parity("json_array_insert nested", [], `SELECT json_array_insert('{"a":[1,2,3]}', '$.a[0]', 'new') AS v`);
   }
 }
