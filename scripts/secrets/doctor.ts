@@ -9,6 +9,10 @@ import {
   loadManifest,
   loadVaultConfig,
   localEnvStatus,
+  NPM_PACKAGE,
+  NPM_PACKAGE_URL,
+  NPM_TRUSTED_PUBLISHER_URL,
+  npmViewVersion,
   printCheck,
   printObtain,
   printPopulate,
@@ -31,6 +35,36 @@ console.log(`Vault: ${process.env.VAULT_ADDR?.trim() || cfg.addr}`);
 console.log(`Mount: ${cfg.mount}  project=${cfg.project}  config=${cfg.config}`);
 console.log(`Repo:  ${manifest.repo}`);
 console.log("");
+
+const npmInfo = await npmViewVersion(NPM_PACKAGE);
+if (npmInfo.error) {
+  results.push({
+    id: "npm:registry",
+    status: "warn",
+    message: `Could not query npm for ${NPM_PACKAGE}`,
+    details: [npmInfo.error],
+  });
+} else if (npmInfo.missing) {
+  results.push({
+    id: "npm:registry",
+    status: "fail",
+    message: `${NPM_PACKAGE} is not on the npm registry yet`,
+    details: [
+      "Trusted Publisher can only be configured after the package exists.",
+      "One-time seed from your npm login (no Automation token):",
+      "  bun run npm:seed -- --dry-run",
+      "  bun run npm:seed -- --yes",
+      "Then: npm login if prompted, then enable Trusted Publisher.",
+    ],
+  });
+} else {
+  results.push({
+    id: "npm:registry",
+    status: "pass",
+    message: `${NPM_PACKAGE}@${npmInfo.version} exists on npm`,
+    details: [NPM_PACKAGE_URL, `Trusted Publisher: ${NPM_TRUSTED_PUBLISHER_URL}`],
+  });
+}
 
 // --- Tooling ---
 const hasVault = await which("vault");
@@ -258,6 +292,11 @@ if (failedEntries.length > 0 || requiredChecklists.length > 0) {
   if (requiredChecklists.length > 0) {
     console.log("");
     console.log("# Trusted Publishing (required for CI publish)");
+    if (results.some((r) => r.id === "npm:registry" && r.status === "fail")) {
+      console.log("  Seed the package first (one-time local publish):");
+      console.log("    bun run npm:seed -- --yes");
+      console.log("  Then configure Trusted Publisher:");
+    }
     for (const item of requiredChecklists) {
       printObtain(item);
     }

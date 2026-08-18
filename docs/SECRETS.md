@@ -1,6 +1,6 @@
 # Secrets runbook (maintainers)
 
-`sqlite-mem` publishes with **npm Trusted Publishing (OIDC)** — not Automation tokens.
+`@crvouga/sqlite-mem` publishes with **npm Trusted Publishing (OIDC)** — not Automation tokens.
 npm itself warns against granular tokens for CI/CD; use Trusted Publishing instead.
 
 Optional Vault entries are only for **local** dry-runs (GitHub PAT). CI never calls Vault.
@@ -16,23 +16,41 @@ Inventory:
 # Full report + Trusted Publishing setup links (never prints secret values)
 bun run secrets:doctor
 
+# If the package is not on npm yet (one-time, uses `npm login` — not a token)
+bun run npm:seed -- --dry-run
+bun run npm:seed -- --yes
+
 # Validate optional Vault keys + confirm no required Actions secrets are missing
 bun run secrets:check
-
-# Sync Vault → GitHub (no-op today: publish does not use repo secrets)
-bun run secrets:sync -- --dry-run
 ```
 
-## One-time: Trusted Publishing (required)
+## One-time: seed the package, then Trusted Publishing
 
-1. Open the package on npm: https://www.npmjs.com/package/sqlite-mem
-2. **Settings → Trusted Publisher** (not “Granular Access Token”)
+npm cannot attach a Trusted Publisher until `@crvouga/sqlite-mem` exists on the registry.
+The unscoped name `sqlite-mem` is blocked by npm (too similar to `sqlite-vec`).
+
+1. Log in as yourself (interactive — **not** a granular Automation token):
+
+   ```bash
+   npm login --auth-type=web
+   bun run npm:seed -- --yes
+   ```
+
+   npm **does not email** a publish OTP. Enable authenticator 2FA on your npm account
+   ([account settings](https://www.npmjs.com/settings/~/account) or `npm profile enable-2fa auth-and-writes`),
+   then complete the **browser** challenge (or pass a 6-digit authenticator code with `--otp=123456`).
+
+   This publishes **`@crvouga/sqlite-mem@0.1.0`** without provenance. Later CI releases keep provenance via OIDC.
+
+2. Open **Trusted Publisher** (package Access settings — not “Granular Access Token”):
+   https://www.npmjs.com/package/@crvouga/sqlite-mem/access
 3. Add **GitHub Actions** publisher:
    - Organization/user: `crvouga`
    - Repository: `sqlite-mem`
    - Workflow filename: `ci.yml`
    - Environment: leave empty unless the release job uses one
 4. Confirm the release job already has `permissions.id-token: write` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
+5. If missing, push the baseline tag: `git tag v0.1.0 && git push origin v0.1.0`
 
 Docs: https://docs.npmjs.com/trusted-publishers
 

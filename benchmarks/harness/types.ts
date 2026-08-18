@@ -7,7 +7,9 @@ export interface MemorySample {
 }
 
 export interface BenchStatement {
-  run(...params: unknown[]):
+  run(
+    ...params: unknown[]
+  ):
     | { changes: number; lastInsertRowid: number | bigint }
     | Promise<{ changes: number; lastInsertRowid: number | bigint }>;
   all<T = Record<string, unknown>>(...params: unknown[]): T[] | Promise<T[]>;

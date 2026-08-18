@@ -1,5 +1,5 @@
 {
-  "name": "sqlite-mem",
+  "name": "@crvouga/sqlite-mem",
   "version": "0.0.0-development",
   "description": "Pure TypeScript in-memory SQLite implementation with zero WASM/native dependencies",
   "type": "module",
@@ -69,6 +69,7 @@
     "secrets:doctor": "bun run scripts/secrets/doctor.ts",
     "secrets:check": "bun run scripts/secrets/check-vault.ts && bun run scripts/secrets/check-github.ts",
     "secrets:sync": "bun run scripts/secrets/sync-github.ts",
+    "npm:seed": "bun run scripts/seed-npm.ts",
     "gh": "open https://github.com/crvouga/sqlite-mem/actions"
   },
   "devDependencies": {

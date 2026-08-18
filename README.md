@@ -13,15 +13,15 @@ See [COMPATIBILITY.md](COMPATIBILITY.md) for the matrix and [COMPATIBILITY-AUDIT
 ## Install
 
 ```bash
-bun add sqlite-mem
+bun add @crvouga/sqlite-mem
 # or
-npm install sqlite-mem
+npm install @crvouga/sqlite-mem
 ```
 
 ## Usage
 
 ```ts
-import { Database } from "sqlite-mem";
+import { Database } from "@crvouga/sqlite-mem";
 
 const db = new Database();
 
@@ -149,7 +149,16 @@ bun run release:dry-run
 
 Do this once so CI can publish. Full checklist: **[docs/SECRETS.md](./docs/SECRETS.md)**.
 
-1. **npm Trusted Publishing (OIDC)** — required. On [npmjs.com/package/sqlite-mem](https://www.npmjs.com/package/sqlite-mem) → Settings → Trusted Publisher → GitHub Actions (`crvouga/sqlite-mem`, workflow `ci.yml`). Do **not** create an Automation / granular access token for CI.
+1. **Create the package on npm (once), then Trusted Publishing.** If https://www.npmjs.com/package/@crvouga/sqlite-mem 404s:
+
+   ```bash
+   npm login --auth-type=web
+   bun run npm:seed -- --yes
+   ```
+
+   npm does not email a publish code — complete 2FA in the browser or authenticator app.
+
+   Then on [package Access](https://www.npmjs.com/package/@crvouga/sqlite-mem/access) → Trusted Publisher → GitHub Actions (`crvouga/sqlite-mem`, workflow `ci.yml`). Do **not** create an Automation / granular access token for CI.
 2. Confirm GitHub Actions is enabled and can create releases (default `GITHUB_TOKEN` is enough with this workflow’s permissions). No `NPM_TOKEN` repo secret.
 3. Ensure the baseline tag exists and is pushed: `v0.1.0` (semver continues from there; the next `feat` publishes `0.2.0`).
 

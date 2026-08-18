@@ -31,8 +31,8 @@ requireFile("package.json");
 
 const pkg = await Bun.file(join(root, "package.json")).json();
 
-if (pkg.name !== "sqlite-mem") {
-  fail(`package.json name must be "sqlite-mem" (got ${JSON.stringify(pkg.name)})`);
+if (pkg.name !== "@crvouga/sqlite-mem") {
+  fail(`package.json name must be "@crvouga/sqlite-mem" (got ${JSON.stringify(pkg.name)})`);
 }
 
 if (!pkg.exports?.["."]?.import || !pkg.exports?.["."]?.types) {
