@@ -25,7 +25,9 @@ Checked items (`[x]`) are already differentially covered. Unchecked items are wo
 
 [COMPATIBILITY.md](../COMPATIBILITY.md) and `compat/coverage.json` mark large areas **VERIFIED** via page-level `SOURCE_SEED` in [`scripts/sqlite-requirements.ts`](../scripts/sqlite-requirements.ts) (for example `lang_insert.html` → `tests/contract/insert/` + `tests/contract/upsert/`). That is **directory existence**, not construct-level coverage.
 
-Current matrix (`compat/coverage.json`): 1901 SQL_BEHAVIOR requirements → 1372 VERIFIED / 351 PARTIALLY_VERIFIED / 178 UNSUPPORTED. UNSUPPORTED is mostly unmapped sqlite.org pages (`optoverview.html`, `uri.html`, `vtab.html`, …), not a construct checklist.
+Current matrix (`compat/coverage.json`): 1901 SQL_BEHAVIOR requirements → 1372 VERIFIED / 351 PARTIALLY_VERIFIED / 178 UNSUPPORTED. UNSUPPORTED is mostly unmapped sqlite.org pages (`optoverview.html`, `uri.html`, `vtab.html`, `deterministic.html`, `dbstat.html`, plus essays like `undoredo.html` / `whynotgit.html`), not a construct checklist.
+
+`SOURCE_SEED` also keys pages the sqlite.org dump never ingested, so they never appear in `coverage.json` even when COMPATIBILITY.md claims them: `fts5.html`, `json1.html`, `windowfunctions.html`, `lang_with.html`, `rowvalue.html`, `expridx.html`, `nulls.html`. Some VERIFIED notes in `coverage.json` are stale vs current seed (e.g. “RTREE pending”, “unixepoch/timediff pending”).
 
 **LIKELY DIVERGENCE** items are hypotheses (missing or approximate implementation). Probe with a failing contract first, then fix or document.
 
@@ -219,7 +221,7 @@ Not in the original 13 app-code areas, but high likelihood of breaking a drop-in
 - [ ] **`NOT IN (SELECT …)` NULL trap** — high-likelihood app SQL; only list-form `NOT IN` is tested
 - [ ] **Comma joins** `FROM a, b WHERE …`; `USING` multi-column
 - [ ] **`pragma_*` TVFs** (`pragma_table_info()`, `pragma_function_list()`) — not implemented; inventory ignores them
-- [ ] Coverage hygiene: `uri.html` is UNSUPPORTED but mission says NOT APPLICABLE; `dbstat.html` UNSUPPORTED while the module exists; `fts5.html` / `json1.html` / `windowfunctions.html` are absent from the sqlite.org dump so they never appear in `coverage.json`
+- [ ] Coverage hygiene: `uri.html` is UNSUPPORTED but mission says NOT APPLICABLE; `dbstat.html` UNSUPPORTED while the module exists; `fts5.html` / `json1.html` / `windowfunctions.html` / `lang_with.html` / `rowvalue.html` / `expridx.html` / `nulls.html` are absent from the sqlite.org dump so they never appear in `coverage.json`; `undoredo.html` / `whynotgit.html` are not dialect; stale VERIFIED notes in `coverage.json` vs current `SOURCE_SEED`
 
 ---
 
