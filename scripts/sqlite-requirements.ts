@@ -843,7 +843,7 @@ async function main(): Promise<void> {
     const committed = loadCommittedRequirements(requirementsPath);
     if (committed) {
       console.error(
-        `Parsed ${requirements.length} requirements from HTML; falling back to committed compat/requirements.json (${committed.length})`,
+        `Parsed ${requirements.length} requirements from HTML; falling back to existing compat/requirements.json (${committed.length})`,
       );
       requirements = committed;
     }
@@ -854,7 +854,7 @@ async function main(): Promise<void> {
   if (requirements.length < MIN_REQUIREMENTS) {
     console.error(
       `ERROR: expected at least ${MIN_REQUIREMENTS} SQLite.org requirements, got ${requirements.length}. ` +
-        "Vendor a parseable dump as compat/requirements.raw.html or restore compat/requirements.json.",
+        "Vendor a parseable dump as compat/requirements.raw.html, or keep a previously generated compat/requirements.json.",
     );
     process.exit(1);
   }
