@@ -154,11 +154,23 @@ await ensureBuild();
 const { url, stop } = await serve();
 console.log(`Serving smoke page at ${url}`);
 
-const browsers: Array<[BrowserType, string]> = [
+const allBrowsers: Array<[BrowserType, string]> = [
   [chromium, "chromium"],
   [firefox, "firefox"],
   [webkit, "webkit"],
 ];
+
+/** Comma-separated list; default all three. CI sets `chromium` only. */
+const requested = (process.env.SQLITE_MEM_BROWSER_BROWSERS ?? "chromium,firefox,webkit")
+  .split(",")
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+const browsers = allBrowsers.filter(([, name]) => requested.includes(name));
+if (browsers.length === 0) {
+  throw new Error(
+    `SQLITE_MEM_BROWSER_BROWSERS=${JSON.stringify(process.env.SQLITE_MEM_BROWSER_BROWSERS)} matched no browsers (want chromium, firefox, and/or webkit)`,
+  );
+}
 
 let failed = false;
 try {
@@ -175,4 +187,4 @@ try {
 }
 
 if (failed) process.exit(1);
-console.log("Browser smoke passed on chromium, firefox, webkit");
+console.log(`Browser smoke passed on ${browsers.map(([, name]) => name).join(", ")}`);

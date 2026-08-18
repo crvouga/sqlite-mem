@@ -238,7 +238,7 @@ bun run typecheck
 bun run test:sqlite-compat   # requirements + inventory gate + differential suite
 bun test                     # contract + fuzz + harness
 bun run build
-bun run test:browser         # Playwright smoke (Chrome/Firefox/Safari)
+bun run test:browser         # Playwright smoke (Chrome/Firefox/Safari; CI uses Chromium)
 ```
 
 See [COMPATIBILITY.md](./COMPATIBILITY.md).

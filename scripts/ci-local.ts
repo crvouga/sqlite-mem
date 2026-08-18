@@ -195,15 +195,17 @@ job("test  (CI job)");
 await runStep("Run tests", ["bun", "run", "test:sqlite-compat"]);
 
 job("browser  (CI job)");
-// CI caches ~/.cache/ms-playwright and only re-runs install-deps on hit.
-// Locally browsers are usually already present; install is incremental.
+// Mirrors GitHub Actions: Chromium only. Full trio: bun run test:browser (no env).
 const playwrightInstall =
   process.platform === "linux"
-    ? ["bunx", "playwright", "install", "--with-deps", "chromium", "firefox", "webkit"]
-    : ["bunx", "playwright", "install", "chromium", "firefox", "webkit"];
+    ? ["bunx", "playwright", "install", "--with-deps", "chromium"]
+    : ["bunx", "playwright", "install", "chromium"];
 await runStep("Install Playwright browsers", playwrightInstall);
 await runStep("Browser smoke tests", ["bun", "run", "test:browser"], {
-  env: { SQLITE_MEM_BROWSER_SKIP_BUILD: "1" },
+  env: {
+    SQLITE_MEM_BROWSER_SKIP_BUILD: "1",
+    SQLITE_MEM_BROWSER_BROWSERS: "chromium",
+  },
 });
 
 job("benchmark  (CI job)");

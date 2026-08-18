@@ -126,8 +126,8 @@ jobs:
     name: Browser
     needs: [quality]
     runs-on: ubuntu-latest
-    # Cold Playwright install (--with-deps × 3 browsers) can hang on apt/CDN;
-    # fail closed instead of burning 20+ minutes. Cache hits finish in ~1–2 min.
+    # CI smokes Chromium only (Firefox/WebKit locally via bun run test:browser).
+    # apt install-deps can hang on unattended-upgrades / man-db; clear those first.
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v5
@@ -142,6 +142,16 @@ jobs:
       - name: Build
         run: bun run build
 
+      # Playwright --with-deps / install-deps waits on dpkg; Ubuntu background apt and
+      # man-db triggers commonly hang this step for many minutes on GH runners.
+      - name: Prepare apt for Playwright
+        run: |
+          sudo systemctl stop apt-daily.service apt-daily-upgrade.service unattended-upgrades.service || true
+          sudo systemctl stop apt-daily.timer apt-daily-upgrade.timer || true
+          sudo systemctl disable apt-daily.service apt-daily-upgrade.service unattended-upgrades.service || true
+          sudo apt-get --yes remove --purge man-db || true
+          sudo flock --wait 60 /var/lib/dpkg/lock-frontend true || true
+
       - name: Resolve Playwright version
         id: playwright
         run: echo "version=$(bun -e 'console.log(require("playwright/package.json").version)')" >> "$GITHUB_OUTPUT"
@@ -151,22 +161,23 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium
 
       # Cache stores browser binaries only; OS libs still need install-deps on hit.
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         timeout-minutes: 8
-        run: bunx playwright install --with-deps chromium firefox webkit
+        run: bunx playwright install --with-deps chromium
 
       - name: Install Playwright OS dependencies
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         timeout-minutes: 5
-        run: bunx playwright install-deps chromium firefox webkit
+        run: bunx playwright install-deps chromium
 
       - name: Browser smoke tests
         env:
           SQLITE_MEM_BROWSER_SKIP_BUILD: "1"
+          SQLITE_MEM_BROWSER_BROWSERS: chromium
         run: bun run test:browser
 
   benchmark:
