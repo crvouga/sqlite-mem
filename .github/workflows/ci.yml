@@ -126,6 +126,9 @@ jobs:
     name: Browser
     needs: [quality]
     runs-on: ubuntu-latest
+    # Cold Playwright install (--with-deps × 3 browsers) can hang on apt/CDN;
+    # fail closed instead of burning 20+ minutes. Cache hits finish in ~1–2 min.
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v5
 
@@ -139,10 +142,31 @@ jobs:
       - name: Build
         run: bun run build
 
+      - name: Resolve Playwright version
+        id: playwright
+        run: echo "version=$(bun -e 'console.log(require("playwright/package.json").version)')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      # Cache stores browser binaries only; OS libs still need install-deps on hit.
       - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 8
         run: bunx playwright install --with-deps chromium firefox webkit
 
+      - name: Install Playwright OS dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        timeout-minutes: 5
+        run: bunx playwright install-deps chromium firefox webkit
+
       - name: Browser smoke tests
+        env:
+          SQLITE_MEM_BROWSER_SKIP_BUILD: "1"
         run: bun run test:browser
 
   benchmark:

@@ -12,6 +12,13 @@ const root = path.resolve(import.meta.dir, "../..");
 const _distDir = path.join(root, "dist");
 
 async function ensureBuild(): Promise<void> {
+  if (process.env.SQLITE_MEM_BROWSER_SKIP_BUILD === "1") {
+    const dist = Bun.file(path.join(root, "dist/index.js"));
+    if (!(await dist.exists())) {
+      throw new Error("SQLITE_MEM_BROWSER_SKIP_BUILD=1 but dist/index.js is missing; run bun run build first");
+    }
+    return;
+  }
   const build = Bun.spawn(["bun", "run", "build"], { cwd: root, stdout: "inherit", stderr: "inherit" });
   const code = await build.exited;
   if (code !== 0) throw new Error("build failed");

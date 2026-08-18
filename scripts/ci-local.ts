@@ -21,7 +21,7 @@ function job(name: string): void {
   console.log("=".repeat(72));
 }
 
-async function runStep(label: string, argv: string[]): Promise<void> {
+async function runStep(label: string, argv: string[], opts?: { env?: Record<string, string> }): Promise<void> {
   console.log("");
   console.log(`▸ ${label}`);
   console.log(`  $ ${argv.join(" ")}`);
@@ -30,7 +30,7 @@ async function runStep(label: string, argv: string[]): Promise<void> {
     cwd: root,
     stdout: "inherit",
     stderr: "inherit",
-    env: { ...process.env, HUSKY: "0" },
+    env: { ...process.env, HUSKY: "0", ...opts?.env },
   });
   const code = await proc.exited;
   const seconds = (performance.now() - started) / 1000;
@@ -195,12 +195,16 @@ job("test  (CI job)");
 await runStep("Run tests", ["bun", "run", "test:sqlite-compat"]);
 
 job("browser  (CI job)");
+// CI caches ~/.cache/ms-playwright and only re-runs install-deps on hit.
+// Locally browsers are usually already present; install is incremental.
 const playwrightInstall =
   process.platform === "linux"
     ? ["bunx", "playwright", "install", "--with-deps", "chromium", "firefox", "webkit"]
     : ["bunx", "playwright", "install", "chromium", "firefox", "webkit"];
 await runStep("Install Playwright browsers", playwrightInstall);
-await runStep("Browser smoke tests", ["bun", "run", "test:browser"]);
+await runStep("Browser smoke tests", ["bun", "run", "test:browser"], {
+  env: { SQLITE_MEM_BROWSER_SKIP_BUILD: "1" },
+});
 
 job("benchmark  (CI job)");
 await runStep("CI benchmarks", ["bun", "run", "benchmark:ci"]);
