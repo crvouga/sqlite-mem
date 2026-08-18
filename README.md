@@ -58,6 +58,18 @@ db2.restore(snap);
 
 All methods are **synchronous** — do not `await` them. Browser and Node/Bun share the same in-memory JS surface (no filesystem; `ATTACH` opens a new empty in-memory schema, not a file).
 
+## Example
+
+A React + Vite SQL playground lives in [`examples/react-vite`](examples/react-vite):
+
+```bash
+cd examples/react-vite
+bun install
+bun run dev
+```
+
+From the repo root after that install: `bun run example`.
+
 ## API
 
 ```ts
@@ -208,7 +220,7 @@ Goal: drop-in SQL behavior vs SQLite **3.51.0**. Full matrix: [COMPATIBILITY.md]
 9. **Do not bind `Date` objects** — store unixepoch integers or ISO text.
 10. **Do not use `Number.isInteger` for SQL REAL vs INTEGER** — use SQL `typeof()`.
 
-Working examples beyond this README: `tests/contract/api/`, `tests/contract/parameters/`, `tests/browser/run.ts`.
+Working examples beyond this README: `examples/react-vite`, `tests/contract/api/`, `tests/contract/parameters/`, `tests/browser/run.ts`.
 
 ## Development
 

@@ -42,6 +42,7 @@
     "test": "bun test tests/contract tests/fuzz tests/harness",
     "test:contract": "bun test tests/contract",
     "test:fuzz": "bun test tests/fuzz",
+    "example": "bun run --cwd examples/react-vite dev",
     "test:browser": "bun run tests/browser/run.ts",
     "benchmark": "bun run benchmarks/run.ts --tier default --engine mem",
     "benchmark:bun": "bun run benchmarks/run.ts --tier full --engine both",
@@ -74,7 +75,8 @@
     "secrets:check": "bun run scripts/secrets/check-vault.ts && bun run scripts/secrets/check-github.ts",
     "secrets:sync": "bun run scripts/secrets/sync-github.ts",
     "npm:seed": "bun run scripts/seed-npm.ts",
-    "gh": "open https://github.com/crvouga/sqlite-mem/actions"
+    "gh": "open https://github.com/crvouga/sqlite-mem/actions",
+    "example:react-vite": "cd examples/react-vite && bun install && bun run dev"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
