@@ -111,15 +111,16 @@ export function compareReports(
   for (const base of baseline.results) {
     const match = currentByKey.get(`${base.engine}::${base.name}`);
     if (!match) continue;
-    // CI suites use few iterations — gate on median (p50), not noisy p95 tails.
-    const useMedian =
+    // n<5: p50 is one sample (printed as mean~). Gate on mean instead.
+    // n<12: gate on median, not noisy p95 tails.
+    const unreliable =
       base.reliablePercentiles === false ||
       match.reliablePercentiles === false ||
-      base.iterations < 12 ||
-      match.iterations < 12 ||
-      base.iterations < RELIABLE_PERCENTILE_MIN_SAMPLES;
-    const baseMetric = useMedian ? base.p50 || base.mean : base.p95;
-    const matchMetric = useMedian ? match.p50 || match.mean : match.p95;
+      base.iterations < RELIABLE_PERCENTILE_MIN_SAMPLES ||
+      match.iterations < RELIABLE_PERCENTILE_MIN_SAMPLES;
+    const useMedian = !unreliable && (base.iterations < 12 || match.iterations < 12);
+    const baseMetric = unreliable ? base.mean || base.p50 : useMedian ? base.p50 || base.mean : base.p95;
+    const matchMetric = unreliable ? match.mean || match.p50 : useMedian ? match.p50 || match.mean : match.p95;
     if (baseMetric <= 0) continue;
     // Ignore absolute noise on sub-50µs micros where scheduling dominates.
     if (baseMetric < 0.05 && matchMetric < 0.2) continue;

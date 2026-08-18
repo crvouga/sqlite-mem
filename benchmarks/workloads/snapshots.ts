@@ -36,7 +36,7 @@ export function snapshotSpecs(): BenchSpec[] {
         datasetSize: target.rows,
         tiers: target.tiers,
         layer: "engine",
-        warmup: 0,
+        warmup: target.rows >= 25_000 ? 0 : 1,
         iterations: target.rows >= 25_000 ? 1 : 3,
         setup: (engine) => {
           populateSnapshotDb(engine, target.rows, target.payloadBytes);
@@ -65,7 +65,7 @@ export function snapshotSpecs(): BenchSpec[] {
         tiers: target.tiers,
         layer: "engine",
         isolateIterations: target.rows >= 25_000,
-        warmup: 0,
+        warmup: target.rows >= 25_000 ? 0 : 1,
         iterations: target.rows >= 25_000 ? 1 : 3,
         setup: (engine) => {
           populateSnapshotDb(engine, target.rows, target.payloadBytes);
