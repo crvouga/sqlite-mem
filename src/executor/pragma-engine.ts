@@ -181,6 +181,62 @@ export function isPragmaTvfName(name: string): boolean {
   return false;
 }
 
+/**
+ * Column names for a pragma_* TVF without evaluating arguments.
+ * Used by SELECT shape analysis so correlated args (e.g. `tl.name`) are not
+ * resolved before the outer row is bound.
+ */
+export function pragmaTvfColumns(name: string): string[] | null {
+  const key = normalizePragmaKey(name);
+  switch (key) {
+    case "foreign_keys":
+      return ["foreign_keys"];
+    case "user_version":
+      return ["user_version"];
+    case "schema_version":
+      return ["schema_version"];
+    case "table_info":
+      return ["cid", "name", "type", "notnull", "dflt_value", "pk"];
+    case "table_xinfo":
+      return ["cid", "name", "type", "notnull", "dflt_value", "pk", "hidden"];
+    case "index_list":
+      return ["seq", "name", "unique", "origin", "partial"];
+    case "index_info":
+      return ["seqno", "cid", "name"];
+    case "index_xinfo":
+      return ["seqno", "cid", "name", "desc", "coll", "key"];
+    case "foreign_key_list":
+      return ["id", "seq", "table", "from", "to", "on_update", "on_delete", "match"];
+    case "foreign_key_check":
+      return ["table", "rowid", "parent", "fkid"];
+    case "database_list":
+      return ["seq", "name", "file"];
+    case "table_list":
+      return ["schema", "name", "type", "ncol", "wr", "strict"];
+    case "collation_list":
+      return ["seq", "name"];
+    case "compile_options":
+      return ["compile_options"];
+    case "function_list":
+      return ["name", "builtin", "type", "enc", "narg", "flags"];
+    case "module_list":
+    case "pragma_list":
+      return ["name"];
+    case "integrity_check":
+    case "quick_check":
+      return [key];
+    case "optimize":
+      return ["optimize"];
+    case "page_count":
+      return ["page_count"];
+    default: {
+      const storage = STORAGE_DEFAULTS[key];
+      if (storage) return [storage.column];
+      return null;
+    }
+  }
+}
+
 function normalizePragmaKey(name: string): string {
   const lower = name.toLowerCase();
   if ((PRAGMA_TVF_NAMES as readonly string[]).includes(lower)) return lower;

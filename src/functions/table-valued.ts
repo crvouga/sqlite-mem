@@ -1,6 +1,7 @@
 import type { Expr } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
 import type { ExecutionEnv, ScopeRow } from "../executor/env.ts";
+import { pragmaTvfColumns } from "../executor/pragma-engine.ts";
 import { evalExpr } from "../expressions/eval.ts";
 import { jsonEachRows, jsonTreeRows } from "../json/tvf.ts";
 import { toInteger } from "../types/value.ts";
@@ -84,6 +85,18 @@ registerTableValuedFunction("json_tree", (args, alias) => {
 
 function safeInt(value: bigint): number | bigint {
   return value <= BigInt(Number.MAX_SAFE_INTEGER) && value >= BigInt(Number.MIN_SAFE_INTEGER) ? Number(value) : value;
+}
+
+/**
+ * Known output columns for a TVF without evaluating arguments.
+ * Prefer this for FROM-item shape analysis when args may be correlated.
+ */
+export function tableValuedColumns(name: string): string[] | null {
+  ensurePragmaTvfsRegistered();
+  const lower = name.toLowerCase();
+  if (lower === "generate_series") return ["value"];
+  if (lower === "json_each" || lower === "json_tree") return [...JSON_TVF_COLUMNS];
+  return pragmaTvfColumns(name);
 }
 
 export function evaluateTableFunction(

@@ -11,6 +11,60 @@ describe("pragma_* TVFs", () => {
     "SELECT * FROM pragma_table_info('people') ORDER BY cid",
   );
 
+  // Kysely SqliteIntrospector style: correlated TVF arg from outer CTE/subquery row.
+  parity(
+    "correlated pragma_table_info(tl.name) comma-join",
+    ["CREATE TABLE notes (id TEXT PRIMARY KEY, body TEXT)", "CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT)"],
+    `WITH table_list AS (
+      SELECT name FROM sqlite_master
+      WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+    )
+    SELECT
+      tl.name AS "table",
+      p.cid, p.name, p.type, p."notnull", p.dflt_value, p.pk
+    FROM table_list AS tl, pragma_table_info(tl.name) AS p
+    ORDER BY tl.name, p.cid`,
+  );
+
+  parity(
+    "correlated pragma_table_info(tl.name) JOIN",
+    ["CREATE TABLE notes (id TEXT PRIMARY KEY, body TEXT)", "CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT)"],
+    `SELECT tl.name AS "table", p.name
+     FROM (SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%') AS tl
+     JOIN pragma_table_info(tl.name) AS p
+     ORDER BY tl.name, p.cid`,
+  );
+
+  parity(
+    "correlated pragma_table_info empty catalog returns empty",
+    [],
+    `WITH table_list AS (
+      SELECT name FROM sqlite_master
+      WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+    )
+    SELECT tl.name AS "table", p.name
+    FROM table_list AS tl, pragma_table_info(tl.name) AS p
+    ORDER BY tl.name, p.name`,
+  );
+
+  parity(
+    "correlated pragma_index_list(tl.name)",
+    ["CREATE TABLE people(id INTEGER PRIMARY KEY, name TEXT)", "CREATE INDEX idx_people_name ON people(name)"],
+    `SELECT tl.name AS "table", p.name, p."unique"
+     FROM (SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'people') AS tl
+     JOIN pragma_index_list(tl.name) AS p
+     ORDER BY p.seq`,
+  );
+
+  parity(
+    "correlated pragma_table_xinfo(tl.name)",
+    ["CREATE TABLE people(id INTEGER PRIMARY KEY, name TEXT NOT NULL)"],
+    `SELECT tl.name AS "table", p.name, p.hidden
+     FROM (SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'people') AS tl
+     JOIN pragma_table_xinfo(tl.name) AS p
+     ORDER BY p.cid`,
+  );
+
   parity(
     "pragma_table_xinfo TVF",
     ["CREATE TABLE people(id INTEGER PRIMARY KEY, name TEXT NOT NULL)"],

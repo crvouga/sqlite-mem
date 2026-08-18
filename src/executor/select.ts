@@ -12,7 +12,7 @@ import { SqliteError } from "../errors/index.ts";
 import type { EvalContext } from "../expressions/context.ts";
 import { evalExpr } from "../expressions/eval.ts";
 import { isPragmaTvfName } from "../functions/pragma-tvf.ts";
-import { evaluateTableFunction, hasTableValuedFunction } from "../functions/table-valued.ts";
+import { evaluateTableFunction, hasTableValuedFunction, tableValuedColumns } from "../functions/table-valued.ts";
 import { buildSqliteMaster, buildSqliteSchema } from "../schema/catalog.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
 import {
@@ -670,12 +670,9 @@ function shapeOf(item: FromItem, env: ExecutionEnv): ScopeRow["cells"] {
   if (item.type === "subquery")
     return resultColumnNames(item.select.columns).map((name) => ({ table: item.alias, name, value: null }));
   if (item.type === "table_func") {
-    const columns =
-      item.name.toLowerCase() === "generate_series"
-        ? ["value"]
-        : item.name.toLowerCase() === "json_each" || item.name.toLowerCase() === "json_tree"
-          ? ["key", "value", "type", "atom", "id", "parent", "fullkey", "path"]
-          : evaluateTableFunction(item.name, item.args, item.alias, env).columns;
+    // Do not evaluate args here — they may be correlated (e.g. pragma_table_info(tl.name)).
+    const known = tableValuedColumns(item.name);
+    const columns = known ?? evaluateTableFunction(item.name, item.args, item.alias, env).columns;
     return columns.map((name) => ({
       table: item.alias ?? item.name,
       name,
@@ -683,7 +680,7 @@ function shapeOf(item: FromItem, env: ExecutionEnv): ScopeRow["cells"] {
     }));
   }
   if (item.type === "table" && isPragmaTvfName(item.name) && hasTableValuedFunction(item.name.toLowerCase())) {
-    const columns = evaluateTableFunction(item.name, [], item.alias, env).columns;
+    const columns = tableValuedColumns(item.name) ?? evaluateTableFunction(item.name, [], item.alias, env).columns;
     return columns.map((name) => ({
       table: item.alias ?? item.name,
       name,

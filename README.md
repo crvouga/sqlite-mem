@@ -216,7 +216,7 @@ Goal: drop-in SQL behavior vs SQLite **3.51.0**. Full matrix: [COMPATIBILITY.md]
 - FTS3/4/5 — largely implemented; shadow-table change counters intentionally diverge; some edges partial
 - `EXPLAIN` / `EXPLAIN QUERY PLAN` — stub shapes, not real bytecode
 - `INDEXED BY` / `NOT INDEXED` — parsed and discarded
-- Unknown statement `PRAGMA` succeeds with an empty result (SQLite-like). All oracle-exposed `pragma_*` eponymous TVFs are supported (`SELECT * FROM pragma_table_info('t')`, bare `FROM pragma_database_list`, …). Storage/journal getters return bun `:memory:`-compatible defaults.
+- Unknown statement `PRAGMA` succeeds with an empty result (SQLite-like). All oracle-exposed `pragma_*` eponymous TVFs are supported (`SELECT * FROM pragma_table_info('t')`, bare `FROM pragma_database_list`, …), including **correlated** args such as `FROM table_list AS tl, pragma_table_info(tl.name) AS p` (Kysely SQLite introspector). Storage/journal getters return bun `:memory:`-compatible defaults.
 
 ## Common pitfalls
 
