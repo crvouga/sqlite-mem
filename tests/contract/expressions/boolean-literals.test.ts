@@ -49,7 +49,7 @@ parity(
 );
 
 parity(
-  "quoted identifier \"true\" is a column, distinct from literal true",
+  'quoted identifier "true" is a column, distinct from literal true',
   ['CREATE TABLE q("true" INT)', 'INSERT INTO q("true") VALUES (5)'],
   'SELECT "true" AS quoted_col, true AS lit FROM q',
 );
