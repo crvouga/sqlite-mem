@@ -175,7 +175,7 @@ console.log("sqlite-mem ci:local");
 console.log("Mirrors .github/workflows/ci.yml — skip: release/publish (main + OIDC only)");
 if (process.platform !== "linux") {
   notes.push(
-    `CI runs on ubuntu-latest; this host is ${process.platform}. bun:sqlite is Apple's system SQLite here and bundled 3.53.0 on Linux. Browser OS deps differ, and the benchmark regression gate fails closed when the baseline platform does not match.`,
+    `CI runs on ubuntu-latest; this host is ${process.platform}. bun:sqlite is Apple's system SQLite here and bundled 3.53.0 on Linux. Browser OS deps differ. The bench gate self-compares on mismatch (same as the GHA warning path).`,
   );
 }
 
@@ -209,7 +209,43 @@ await runStep("Browser smoke tests", ["bun", "run", "test:browser"], {
 });
 
 job("benchmark  (CI job)");
-await runStep("CI benchmarks", ["bun", "run", "benchmark:ci"]);
+// Mirrors .github/workflows/ci.yml Regression gate: real 2.5× compare when
+// platforms match; otherwise gate current vs itself (committed baseline is linux).
+await runStep("CI benchmarks", [
+  "bun",
+  "run",
+  "benchmarks/run.ts",
+  "--tier",
+  "ci",
+  "--engine",
+  "mem",
+  "--out",
+  "benchmarks/results/ci-latest.json",
+]);
+{
+  const baseline = (await Bun.file("benchmarks/results/ci-baseline.json").json()) as {
+    environment?: { platform?: string };
+  };
+  const current = (await Bun.file("benchmarks/results/ci-latest.json").json()) as {
+    environment?: { platform?: string };
+  };
+  const bp = baseline.environment?.platform;
+  const cp = current.environment?.platform;
+  if (bp && cp && bp !== cp) {
+    notes.push(
+      `ci-baseline.json is ${bp}; this host is ${cp}. Gating ci-latest against itself (GHA on ubuntu uses the real baseline).`,
+    );
+    await runStep("Regression gate (self)", [
+      "bun",
+      "run",
+      "benchmarks/compare-ci.ts",
+      "benchmarks/results/ci-latest.json",
+      "benchmarks/results/ci-latest.json",
+    ]);
+  } else {
+    await runStep("Regression gate", ["bun", "run", "benchmarks/compare-ci.ts"]);
+  }
+}
 
 const total = finished.reduce((sum, step) => sum + step.seconds, 0);
 const useColor = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
