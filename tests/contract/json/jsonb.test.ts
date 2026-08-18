@@ -1,3 +1,6 @@
+import { Database as BunDatabase } from "bun:sqlite";
+import { expect, test } from "bun:test";
+import { InMemoryAdapter } from "../../adapters/in-memory.ts";
 import { parity } from "../helpers.ts";
 
 parity("jsonb hex encoding array", [], `SELECT hex(jsonb('[1,2]'))`);
@@ -22,3 +25,25 @@ parity(
   ["CREATE TABLE t(v)", "INSERT INTO t VALUES (1), (2)"],
   `SELECT json(jsonb_group_array(v)) FROM t`,
 );
+
+test("jsonb_array_insert roundtrips through json()", () => {
+  const db = new InMemoryAdapter();
+  try {
+    const result = db.query(`SELECT json(jsonb_array_insert('[1,2,3]','$[1]','new')) AS v`);
+    expect(result.ok).toBe(true);
+    expect(String(result.rows[0]!.v)).toBe('[1,"new",2,3]');
+  } finally {
+    db.close();
+  }
+});
+
+{
+  const oracle = new BunDatabase(":memory:");
+  const hasArrayInsert =
+    oracle.prepare("select 1 as ok from pragma_function_list() where name = 'jsonb_array_insert' limit 1").get() !=
+    null;
+  oracle.close();
+  if (hasArrayInsert) {
+    parity("jsonb_array_insert", [], `SELECT json(jsonb_array_insert('[1,2,3]','$[1]','new'))`);
+  }
+}

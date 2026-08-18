@@ -7,6 +7,7 @@ export {
   walkJsonbTree,
 } from "./jsonb.ts";
 export {
+  arrayInsertJson,
   ensureJson,
   extractOne,
   jsonArrowPath,

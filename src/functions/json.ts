@@ -1,5 +1,6 @@
 import { SqliteError } from "../errors/index.ts";
 import {
+  arrayInsertJson,
   ensureJson,
   extractOne,
   isValidJsonText,
@@ -31,6 +32,27 @@ function textOf(value: SqlValue): string {
 function _requireOdd(name: string, args: SqlValue[]): void {
   if (args.length % 2 === 0) {
     throw new SqliteError(`json_${name}() requires an odd number of arguments`, "misuse");
+  }
+}
+
+function arrayInsertArgs(args: SqlValue[], asJsonb: boolean): SqlValue {
+  if (args.length === 0) {
+    throw new SqliteError("wrong number of arguments to function json_array_insert()", "misuse");
+  }
+  if (args.length % 2 === 0) {
+    throw new SqliteError("json_array_insert() requires an odd number of arguments", "misuse");
+  }
+  if (args.some((arg) => arg === null)) return null;
+  try {
+    let node = ensureJson(args[0]!);
+    for (let i = 1; i < args.length; i += 2) {
+      const path = textOf(args[i]!);
+      const value = sqlValueToJsonNode(args[i + 1]!);
+      node = arrayInsertJson(node, path, value);
+    }
+    return asJsonb ? jsonNodeToSql(node, "jsonb") : jsonNodeToSql(node, "json");
+  } catch (e) {
+    wrapJsonError(e);
   }
 }
 
@@ -175,6 +197,12 @@ export const jsonScalarFunctions: Readonly<Record<string, ScalarFunction>> = {
   },
   jsonb_insert(args) {
     return mutateArgs(args, "insert", true);
+  },
+  json_array_insert(args) {
+    return arrayInsertArgs(args, false);
+  },
+  jsonb_array_insert(args) {
+    return arrayInsertArgs(args, true);
   },
   json_replace(args) {
     return mutateArgs(args, "replace", false);

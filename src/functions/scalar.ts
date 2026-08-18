@@ -302,6 +302,10 @@ const scalarFunctions: Record<string, ScalarFunction> = {
     requireArgs("sqlite_log", args, 2);
     return null;
   },
+  load_extension(args) {
+    requireArgs("load_extension", args, 1, 2);
+    throw new SqliteError("not authorized", "misuse");
+  },
   like(args) {
     requireArgs("like", args, 2, 3);
     if (args[0] === null || args[1] === null || args[2] === null) return null;

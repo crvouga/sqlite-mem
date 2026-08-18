@@ -34,30 +34,17 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Validate current commit (push)
+      # Direct pushes to main cannot rewrite already-landed messages.
+      # Conventional Commits are enforced on pull requests (commits + title).
+      # semantic-release still ignores non-releasable commits on main.
+      - name: Note push commitlint policy
         if: github.event_name == 'push'
         run: |
           set +e
           bunx commitlint --last --verbose
           status=$?
           if [ "$status" -ne 0 ]; then
-            echo "::error::Commit message failed Conventional Commits lint."
-            echo ""
-            echo "Expected format:"
-            echo "  <type>(optional-scope): <description>"
-            echo ""
-            echo "Examples that trigger a release:"
-            echo "  feat: add JOIN support"
-            echo "  fix: correct NULL handling in WHERE"
-            echo "  feat!: rename Database.snapshot API"
-            echo ""
-            echo "Examples that do NOT release:"
-            echo "  docs: update README"
-            echo "  chore: tweak CI"
-            echo "  refactor: clean up parser"
-            echo ""
-            echo "See README.md → Releasing"
-            exit "$status"
+            echo "::warning::HEAD is not Conventional Commits. Enforced on PRs; semantic-release will skip this commit."
           fi
 
       - name: Validate PR commits
@@ -210,13 +197,9 @@ jobs:
         run: bun run verify-package
 
       - name: Release preflight
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: bun run release:preflight
 
       - name: Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: bunx semantic-release

@@ -117,6 +117,29 @@ export function extractOne(root: JsonNode, path: string): JsonNode | undefined {
 
 export type MutateMode = "insert" | "replace" | "set";
 
+/**
+ * json_array_insert / jsonb_array_insert — like json_replace, but PATH must end
+ * with an array index and the value is spliced in (existing elements shift right).
+ * https://www.sqlite.org/json1.html#jarrins
+ */
+export function arrayInsertJson(root: JsonNode, path: string, value: JsonNode): JsonNode {
+  const steps = parseJsonPath(path);
+  const last = steps[steps.length - 1];
+  if (!last || last.kind === "root" || last.kind === "key") {
+    throw new SqliteError("JSON path error", "other");
+  }
+  const result = cloneJson(root);
+  const parentInfo = pathParent(result, steps);
+  if (parentInfo?.parent.kind !== "array") return result;
+  const parent = parentInfo.parent;
+  let idx = parentInfo.index;
+  if (last.kind === "fromEnd") idx = parent.elements.length - last.n;
+  if (last.kind === "append") idx = parent.elements.length;
+  if (idx < 0 || idx > parent.elements.length) return result;
+  parent.elements.splice(idx, 0, cloneJson(value));
+  return result;
+}
+
 export function mutateJson(root: JsonNode, path: string, value: JsonNode, mode: MutateMode): JsonNode {
   const steps = parseJsonPath(path);
   if (steps.length <= 1) {

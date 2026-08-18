@@ -1,6 +1,7 @@
 import { Database as BunDatabase } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 import { listMemoryFunctionNames } from "../../../scripts/sqlite-inventory.ts";
+import { InMemoryAdapter } from "../../adapters/in-memory.ts";
 
 /**
  * Scope-3: every oracle-exposed SQL function name must be present in sqlite-mem.
@@ -37,8 +38,32 @@ describe("function inventory vs oracle", () => {
 
   test("representative Scope-3 builtins are present", () => {
     const mem = listMemoryFunctionNames();
-    for (const name of ["sin", "cos", "pow", "sqrt", "instr", "concat", "unicode", "unixepoch", "ntile", "uuid"]) {
+    for (const name of [
+      "sin",
+      "cos",
+      "pow",
+      "sqrt",
+      "instr",
+      "concat",
+      "unicode",
+      "unixepoch",
+      "ntile",
+      "uuid",
+      "json_array_insert",
+      "jsonb_array_insert",
+      "load_extension",
+    ]) {
       expect(mem.has(name)).toBe(true);
+    }
+  });
+
+  test("load_extension is registered but not authorized", () => {
+    const db = new InMemoryAdapter();
+    try {
+      const result = db.query("SELECT load_extension('x')");
+      expect(result.ok).toBe(false);
+    } finally {
+      db.close();
     }
   });
 });

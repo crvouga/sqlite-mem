@@ -19,6 +19,14 @@ if (!(await currentFile.exists())) {
 
 const baseline = (await baselineFile.json()) as BenchReport;
 const current = (await currentFile.json()) as BenchReport;
+const basePlatform = baseline.environment.platform;
+const currentPlatform = current.environment.platform;
+if (basePlatform && currentPlatform && basePlatform !== currentPlatform) {
+  console.log(
+    `Skipping regression gate: baseline platform=${basePlatform} current=${currentPlatform}. Refresh benchmarks/results/ci-baseline.json from CI to enable the gate.`,
+  );
+  process.exit(0);
+}
 const slowerThan = Number(process.env.BENCH_REGRESSION_FACTOR ?? 2.5);
 const regressions = compareReports(baseline, current, slowerThan);
 
