@@ -273,7 +273,7 @@ export function decodeDatabaseState(snapshot: Uint8Array): DecodedSnapshot {
     throw new SqliteError("invalid sqlite-mem snapshot magic", "other");
   const version = reader.u32();
   if (version !== VERSION && version !== VERSION_V1) {
-    throw new SqliteError(`unsupported sqlite-mem snapshot version: ${version}`, "unsupported");
+    throw new SqliteError(`unsupported sqlite-mem snapshot version: ${version}`, "snapshot_version", "SQLITE_FORMAT");
   }
   const state = new DatabaseState();
   state.foreignKeysEnabled = reader.u8() !== 0;

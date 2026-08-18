@@ -1,4 +1,5 @@
-import { Database, parse } from "../../src/index.ts";
+import { Database } from "../../src/index.ts";
+import { parse } from "../../src/unstable.ts";
 import type { BenchSpec } from "../harness/types.ts";
 import { fillUsers } from "./populate.ts";
 import { spec } from "./tiers.ts";

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { Database, DEFAULT_NOW, Prng } from "../../../src/index.ts";
+import { Database } from "../../../src/index.ts";
+import { DEFAULT_NOW, Prng } from "../../../src/unstable.ts";
 import { InMemoryAdapter } from "../../adapters/in-memory.ts";
 
 describe("determinism", () => {

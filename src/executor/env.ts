@@ -111,16 +111,16 @@ export class ExecutionEnv {
 
   getBoundParameter(name: string | number): SqlValue {
     if (typeof name === "number") {
-      if (name < 1 || name > this.positional.length)
-        throw new SqliteError(`binding parameter ${name} is not supplied`, "misuse");
+      if (name < 1 || name > this.positional.length) return null;
       return this.positional[name - 1]!;
     }
     const key = name.toLowerCase();
-    const value = this.named.get(key);
-    if (value === undefined && !this.named.has(key)) {
-      throw new SqliteError(`binding parameter :${name} is not supplied`, "misuse");
+    if (!this.named.has(key)) {
+      // Unnamed positional fallback is handled by the evaluator for PARAM_POS;
+      // named placeholders that were never bound are NULL (SQLite).
+      return null;
     }
-    return value ?? null;
+    return this.named.get(key) ?? null;
   }
 
   setNamed(name: string, value: unknown): void {
@@ -220,8 +220,9 @@ export class ExecutionEnv {
         return {
           columns: result.columns,
           rows:
-            result.values?.map((row) => [...row]) ??
-            result.rows.map((record) => result.columns.map((column) => record[column] ?? null)),
+            result.values.length > 0
+              ? result.values.map((row) => [...row])
+              : result.rows.map((record) => result.columns.map((column) => record[column] ?? null)),
         };
       },
       matchFts: (table, column, query) => {
@@ -250,7 +251,23 @@ export function toSqlValue(value: unknown): SqlValue {
   }
   if (typeof value === "boolean") return value ? 1 : 0;
   if (value instanceof SqlReal || value instanceof SqlJsonText) return value;
-  if (value instanceof Uint8Array) return new Uint8Array(value);
+  if (value instanceof Uint8Array) {
+    if (isSharedArrayBufferView(value)) {
+      throw new SqliteError("cannot bind SharedArrayBuffer-backed buffers; copy into a Uint8Array first", "misuse");
+    }
+    return new Uint8Array(value);
+  }
   if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  if (typeof SharedArrayBuffer !== "undefined" && value instanceof SharedArrayBuffer) {
+    throw new SqliteError("cannot bind SharedArrayBuffer; copy into an ArrayBuffer or Uint8Array first", "misuse");
+  }
+  if (ArrayBuffer.isView(value)) {
+    const kind = Object.prototype.toString.call(value).slice(8, -1);
+    throw new SqliteError(`cannot bind ${kind}; only Uint8Array and ArrayBuffer are accepted as BLOB values`, "misuse");
+  }
   throw new SqliteError(`unsupported bind value: ${typeof value}`, "datatype_mismatch");
+}
+
+function isSharedArrayBufferView(view: ArrayBufferView): boolean {
+  return typeof SharedArrayBuffer !== "undefined" && view.buffer instanceof SharedArrayBuffer;
 }

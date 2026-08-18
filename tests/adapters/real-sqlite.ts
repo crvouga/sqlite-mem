@@ -76,11 +76,6 @@ class RealSqliteStatement implements ContractStatement {
     this.onRun = onRun;
   }
 
-  bind(...params: SqlValue[]): ContractStatement {
-    this.stmt.bind(...(params as never[]));
-    return this;
-  }
-
   run(...params: SqlValue[]): QueryResult {
     try {
       const result = params.length > 0 ? this.stmt.run(...(params as never[])) : this.stmt.run();

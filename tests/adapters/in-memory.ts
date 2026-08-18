@@ -26,23 +26,11 @@ function mapSqliteError(error: unknown): QueryResult {
   };
 }
 
-function _rowsFromRecords(rows: Record<string, SqlValue>[]): { columns: string[]; rows: Record<string, SqlValue>[] } {
-  if (rows.length === 0) {
-    return { columns: [], rows: [] };
-  }
-  return { columns: Object.keys(rows[0]!), rows };
-}
-
 class InMemoryStatement implements ContractStatement {
   private readonly stmt: Statement;
 
   constructor(stmt: Statement) {
     this.stmt = stmt;
-  }
-
-  bind(...params: SqlValue[]): ContractStatement {
-    this.stmt.bind(...params);
-    return this;
   }
 
   run(...params: SqlValue[]): QueryResult {
@@ -62,7 +50,7 @@ class InMemoryStatement implements ContractStatement {
         result.rows as Record<string, SqlValue>[],
         0,
         0,
-        result.values?.map((row) => [...row]),
+        result.values.map((row) => [...row]),
       );
     } catch (error) {
       return mapSqliteError(error);
@@ -80,7 +68,7 @@ class InMemoryStatement implements ContractStatement {
         [result.rows[0] as Record<string, SqlValue>],
         0,
         0,
-        result.values ? [[...result.values[0]!]] : undefined,
+        result.values.length > 0 ? [[...result.values[0]!]] : [],
       );
     } catch (error) {
       return mapSqliteError(error);
@@ -90,7 +78,11 @@ class InMemoryStatement implements ContractStatement {
 
 export function safeExec(db: Database, sql: string, params?: SqlValue[]): QueryResult {
   try {
-    db.exec(sql, params);
+    if (params && params.length > 0) {
+      const result = db.prepare(sql).run(...params);
+      return okResult([], [], result.changes, result.lastInsertRowid);
+    }
+    db.exec(sql);
     return okResult([], [], db.changes, db.lastInsertRowid);
   } catch (error) {
     return mapSqliteError(error);
@@ -120,7 +112,7 @@ export class InMemoryAdapter implements ContractDb {
         result.rows as Record<string, SqlValue>[],
         0,
         0,
-        result.values?.map((row) => [...row]),
+        result.values.map((row) => [...row]),
       );
     } catch (error) {
       return mapSqliteError(error);

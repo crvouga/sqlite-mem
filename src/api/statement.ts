@@ -19,9 +19,9 @@ export interface RunResult {
 /**
  * Prepared SQL statement bound to a {@link Database}.
  *
- * Create with {@link Database.prepare}. Extra arguments to {@link run},
- * {@link all}, {@link get}, or {@link result} override values from {@link bind};
- * otherwise the last `bind()` parameters are used.
+ * Create with {@link Database.prepare}. Pass bind values as rest arguments to
+ * {@link run}, {@link all}, {@link get}, or {@link result} on each call
+ * (stateless — there is no sticky `bind()`).
  *
  * @example
  * ```ts
@@ -35,7 +35,6 @@ export interface RunResult {
  * ```
  */
 export class Statement {
-  private bound: BindValue[] = [];
   private namedPlan: ReturnType<typeof planNamedParameters> | null = null;
   private env: ExecutionEnv | null = null;
   private statements: AstStatement[];
@@ -51,7 +50,7 @@ export class Statement {
   }
 
   /**
-   * Construct a {@link Statement} for {@link Database.prepare}.
+   * Construct a {@link Statement} for {@link Database.prepare} / {@link Database.exec}.
    * @internal
    */
   static create(database: Database, sql: string, statements: AstStatement[]): Statement {
@@ -59,27 +58,14 @@ export class Statement {
   }
 
   /**
-   * Store parameters for later {@link run} / {@link all} / {@link get} / {@link result}.
-   *
-   * Supports positional `?` / `?NNN` and named `:name` / `@name` / `$name` placeholders.
-   *
-   * @param params - Values to bind, in placeholder order.
-   * @returns `this` for chaining.
-   */
-  bind(...params: BindValue[]): Statement {
-    this.bound = [...params];
-    return this;
-  }
-
-  /**
    * Execute for side effects (INSERT / UPDATE / DELETE / DDL).
    *
-   * @param params - If provided, override the last {@link bind}; otherwise bound values are used.
+   * @param params - Bind values for this call only.
    * @returns Mutation counters for this execution.
    * @throws {SqliteError} If the database is closed, the statement is empty, or execution fails.
    */
   run(...params: BindValue[]): RunResult {
-    const result = this.execute(params.length > 0 ? params : this.bound, { named: false });
+    const result = this.execute(params, { named: false });
     return { changes: result.changes, lastInsertRowid: result.lastInsertRowid };
   }
 
@@ -87,11 +73,11 @@ export class Statement {
    * Execute and return every result row as an object keyed by column name.
    *
    * @typeParam T - Row shape. Defaults to {@link QueryRow}.
-   * @param params - If provided, override the last {@link bind}; otherwise bound values are used.
+   * @param params - Bind values for this call only.
    * @throws {SqliteError} If the database is closed, the statement is empty, or execution fails.
    */
   all<T = QueryRow>(...params: BindValue[]): T[] {
-    return this.execute(params.length > 0 ? params : this.bound, { named: true }).rows as T[];
+    return this.execute(params, { named: true }).rows as T[];
   }
 
   /**
@@ -100,40 +86,43 @@ export class Statement {
    * Use this when you need metadata for an empty result (column names with zero rows).
    * {@link all} only returns row objects.
    *
-   * @param params - If provided, override the last {@link bind}; otherwise bound values are used.
+   * @param params - Bind values for this call only.
    * @throws {SqliteError} If the database is closed, the statement is empty, or execution fails.
    */
   result(...params: BindValue[]): ResultSet {
-    return this.execute(params.length > 0 ? params : this.bound, { named: true });
+    return this.execute(params, { named: true });
   }
 
   /**
    * Execute and return the first row, or `undefined` if there are no rows.
    *
    * @typeParam T - Row shape. Defaults to {@link QueryRow}.
-   * @param params - If provided, override the last {@link bind}; otherwise bound values are used.
+   * @param params - Bind values for this call only.
    * @throws {SqliteError} If the database is closed, the statement is empty, or execution fails.
    */
   get<T = QueryRow>(...params: BindValue[]): T | undefined {
-    return this.execute(params.length > 0 ? params : this.bound, { named: true, maxRows: 1 }).rows[0] as T | undefined;
+    return this.execute(params, { named: true, maxRows: 1 }).rows[0] as T | undefined;
   }
 
   private execute(params: readonly BindValue[], options?: { named?: boolean; maxRows?: number }): ResultSet {
     this.database.assertOpen();
     this.reprepareIfSchemaChanged();
     if (this.statements.length === 0) throw new SqliteError("empty statement", "misuse");
+    this.namedPlan ??= planNamedParameters(this.sql);
+    const expected = this.namedPlan.expectedCount;
+    if (params.length > 0 && params.length !== expected) {
+      throw new SqliteError(`SQLite query expected ${expected} values, received ${params.length}`, "misuse");
+    }
     const env = this.obtainEnv(params);
     env.maxRows = options?.maxRows ?? Number.POSITIVE_INFINITY;
     env.includeNamedRows = options?.named !== false;
     env.includeValues = true;
     this.bindNamed(env, params);
     let result: ResultSet | undefined;
-    let lastQuery: ResultSet | undefined;
     for (const statement of this.statements) {
       result = executeStatement(statement, env);
-      if (result.columns.length > 0) lastQuery = result;
     }
-    return lastQuery ?? result!;
+    return result!;
   }
 
   private obtainEnv(params: readonly BindValue[]): ExecutionEnv {
@@ -170,6 +159,8 @@ export class Statement {
 
 interface NamedPlan {
   named: { name: string; slot: number }[];
+  /** Highest bind slot index (SQLite parameter count). */
+  expectedCount: number;
 }
 
 function planNamedParameters(sql: string): NamedPlan {
@@ -191,7 +182,7 @@ function planNamedParameters(sql: string): NamedPlan {
       }
     }
   }
-  return { named };
+  return { named, expectedCount: nextSlot - 1 };
 }
 
 /**

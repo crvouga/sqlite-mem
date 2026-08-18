@@ -1,5 +1,4 @@
 import type { Clock } from "./clock.ts";
-import type { Prng } from "./prng.ts";
 
 /** Options for {@link Database} construction. All fields are optional. */
 export interface DatabaseOptions {
@@ -14,8 +13,6 @@ export interface DatabaseOptions {
    * Pass a `Date` or `() => Date` to override.
    */
   now?: Date | Clock;
-  /** Optional pre-built PRNG (takes precedence over `seed`). */
-  prng?: Prng;
 }
 
 /** Default {@link DatabaseOptions.seed} when constructing a {@link Database}. */

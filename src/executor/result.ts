@@ -6,8 +6,8 @@ export interface ResultSet {
   columns: string[];
   /** Named rows. Duplicate column names keep the last value. */
   rows: QueryRow[];
-  /** Positional rows preserve duplicate result-column names for internal use. */
-  values?: QueryValue[][];
+  /** Positional rows; always present (empty array when there are zero rows). */
+  values: QueryValue[][];
   /** Rows changed by the most recent mutating statement in this execution. */
   changes: number;
   /** Rowid of the most recent INSERT in this execution. */
@@ -15,7 +15,7 @@ export interface ResultSet {
 }
 
 export function emptyResult(changes = 0, lastInsertRowid: number | bigint = 0): ResultSet {
-  return { columns: [], rows: [], changes, lastInsertRowid };
+  return { columns: [], rows: [], values: [], changes, lastInsertRowid };
 }
 
 /** Export engine values to the public JS surface (SqlReal → number, SqlJsonText → string). */
@@ -36,7 +36,7 @@ export function valuesToResult(
   const keepValues = options?.keepValues !== false;
   return {
     columns,
-    values: keepValues ? values.map((row) => row.map(exportSqlValue)) : undefined,
+    values: keepValues ? values.map((row) => row.map(exportSqlValue)) : [],
     rows: named
       ? values.map((row) => {
           const object: QueryRow = {};
@@ -52,8 +52,8 @@ export function valuesToResult(
 }
 
 export function resultValues(result: ResultSet): SqlValue[][] {
-  return (
-    result.values?.map((row) => [...row]) ??
-    result.rows.map((row) => result.columns.map((column) => row[column] ?? null))
-  );
+  if (result.values.length > 0 || result.rows.length === 0) {
+    return result.values.map((row) => [...row]);
+  }
+  return result.rows.map((row) => result.columns.map((column) => row[column] ?? null));
 }

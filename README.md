@@ -46,7 +46,7 @@ db.exec(`
   )
 `);
 
-db.exec(`INSERT INTO users (name) VALUES (?)`, ["Alice"]);
+db.prepare(`INSERT INTO users (name) VALUES (?)`).run("Alice");
 
 const users = db.query<{ id: number; name: string }>(`SELECT * FROM users`);
 console.log(users);
@@ -78,28 +78,27 @@ import { Database, SqliteError } from "@crvouga/sqlite-mem";
 interface DatabaseOptions {
   seed?: number | bigint;           // default 1 — PRNG for random() / randomblob()
   now?: Date | (() => Date);        // default 2000-01-01T00:00:00.000Z
-  prng?: Prng;                      // optional; overrides seed
 }
 
 interface Database {
   constructor(options?: DatabaseOptions);
-  exec(sql: string, params?: BindValue[]): void;
+  exec(sql: string): void;
   query<T = QueryRow>(sql: string, params?: BindValue[]): T[];
   prepare(sql: string): Statement;
   transaction<T>(fn: () => T): T;
   snapshot(): Uint8Array;
   restore(snapshot: Uint8Array): void;
   close(): void;
+  [Symbol.dispose]?(): void;        // alias for close() when Symbol.dispose exists
   readonly changes: number;
   readonly lastInsertRowid: number | bigint;
 }
 
 interface Statement {
-  bind(...params: BindValue[]): Statement;
   run(...params: BindValue[]): RunResult;
   all<T = QueryRow>(...params: BindValue[]): T[];
   get<T = QueryRow>(...params: BindValue[]): T | undefined;
-  result(...params: BindValue[]): ResultSet; // includes columns when zero rows
+  result(...params: BindValue[]): ResultSet; // includes columns + values when zero rows
 }
 
 interface RunResult {
@@ -110,46 +109,48 @@ interface RunResult {
 interface ResultSet {
   columns: string[];
   rows: QueryRow[];
-  values?: QueryValue[][];
+  values: QueryValue[][];           // always present (empty array for zero rows)
   changes: number;
   lastInsertRowid: number | bigint;
 }
 
 class SqliteError extends Error {
   readonly category: ErrorCategory; // syntax, no_such_table, constraint_unique, misuse, …
-  readonly sqliteCode?: string;
+  readonly sqliteCode: string;      // always set; default "SQLITE_ERROR"
+  readonly code: string;            // === sqliteCode (Node err.code convention)
 }
 ```
 
-Stick to `Database`, `Statement`, and `SqliteError` for application code. The package also exports lower-level helpers (`parse`, `tokenize`, `evalExpr`, snapshot codec pieces, `SqlValue` utilities) for advanced use.
+Stick to `Database`, `Statement`, and `SqliteError` for application code. Advanced internals (`parse`, `tokenize`, `evalExpr`, snapshot codec pieces, `SqlValue` utilities, `Prng`, …) are available only from `@crvouga/sqlite-mem/unstable` and are **exempt from semver**.
 
 ### Method semantics
 
 | Method | Behavior |
 | --- | --- |
-| `exec(sql, params?)` | Runs all semicolon-separated statements; **discards** row results (`void`). Read `db.changes` / `db.lastInsertRowid` afterward if needed. |
-| `query(sql, params?)` | Same parse/run; returns rows of the **last** statement that has columns. Earlier SELECTs in a multi-statement script are dropped. |
-| `prepare(sql)` | Parses immediately; AST is reused. `run` / `all` / `get` / `result` with args override prior `bind()`. |
-| `transaction(fn)` | If idle: `BEGIN` → `fn()` → `COMMIT`, or `ROLLBACK` + rethrow. If already in a transaction: nested savepoint. Nested SQL `BEGIN` still errors. |
+| `exec(sql)` | Runs all semicolon-separated statements; **discards** row results (`void`). Does **not** accept bind parameters. Read `db.changes` / `db.lastInsertRowid` afterward if needed (counters reflect the **most recent** completed statement, matching SQLite). |
+| `query(sql, params?)` | **Single statement only** (trailing `;` is fine). Returns all rows. Multi-statement scripts throw `misuse`. |
+| `prepare(sql)` | **Single statement only**. Parses immediately; AST is reused. Pass binds as rest args to `run` / `all` / `get` / `result` on each call. |
+| `transaction(fn)` | If idle: `BEGIN` → `fn()` → `COMMIT`, or `ROLLBACK` + rethrow. If already in a transaction: nested savepoint. Nested SQL `BEGIN` still errors. `close()` inside `fn` throws `misuse`. |
 | `snapshot` / `restore` | Custom binary format (see below). |
-| `close()` | Idempotent; rolls back an open transaction; further ops throw `misuse`. |
+| `close()` | Idempotent; rolls back an open SQL transaction; further ops throw `misuse`. Also available as `[Symbol.dispose]` when supported. |
 
-SQL `BEGIN` / `COMMIT` / `ROLLBACK` / `SAVEPOINT` / `RELEASE` are first-class. Empty SQL throws `misuse` (`empty statement`).
+SQL `BEGIN` / `COMMIT` / `ROLLBACK` / `SAVEPOINT` / `RELEASE` are first-class. Empty / comment-only SQL on `prepare` / `query` throws `misuse` (`empty statement`), matching SQLite prepare failure.
 
 ### Parameter binding
 
 Supported styles: `?`, `?NNN`, `:name`, `@name`, `$name`.
 
-- The JS API takes a **positional array** (or rest args) only — there is **no** `bind({ name: value })`.
+- The JS API takes **rest args** (or a positional array into `query`) only — there is **no** sticky `bind()` and **no** `bind({ name: value })`.
 - Named parameters occupy slots in **first-occurrence order**; repeated names share one slot.
 - Prefixes are part of the name: `@x`, `$x`, and `:x` are **three different** parameters.
 - Names are lowercased for lookup (`:Left` ≡ `:left`).
 - Bindable: `null`, `string`, finite `number`, `bigint`, `boolean` → `0`/`1`, `Uint8Array` / `ArrayBuffer`.
-- Rejected: `undefined`, `Date`, plain objects, `NaN` / `Infinity`.
+- Rejected (`misuse`): `DataView`, typed-array views other than `Uint8Array`, `SharedArrayBuffer` / SAB-backed buffers.
+- Rejected (`datatype_mismatch`): `undefined`, `Date`, plain objects, `NaN` / `Infinity`.
 
 ```ts
 db.query(`SELECT ? AS a, :name AS b`, [1, "Alice"]);
-db.prepare(`SELECT @id AS id`).bind(42).get();
+db.prepare(`SELECT @id AS id`).get(42);
 ```
 
 ### Returned JavaScript types
@@ -166,12 +167,13 @@ Duplicate column names collapse in row objects (last write wins). Use `stmt.resu
 
 ### Snapshots
 
-- Format magic `SQLM` — **not** a portable `.sqlite` file and not loadable by the SQLite CLI.
+- Format magic `SQLM` followed by an explicit little-endian format-version `u32` — **not** a portable `.sqlite` file and not loadable by the SQLite CLI.
 - Round-trips ordinary tables, views, indexes, change counters, PRNG state, and clock.
 - **Not** encoded: triggers, ATTACH’d schemas, virtual tables (FTS / RTREE / …), `userVersion`.
 - Cannot `restore()` while a transaction is open.
 - `restore()` replaces `now` with a fixed clock from the snapshot (a live `() => Date` is overwritten).
-- Equivalent databases produce byte-identical snapshots (schema/rows sorted).
+- Equivalent databases produce byte-identical snapshots (schema/rows sorted) **within a single library version**.
+- **Compatibility policy:** newer library versions can always restore older snapshots; older libraries cannot restore newer format versions (`snapshot_version` / `SQLITE_FORMAT`). Corrupt magic yields a distinct error.
 
 ## Determinism
 
@@ -179,7 +181,7 @@ The engine is deterministic by default. Invariants:
 
 | Source | Default | Override / notes |
 | --- | --- | --- |
-| `random()` / `randomblob()` | Seeded xorshift64* (`seed: 1`) | `new Database({ seed })` or `{ prng }` |
+| `random()` / `randomblob()` | Seeded xorshift64* (`seed: 1`) | `new Database({ seed })` |
 | `date('now')` / friends | Fixed `2000-01-01T00:00:00.000Z` | `new Database({ now: Date \| (() => Date) })` |
 | Table scans | Rowid order | Same order after `snapshot`/`restore` |
 | Snapshots | Sorted schema/rows + PRNG state + clock | Restored into PRNG and `now` |
@@ -193,6 +195,15 @@ bun test tests/fuzz
 SQLITE_MEM_FUZZ_SEED=12345 bun test tests/fuzz
 SQLITE_MEM_FUZZ_SEED=12345 SQLITE_MEM_FUZZ_PATH='0:1' bun test tests/fuzz  # exact replay
 ```
+
+## Stability policy
+
+The exports of the main entry (`@crvouga/sqlite-mem`) are **frozen**:
+
+- **Never** outside a major: removals, renames, signature changes, or changes to documented behavior of the stable surface.
+- **Allowed in minors:** additions (new methods, new optional `DatabaseOptions` fields, new `ErrorCategory` values). Consumers that `switch` on `category` must include a default case — new categories may appear without a major bump.
+- **`@crvouga/sqlite-mem/unstable`** is exempt from semver and may change or disappear in any release.
+- **Snapshots:** newer library → can restore older blobs; older library → cannot restore newer format versions; byte-identical snapshot guarantee holds only within one library version.
 
 ## Compatibility notes for integrators
 
@@ -210,15 +221,16 @@ Goal: drop-in SQL behavior vs SQLite **3.51.0**. Full matrix: [COMPATIBILITY.md]
 ## Common pitfalls
 
 1. **Do not `await`** — the API is sync.
-2. **No named-object binds** — use positional arrays in declaration order.
-3. **Multi-statement `query`** returns only the last result set with columns.
-4. **`exec` returns `void`** — use `db.changes` / `stmt.run()` for counters.
+2. **No named-object binds and no sticky `bind()`** — pass positional rest args / arrays in declaration order to `query` / `run` / `all` / `get` / `result`.
+3. **`query` / `prepare` are single-statement only** — multi-statement scripts belong in `exec()` (which does not take bind parameters).
+4. **`exec` returns `void` and takes no params** — use `db.prepare(…).run(…)` or `db.query(…)` for binds; use `db.changes` / `stmt.run()` for counters.
 5. **`'now'` is not wall-clock** unless you pass `{ now: () => new Date() }`. Default is year 2000.
 6. **`random()` is seeded**, not OS entropy; snapshots restore the PRNG.
 7. **Snapshots are not `.sqlite` files** and do not round-trip FTS / triggers / ATTACH.
 8. **No better-sqlite3 extras** — no `iterate`, `pluck`/`raw`, `safeIntegers` option, `pragma()` helper, `loadExtension`, or SQLite-file `serialize()`.
-9. **Do not bind `Date` objects** — store unixepoch integers or ISO text.
+9. **Do not bind `Date` objects** — store unixepoch integers or ISO text. Do not bind `DataView` / non-`Uint8Array` typed arrays.
 10. **Do not use `Number.isInteger` for SQL REAL vs INTEGER** — use SQL `typeof()`.
+11. **Do not import `@crvouga/sqlite-mem/unstable` in application code** unless you accept breakage in any release.
 
 Working examples beyond this README: `examples/react-vite`, `tests/contract/api/`, `tests/contract/parameters/`, `tests/browser/run.ts`.
 

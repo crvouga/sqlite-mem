@@ -38,6 +38,8 @@ console.log("verify-package: checking build outputs…");
 
 requireFile("dist/index.js");
 requireFile("dist/index.d.ts");
+requireFile("dist/unstable.js");
+requireFile("dist/unstable.d.ts");
 requireFile("dist/api/database.d.ts");
 requireFile("dist/api/statement.d.ts");
 requireFile("LICENSE");
@@ -53,11 +55,24 @@ if (pkg.name !== "@crvouga/sqlite-mem") {
 if (!pkg.exports?.["."]?.import || !pkg.exports?.["."]?.types) {
   fail('package.json exports["."] must define "import" and "types"');
 }
+if (!pkg.exports?.["./unstable"]?.import || !pkg.exports?.["./unstable"]?.types) {
+  fail('package.json exports["./unstable"] must define "import" and "types"');
+}
+
+const exportKeys = Object.keys(pkg.exports).sort();
+if (exportKeys.length !== 2 || exportKeys[0] !== "." || exportKeys[1] !== "./unstable") {
+  fail(`package.json exports must be exactly "." and "./unstable" (got ${JSON.stringify(exportKeys)})`);
+}
 
 const exportImport = String(pkg.exports["."].import).replace(/^\.\//, "");
 const exportTypes = String(pkg.exports["."].types).replace(/^\.\//, "");
 requireFile(exportImport);
 requireFile(exportTypes);
+
+const unstableImport = String(pkg.exports["./unstable"].import).replace(/^\.\//, "");
+const unstableTypes = String(pkg.exports["./unstable"].types).replace(/^\.\//, "");
+requireFile(unstableImport);
+requireFile(unstableTypes);
 
 if (!Array.isArray(pkg.files) || !pkg.files.includes("dist")) {
   fail('package.json "files" must include "dist" so the tarball ships the build');
@@ -69,6 +84,38 @@ if (!pkg.repository?.url) {
 
 if (!pkg.publishConfig?.access) {
   fail('package.json must set publishConfig.access (expected "public")');
+}
+
+if (pkg.type !== "module") {
+  fail('package.json must set "type": "module" (ESM-only isomorphic package)');
+}
+
+if (exportImport !== "dist/index.js") {
+  fail(
+    `exports["."].import must be "./dist/index.js" (browser-built ESM), got ${JSON.stringify(pkg.exports["."].import)}`,
+  );
+}
+
+console.log("verify-package: checking dist is isomorphic (no Node/Bun APIs)…");
+const bundle = await Bun.file(join(root, "dist/index.js")).text();
+const forbiddenInBundle: Array<{ label: string; test: (text: string) => boolean }> = [
+  { label: 'from "node:…"', test: (t) => /from\s+["']node:/.test(t) },
+  { label: 'from "bun:…"', test: (t) => /from\s+["']bun:/.test(t) },
+  { label: 'import("node:…") / import("bun:…")', test: (t) => /import\s*\(\s*["'](?:node|bun):/.test(t) },
+  { label: "require(", test: (t) => /\brequire\s*\(/.test(t) },
+  { label: "__dirname", test: (t) => /\b__dirname\b/.test(t) },
+  { label: "__filename", test: (t) => /\b__filename\b/.test(t) },
+  { label: "module.exports", test: (t) => /\bmodule\.exports\b/.test(t) },
+  { label: "process.cwd", test: (t) => /\bprocess\.cwd\b/.test(t) },
+  { label: "process.exit", test: (t) => /\bprocess\.exit\b/.test(t) },
+  { label: "process.env", test: (t) => /\bprocess\.env\b/.test(t) },
+];
+for (const item of forbiddenInBundle) {
+  if (item.test(bundle)) {
+    fail(
+      `dist/index.js contains Node/Bun-only pattern (${item.label}); keep the esbuild --platform=browser bundle isomorphic`,
+    );
+  }
 }
 
 console.log("verify-package: checking JSDoc in declaration emit…");
@@ -97,13 +144,24 @@ for (const exported of [
   "QueryRow",
   "QueryValue",
   "ErrorCategory",
-  "ParsedStatement",
+  "DatabaseOptions",
   "RunResult",
-  "SqlJsonText",
-  "EvalContext",
+  "ResultSet",
 ]) {
   if (!indexDts.includes(exported)) {
     fail(`dist/index.d.ts is missing public type ${exported}`);
+  }
+}
+for (const leaked of ["ParsedStatement", "EvalContext", "SqlJsonText", "encodeDatabaseState", "tokenize", "Prng"]) {
+  if (indexDts.includes(leaked)) {
+    fail(`dist/index.d.ts must not export unstable symbol ${leaked}; move it to ./unstable`);
+  }
+}
+
+const unstableDts = await Bun.file(join(root, "dist/unstable.d.ts")).text();
+for (const exported of ["parse", "tokenize", "Prng", "encodeDatabaseState", "SqlJsonText", "ParsedStatement"]) {
+  if (!unstableDts.includes(exported)) {
+    fail(`dist/unstable.d.ts is missing ${exported}`);
   }
 }
 
@@ -154,6 +212,8 @@ const files = packEntries[0]?.files?.map((f) => f.path) ?? [];
 const requiredInTarball = [
   "dist/index.js",
   "dist/index.d.ts",
+  "dist/unstable.js",
+  "dist/unstable.d.ts",
   "dist/api/database.d.ts",
   "dist/api/statement.d.ts",
   "package.json",

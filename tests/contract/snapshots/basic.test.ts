@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { Database, SqliteError } from "../../../src/index.ts";
 import { InMemoryAdapter } from "../../adapters/in-memory.ts";
 import { expectParity } from "../../harness/assert.ts";
 import { matrixBoth } from "../../harness/matrix.ts";
@@ -102,4 +103,58 @@ test("snapshot preserves rowids across restore and further inserts", () => {
     source.close();
     clone.close();
   }
+});
+
+test("restore rejects newer snapshot format version", () => {
+  const db = new Database();
+  db.exec("CREATE TABLE t(id INTEGER)");
+  const snap = db.snapshot();
+  // SQLM + little-endian u32 version at offset 4
+  const bumped = new Uint8Array(snap);
+  const view = new DataView(bumped.buffer, bumped.byteOffset, bumped.byteLength);
+  const current = view.getUint32(4, true);
+  view.setUint32(4, current + 1, true);
+  try {
+    db.restore(bumped);
+    expect.unreachable("expected restore to throw");
+  } catch (err) {
+    expect(err).toBeInstanceOf(SqliteError);
+    expect((err as SqliteError).category).toBe("snapshot_version");
+    expect((err as SqliteError).sqliteCode).toBe("SQLITE_FORMAT");
+    expect((err as SqliteError).code).toBe("SQLITE_FORMAT");
+  }
+  db.close();
+});
+
+test("restore rejects corrupt magic with a distinct error", () => {
+  const db = new Database();
+  db.exec("CREATE TABLE t(id INTEGER)");
+  const snap = db.snapshot();
+  const corrupt = new Uint8Array(snap);
+  corrupt[0] = "X".charCodeAt(0);
+  try {
+    db.restore(corrupt);
+    expect.unreachable("expected restore to throw");
+  } catch (err) {
+    expect(err).toBeInstanceOf(SqliteError);
+    expect((err as SqliteError).category).toBe("other");
+    expect((err as SqliteError).message).toMatch(/magic/);
+    expect((err as SqliteError).category).not.toBe("snapshot_version");
+  }
+  db.close();
+});
+
+test("current snapshot version round-trips", () => {
+  const a = new Database({ seed: 7 });
+  a.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, name TEXT)");
+  a.prepare("INSERT INTO t(name) VALUES (?)").run("Ada");
+  const snap = a.snapshot();
+  expect(String.fromCharCode(snap[0]!, snap[1]!, snap[2]!, snap[3]!)).toBe("SQLM");
+  const version = new DataView(snap.buffer, snap.byteOffset, snap.byteLength).getUint32(4, true);
+  expect(version).toBe(2);
+  const b = new Database();
+  b.restore(snap);
+  expect(b.query("SELECT name FROM t")).toEqual([{ name: "Ada" }]);
+  a.close();
+  b.close();
 });

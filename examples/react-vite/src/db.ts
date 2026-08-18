@@ -41,8 +41,9 @@ export function seed(db: Database): void {
   const insertUser = db.prepare("INSERT INTO users(name) VALUES (?)");
   insertUser.run("Alice");
   insertUser.run("Bob");
-  db.exec("INSERT INTO posts(user_id, title) VALUES (?, ?)", [1, "Hello"]);
-  db.exec("INSERT INTO posts(user_id, title) VALUES (?, ?)", [1, "World"]);
+  const insertPost = db.prepare("INSERT INTO posts(user_id, title) VALUES (?, ?)");
+  insertPost.run(1, "Hello");
+  insertPost.run(1, "World");
 }
 
 function createDatabase(): Database {

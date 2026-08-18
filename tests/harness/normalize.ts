@@ -95,7 +95,7 @@ export function categorizeErrorMessage(message: string): ErrorCategory {
   if (/unknown datatype/.test(msg)) return "other";
   if (/datatype mismatch|type mismatch/.test(msg)) return "datatype_mismatch";
   if (/unsupported|not supported|not yet implemented/.test(msg)) return "unsupported";
-  if (/misuse|bad parameter|api misuse/.test(msg)) return "misuse";
+  if (/misuse|bad parameter|api misuse|expected \d+ values, received/.test(msg)) return "misuse";
 
   return "other";
 }

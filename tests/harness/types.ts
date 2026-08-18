@@ -14,6 +14,7 @@ export type ErrorCategory =
   | "datatype_mismatch"
   | "unsupported"
   | "misuse"
+  | "snapshot_version"
   | "other";
 
 export interface QueryResult {
@@ -28,7 +29,6 @@ export interface QueryResult {
 }
 
 export interface ContractStatement {
-  bind(...params: SqlValue[]): ContractStatement;
   run(...params: SqlValue[]): QueryResult;
   all(...params: SqlValue[]): QueryResult;
   get(...params: SqlValue[]): QueryResult;

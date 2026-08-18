@@ -13,6 +13,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./unstable": {
+      "types": "./dist/unstable.d.ts",
+      "import": "./dist/unstable.js",
+      "default": "./dist/unstable.js"
     }
   },
   "files": [
@@ -43,13 +48,11 @@
     "test:contract": "bun test tests/contract",
     "test:fuzz": "bun test tests/fuzz",
     "example": "bun run --cwd examples/react-vite dev",
-    "test:browser": "bun run tests/browser/run.ts",
     "benchmark": "bun run benchmarks/run.ts --tier default --engine mem",
     "benchmark:bun": "bun run benchmarks/run.ts --tier full --engine both",
     "benchmark:compare": "bun run benchmarks/run.ts --tier default --engine compare --grep compare/ --out benchmarks/results/compare-js.json",
     "benchmark:compare-js": "bun run benchmarks/run.ts --tier default --engine compare-js --grep compare/js/ --out benchmarks/results/compare-js-only.json",
     "benchmark:compare-sqlite": "bun run benchmarks/run.ts --tier default --engine compare-sqlite --grep compare/sqlite/ --out benchmarks/results/compare-sqlite.json",
-    "benchmark:browser": "bun run benchmarks/browser/run.ts --tier ci --mobile-tier ci",
     "benchmark:ci": "bun run benchmarks/run.ts --tier ci --engine mem --out benchmarks/results/ci-latest.json && bun run benchmarks/compare-ci.ts",
     "benchmark:bundle": "bun run build && bun run benchmarks/bundle.ts",
     "benchmark:report": "bun run benchmarks/report-html.ts",
@@ -93,7 +96,6 @@
     "esbuild": "^0.28.2",
     "fast-check": "^4.1.1",
     "husky": "^9.1.7",
-    "playwright": "^1.52.0",
     "publint": "^0.3.23",
     "semantic-release": "^25.0.9",
     "sql.js": "^1.14.2",
