@@ -38,7 +38,7 @@ export function specsForTier(specs: readonly BenchSpec[], tier: SuiteTier): Benc
 }
 
 function countsForTier(spec: BenchSpec, tier: SuiteTier): { warmup: number; iterations: number } {
-  if (tier === "ci") return { warmup: Math.min(spec.warmup, 1), iterations: Math.min(spec.iterations, 6) };
+  if (tier === "ci") return { warmup: Math.min(spec.warmup, 2), iterations: Math.min(spec.iterations, 20) };
   if (tier === "default") return { warmup: Math.min(spec.warmup, 3), iterations: Math.min(spec.iterations, 12) };
   return { warmup: spec.warmup, iterations: spec.iterations };
 }

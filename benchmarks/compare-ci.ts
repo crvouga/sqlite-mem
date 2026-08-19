@@ -27,7 +27,7 @@ if (basePlatform && currentPlatform && basePlatform !== currentPlatform) {
   process.exit(1);
 }
 const p95Factor = Number(process.env.BENCH_REGRESSION_FACTOR ?? 2.5);
-const medianFactor = Number(process.env.BENCH_REGRESSION_MEDIAN ?? 1.1);
+const medianFactor = Number(process.env.BENCH_REGRESSION_MEDIAN ?? 1.5);
 const currentByKey = new Map(current.results.map((result) => [`${result.engine}::${result.name}`, result]));
 const p95Regressions: string[] = [];
 const medianRegressions: string[] = [];

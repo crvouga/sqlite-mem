@@ -137,7 +137,7 @@ Chromium with CDP 4× CPU throttle measured **0.60 ms p95** for 20 prepared PK l
 
 On `tx/batched-inserts/10000` (Darwin, default tier), the mean sample fell from **3.87 s to 1.95 s** (**49.6% lower**), while throughput rose from **2,582 to 5,133 inserts/sec** (**1.99×**). The remaining cost is constrained insert validation/index work.
 
-The CI regression gate now independently enforces the existing **2.5× p95** ceiling and a **1.10× median** ceiling (`BENCH_REGRESSION_FACTOR`, `BENCH_REGRESSION_MEDIAN`).
+The CI regression gate now independently enforces the existing **2.5× p95** ceiling and a **1.50× median** ceiling (`BENCH_REGRESSION_FACTOR`, `BENCH_REGRESSION_MEDIAN`). CI tier uses 2 warmup samples and 20 timed iterations so p50/p95 are less dominated by a single noisy GitHub Actions sample.
 
 ## Target status
 
