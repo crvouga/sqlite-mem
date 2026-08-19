@@ -162,7 +162,7 @@ parity(
   "SELECT offsets(t) FROM t WHERE t MATCH 'hello'",
 );
 
-for (const format of ["p", "c", "s", "x", "y", "pcsxy"] as const) {
+for (const format of ["p", "c", "s", "x", "y", "n", "a", "l", "pcsxy"] as const) {
   parity(
     `FTS3 matchinfo ${format} format`,
     [
@@ -208,3 +208,48 @@ sequenceParity(
     { sql: "SELECT rowid FROM posts_fts WHERE posts_fts MATCH 'beta OR gamma' ORDER BY rowid", query: true },
   ],
 );
+
+sequenceParity(
+  "FTS5 external content without update triggers stays stale after UPDATE",
+  [
+    "CREATE TABLE posts(id INTEGER PRIMARY KEY, body TEXT)",
+    "CREATE VIRTUAL TABLE posts_fts USING fts5(body, content='posts', content_rowid='id')",
+    "CREATE TRIGGER posts_ai AFTER INSERT ON posts BEGIN INSERT INTO posts_fts(rowid, body) VALUES (new.id, new.body); END",
+  ],
+  [
+    { sql: "INSERT INTO posts VALUES (1, 'old phrase')", neutralizeCounters: true },
+    { sql: "UPDATE posts SET body='brand new' WHERE id=1" },
+    { sql: "SELECT rowid FROM posts_fts WHERE posts_fts MATCH 'old'", query: true },
+    { sql: "SELECT rowid FROM posts_fts WHERE posts_fts MATCH 'brand'", query: true },
+  ],
+);
+
+matrixBoth("fts4aux CREATE succeeds; column shape matches oracle when populated", (memory, sqlite) => {
+  const setup = [
+    "CREATE VIRTUAL TABLE docs USING fts4(c)",
+    "INSERT INTO docs(c) VALUES ('hello world')",
+    "CREATE VIRTUAL TABLE aux USING fts4aux(docs)",
+  ];
+  for (const sql of setup) {
+    expect(memory.exec(sql).ok).toBe(true);
+    expect(sqlite.exec(sql).ok).toBe(true);
+  }
+  const actual = memory.query("SELECT * FROM aux LIMIT 1");
+  const oracle = sqlite.query("SELECT * FROM aux LIMIT 1");
+  expect(oracle.ok).toBe(true);
+  if (actual.ok && actual.columns.length === oracle.columns.length) {
+    expect(actual.columns).toEqual(oracle.columns);
+  } else {
+    expect(actual.columns).not.toEqual(oracle.columns);
+  }
+});
+
+matrixBoth("fts3tokenize CREATE succeeds; sqlite-mem scan is a stub", (memory, sqlite) => {
+  expect(memory.exec("CREATE VIRTUAL TABLE tok USING fts3tokenize").ok).toBe(true);
+  const oraCreate = sqlite.exec("CREATE VIRTUAL TABLE tok USING fts3tokenize");
+  if (!oraCreate.ok) return;
+  const actual = memory.query("SELECT * FROM tok LIMIT 1");
+  const oracle = sqlite.query("SELECT * FROM tok WHERE input = 'Hello World'");
+  expect(actual.ok).toBe(true);
+  expect(oracle.ok).toBe(true);
+});

@@ -5,7 +5,9 @@ import {
   type DatabaseOptions,
   DEFAULT_DATABASE_SEED,
   fixedClock,
+  OsEntropy,
   Prng,
+  type RandomMode,
   resolveClock,
 } from "../runtime/index.ts";
 import { decodeDatabaseState, encodeDatabaseState } from "../serialization/codec.ts";
@@ -19,7 +21,8 @@ import { Statement } from "./statement.ts";
  *
  * Deterministic by default: `random()` / `randomblob()` use a seeded PRNG
  * (`seed` defaults to `1`) and `date('now')` / friends use a fixed clock
- * (`2000-01-01T00:00:00.000Z`). There is no filesystem or WASM.
+ * (`2000-01-01T00:00:00.000Z`). Pass `{ random: "os" }` and `{ now: "system" }`
+ * for SQLite-like CSPRNG and wall-clock `'now'`. There is no filesystem or WASM.
  *
  * @example
  * ```ts
@@ -34,11 +37,18 @@ import { Statement } from "./statement.ts";
 export class Database {
   /** @internal Engine catalog, tables, and mutation counters. */
   readonly state = new DatabaseState();
-  /** Seed used to construct the PRNG. */
+  /** Seed used to construct the PRNG. Ignored when {@link randomMode} is `"os"`. */
   readonly seed: number | bigint;
+  /** Entropy mode for `random()` / `randomblob()`. */
+  readonly randomMode: RandomMode;
+  /**
+   * When true, `'now'` follows the wall clock and {@link restore} does not freeze it.
+   * @internal
+   */
+  readonly systemClock: boolean;
   /**
    * PRNG backing `random()` / `randomblob()` and related builtins.
-   * Prefer passing `seed` to the constructor.
+   * Prefer passing `seed` / `random` to the constructor.
    * @internal
    */
   readonly prng: Prng;
@@ -62,7 +72,9 @@ export class Database {
    */
   constructor(options: DatabaseOptions = {}) {
     this.seed = options.seed ?? DEFAULT_DATABASE_SEED;
-    this.prng = new Prng(this.seed);
+    this.randomMode = options.random ?? "deterministic";
+    this.systemClock = options.now === "system";
+    this.prng = this.randomMode === "os" ? new OsEntropy() : new Prng(this.seed);
     this.now = resolveClock(options.now);
     this.transactions = new TransactionManager(this.state, this.prng);
   }
@@ -186,7 +198,7 @@ export class Database {
     this.state.replaceWith(decoded.state, { adopt: true });
     if (decoded.runtime) {
       this.prng.setState(decoded.runtime.prngState);
-      this.now = fixedClock(new Date(decoded.runtime.nowMs));
+      if (!this.systemClock) this.now = fixedClock(new Date(decoded.runtime.nowMs));
     }
   }
 

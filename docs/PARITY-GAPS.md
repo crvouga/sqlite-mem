@@ -88,7 +88,7 @@ Evidence: [`tests/contract/cte/`](../tests/contract/cte/), [`tests/contract/recu
 
 - [x] Non-recursive WITH, multiple CTEs, CTE shadowing a table
 - [x] Recursive UNION ALL sequences; UNION cycle dedup; >1000 steps
-- [ ] `MATERIALIZED` / `NOT MATERIALIZED` are stored on the `Cte` AST and syntax/result parity is covered, but both hints currently execute through the materialized CTE path
+- [x] `MATERIALIZED` / `NOT MATERIALIZED` are stored on the `Cte` AST and syntax/result parity is covered, but both hints currently execute through the materialized CTE path (documented; `tests/contract/cte/thin-gaps.test.ts`)
 - [ ] **LIKELY DIVERGENCE:** `WITH` on `UPDATE` / `DELETE` / `INSERT … VALUES` — AST has `with`, but [`executeUpdate`](../src/executor/dml.ts) / [`executeDelete`](../src/executor/dml.ts) never call `executeWith`. Only `INSERT … SELECT` threads `stmt.with` into the select
 - [x] Recursive CTE `LIMIT` / `ORDER BY` (SQLite search-limit)
 - [x] Nested WITH
@@ -152,8 +152,8 @@ Evidence: [`tests/contract/expressions/operators.test.ts`](../tests/contract/exp
 - [x] LIKE case-insensitive ASCII; ESCAPE `!`; NOT LIKE; GLOB `*` `?` `[abc]` `[a-c]` `[^]`
 - [x] `NULL LIKE x`, `x LIKE NULL`, empty pattern, LIKE on BLOB
 - [x] Unicode case (`'ß' LIKE 'SS'`) — SQLite NOCASE is ASCII-only
-- [ ] `PRAGMA case_sensitive_like` (unknown pragma currently returns empty)
-- [ ] LIKE vs column `COLLATE BINARY` (LIKE ignores collation) — COLLATE is collected on LIKE operands but **not used**; `likeMatch` always ASCII-CI. `PRAGMA case_sensitive_like` missing (cannot turn CI off)
+- [x] `PRAGMA case_sensitive_like` — [`tests/contract/expressions/like-glob-gaps.test.ts`](../tests/contract/expressions/like-glob-gaps.test.ts)
+- [ ] LIKE vs column `COLLATE BINARY` (LIKE ignores collation) — COLLATE is collected on LIKE operands but **not used**; `likeMatch` is ASCII-CI unless `PRAGMA case_sensitive_like=ON`
 - [ ] **GAP / LIKELY DIVERGENCE:** `REGEXP` is a lexer keyword and an inventory name, but **not parsed** as an operator ([`parseExprPrec`](../src/parser/parser.ts) handles LIKE/GLOB/MATCH only) and has **no evaluator**
 - [x] `ESCAPE ''` (SQLite error); `NOT GLOB`
 - [ ] Multi-char ESCAPE
@@ -246,7 +246,7 @@ Not in the original 13 app-code areas, but high likelihood of breaking a drop-in
 - [ ] **`total_changes()`** asserted as `>= 2` not exact ([`tests/contract/functions/scope3-builtins.test.ts`](../tests/contract/functions/scope3-builtins.test.ts))
 - [ ] **Conflict oracles** `OR ABORT` / `OR FAIL` / `OR ROLLBACK` — **LIKELY DIVERGENCE:** parsed into AST modes; executor throws the same UNIQUE error for all of them. IGNORE/REPLACE covered. FAIL vs ABORT (statement vs transaction) and ROLLBACK of the tx are not distinguished
 - [x] **Triggers:** BEFORE INSERT, `UPDATE OF`, `RAISE(ABORT)`, `RAISE(IGNORE)`, INSTEAD OF view writes, and trigger-visible `last_insert_rowid` have differential coverage. Remaining: `recursive_triggers` PRAGMA (recursion is always on, depth 1000)
-- [x] **PRAGMA surface + `pragma_*` TVFs** — all oracle-exposed `pragma_*` eponymous TVFs registered ([`tests/contract/pragma/tvf.test.ts`](../tests/contract/pragma/tvf.test.ts)); statement getters share [`pragma-engine`](../src/executor/pragma-engine.ts). Remaining: `case_sensitive_like` (no oracle TVF); statement-form writers for storage pragmas still mostly no-op/empty
+- [x] **PRAGMA surface + `pragma_*` TVFs** — all oracle-exposed `pragma_*` eponymous TVFs registered ([`tests/contract/pragma/tvf.test.ts`](../tests/contract/pragma/tvf.test.ts)); statement getters share [`pragma-engine`](../src/executor/pragma-engine.ts). `case_sensitive_like` is a statement-form pragma (no oracle TVF). Storage pragma writers still mostly no-op/empty
 - [ ] **RETURNING** on UPSERT; `RETURNING` excluded columns / `old`/`new` names
 - [ ] **UPDATE … FROM** — one inner join; missing multi-match, LEFT FROM, correlated
 - [ ] **`NOT IN (SELECT …)` NULL trap** — high-likelihood app SQL; only list-form `NOT IN` is tested ([`tests/contract/null/edges.test.ts`](../tests/contract/null/edges.test.ts)); `IN (SELECT)` is tested without NULL
@@ -332,7 +332,7 @@ Inventory gate: 0 missing oracle **names**. Behavioral contracts are a small sub
 | `function_list` / `module_list` / `pragma_list` / `compile_options` | yes | shape / presence (content may differ) |
 | all other oracle `pragma_*` TVFs | yes | resolve smoke test |
 | unknown statement → empty | yes | yes |
-| `case_sensitive_like` | no (empty; no oracle TVF) | no |
+| `case_sensitive_like` | yes (statement form) | [`tests/contract/expressions/like-glob-gaps.test.ts`](../tests/contract/expressions/like-glob-gaps.test.ts) |
 
 ---
 
@@ -450,14 +450,15 @@ Convert to `errorParity`/`parity` or label as engine-only:
 Keep these listed rather than treating them as parity bugs:
 
 - Custom SQLM snapshots (not on-disk `.sqlite` files)
-- Seeded `random()` / fixed `'now'` by default
+- Seeded `random()` / fixed `'now'` by default (`random: "os"` / `now: "system"` optional)
 - No C API / on-disk DB / VFS
-- EXPLAIN stubs; INDEXED BY no-op
+- EXPLAIN stubs; INDEXED BY no-op (missing indexes do not error)
 - Unknown statement `PRAGMA` returns empty result (SQLite-like); `pragma_*` eponymous TVFs are implemented
 - FTS shadow-table `changes()` divergence
 - BigInt vs bun:sqlite without `safeIntegers`
 - `ATTACH` opens an empty in-memory schema, not a file
 - `pragma_compile_options` / `pragma_function_list` row *sets* reflect sqlite-mem (not bun’s native build)
+- `MATERIALIZED` / `NOT MATERIALIZED` both execute as materialized
 
 Candidates to **add** to COMPATIBILITY.md if probes confirm (do not document until a contract fails or we decide not to implement):
 
@@ -500,3 +501,4 @@ Do not treat these as Goal 1.1 work. They are scoped so the next session can int
 | 2026-08-18 | Goal 1.1 | Construct-level gap list vs `tests/contract/` + implementation. No code changes. |
 | 2026-08-18 | Goal 1.1 follow-up | Folded impl-audit facts: plain IPK never reuses rowids; AUTOINCREMENT ≡ IPK (no `sqlite_sequence`); INSTEAD OF never fires; OR ABORT/FAIL/ROLLBACK not distinguished; `last_insert_rowid` stale in AFTER INSERT; WITH ignored on INSERT VALUES. |
 | 2026-08-19 | Hardening pass | Closed P0 divergences; deepened UPSERT/CTE/windows/JSON/COLLATE/LIKE/triggers; FTS+fuzz+EXPLAIN; Phase 2 benches/budgets/throttle/rowid-cache; Phase 3 integration + README pitfalls. Suite 872 pass. |
+| 2026-08-19 | SQL-gap contracts | `random: "os"` / `now: "system"`; `PRAGMA case_sensitive_like`; documented-divergence tests for EXPLAIN, INDEXED BY, ATTACH file, FTS changes, pragma sets, MATERIALIZED, dbstat/bytecode/tables_used. |

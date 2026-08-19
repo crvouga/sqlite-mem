@@ -70,4 +70,14 @@ describe("README common pitfalls", () => {
     expectCategory(() => db.prepare("SELECT 1"), "misuse");
     expectCategory(() => db.exec("SELECT 1"), "misuse");
   });
+
+  test("default clock is year 2000; system and os options are accepted", () => {
+    const fixed = new Database();
+    expect(fixed.query<{ d: string }>("SELECT date('now') AS d")[0]!.d).toBe("2000-01-01");
+    fixed.close();
+    const live = new Database({ now: "system", random: "os" });
+    expect(live.query<{ d: string }>("SELECT date('now') AS d")[0]!.d).toBe(new Date().toISOString().slice(0, 10));
+    expect(live.query<{ t: string }>("SELECT typeof(random()) AS t")[0]!.t).toBe("integer");
+    live.close();
+  });
 });

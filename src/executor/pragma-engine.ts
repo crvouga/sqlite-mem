@@ -258,6 +258,8 @@ export function queryPragma(name: string, args: readonly SqlValue[], env: Execut
   switch (key) {
     case "foreign_keys":
       return single("foreign_keys", env.state.foreignKeysEnabled ? 1 : 0);
+    case "case_sensitive_like":
+      return single("case_sensitive_like", env.state.caseSensitiveLike ? 1 : 0);
     case "user_version":
       return single("user_version", env.state.userVersion);
     case "schema_version":

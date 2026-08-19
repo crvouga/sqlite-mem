@@ -18,6 +18,8 @@ export interface FunctionContext {
   randomU64?: () => bigint;
   /** Active FTS MATCH cursor when evaluating projections with MATCH in WHERE. */
   ftsMatch?: import("../vtable/fts5.ts").FtsMatchCursor | null;
+  /** SQLite `PRAGMA case_sensitive_like` for LIKE / like(). */
+  caseSensitiveLike?: boolean;
   /** Current rowid for FTS aux defaults when MATCH is absent. */
   ftsRowid?: import("../storage/row.ts").Rowid;
   /** Source FTS table name for the current scan row. */

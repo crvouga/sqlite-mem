@@ -5,7 +5,6 @@ import { defaultFunctionRegistry, type FunctionRegistry } from "../functions/reg
 import type { DatabaseState } from "../storage/database-state.ts";
 import type { Rowid } from "../storage/row.ts";
 import type { TransactionManager } from "../transactions/manager.ts";
-import type { ResultSet } from "./result.ts";
 import {
   type Affinity,
   canonicalizeNumber,
@@ -14,6 +13,7 @@ import {
   type SqlValue,
   storageClassOf,
 } from "../types/value.ts";
+import type { ResultSet } from "./result.ts";
 
 export interface Cell {
   table: string | null;
@@ -146,6 +146,7 @@ export class ExecutionEnv {
         now: this.hooks.now,
         random: this.hooks.random,
         randomU64: this.hooks.randomU64,
+        caseSensitiveLike: this.state.caseSensitiveLike,
         ftsMatch: scope?.ftsMatch ?? null,
         ftsRowid: scope?.rowid,
         ftsSourceTable: scope?.sourceTable,

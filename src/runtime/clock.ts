@@ -15,9 +15,15 @@ export function fixedClock(instant: Date = DEFAULT_NOW): Clock {
   return () => new Date(ms);
 }
 
-/** Normalize a `Date`, {@link Clock}, or `undefined` into a {@link Clock}. */
-export function resolveClock(now?: Date | Clock): Clock {
+/** Wall-clock `'now'` matching SQLite (`new Date()` each call). */
+export function systemClock(): Clock {
+  return () => new Date();
+}
+
+/** Normalize a `Date`, {@link Clock}, `"system"`, or `undefined` into a {@link Clock}. */
+export function resolveClock(now?: Date | Clock | "system"): Clock {
   if (now === undefined) return fixedClock(DEFAULT_NOW);
+  if (now === "system") return systemClock();
   if (typeof now === "function") return () => new Date(now().getTime());
   return fixedClock(now);
 }

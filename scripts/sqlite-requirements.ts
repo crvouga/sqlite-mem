@@ -377,7 +377,7 @@ const SOURCE_SEED: Record<string, { status: CoverageStatus; evidence: string[]; 
   "lang_expr.html": {
     status: "PARTIALLY_VERIFIED",
     evidence: ["tests/contract/expressions/"],
-    notes: "Operators covered; row-value/precedence edges expanding",
+    notes: "Operators covered; LIKE case_sensitive_like; row-value/precedence edges expanding",
   },
   "lang_select.html": {
     status: "VERIFIED",
@@ -466,8 +466,8 @@ const SOURCE_SEED: Record<string, { status: CoverageStatus; evidence: string[]; 
   },
   "lang_attach.html": {
     status: "VERIFIED",
-    evidence: ["tests/contract/attach/"],
-    notes: "In-memory schemas",
+    evidence: ["tests/contract/attach/", "tests/contract/attach/file.test.ts"],
+    notes: "In-memory schemas; file ATTACH records the path but does not open on-disk bytes",
   },
   "lang_detach.html": {
     status: "VERIFIED",
@@ -491,7 +491,11 @@ const SOURCE_SEED: Record<string, { status: CoverageStatus; evidence: string[]; 
   },
   "lang_datefunc.html": {
     status: "VERIFIED",
-    evidence: ["tests/contract/date-time/", "tests/contract/functions/scope3-builtins.test.ts"],
+    evidence: [
+      "tests/contract/date-time/",
+      "tests/contract/functions/scope3-builtins.test.ts",
+      "tests/contract/determinism/",
+    ],
     notes: "unixepoch/timediff included",
   },
   "lang_aggfunc.html": {
@@ -521,8 +525,8 @@ const SOURCE_SEED: Record<string, { status: CoverageStatus; evidence: string[]; 
   },
   "lang_indexedby.html": {
     status: "PARTIALLY_VERIFIED",
-    evidence: ["tests/contract/errors/unsupported.test.ts"],
-    notes: "Accepted as no-ops",
+    evidence: ["tests/contract/errors/unsupported.test.ts", "tests/contract/indexes/indexed-by.test.ts"],
+    notes: "Accepted as no-ops; missing indexes do not error (documented)",
   },
   "lang_comment.html": {
     status: "VERIFIED",
@@ -590,8 +594,8 @@ const SOURCE_SEED: Record<string, { status: CoverageStatus; evidence: string[]; 
   },
   "lang_with.html": {
     status: "VERIFIED",
-    evidence: ["tests/contract/cte/", "tests/contract/recursive-cte/"],
-    notes: "",
+    evidence: ["tests/contract/cte/", "tests/contract/recursive-cte/", "tests/contract/cte/thin-gaps.test.ts"],
+    notes: "MATERIALIZED/NOT MATERIALIZED accepted; both execute as materialized",
   },
   "json1.html": {
     status: "VERIFIED",
@@ -602,6 +606,7 @@ const SOURCE_SEED: Record<string, { status: CoverageStatus; evidence: string[]; 
     status: "PARTIALLY_VERIFIED",
     evidence: [
       "tests/contract/fts/",
+      "tests/contract/fts/changes.test.ts",
       "tests/contract/modules/scope3-modules.test.ts",
       "compat/fts-oracle-surface.json",
     ],
@@ -611,6 +616,7 @@ const SOURCE_SEED: Record<string, { status: CoverageStatus; evidence: string[]; 
     status: "PARTIALLY_VERIFIED",
     evidence: [
       "tests/contract/fts/",
+      "tests/contract/fts/changes.test.ts",
       "tests/contract/modules/scope3-modules.test.ts",
       "compat/fts-oracle-surface.json",
     ],
@@ -623,9 +629,9 @@ const SOURCE_SEED: Record<string, { status: CoverageStatus; evidence: string[]; 
   },
   "pragma.html": {
     status: "VERIFIED",
-    evidence: ["tests/contract/pragma/"],
+    evidence: ["tests/contract/pragma/", "tests/contract/pragma/inventory-sets.test.ts"],
     notes:
-      "Statement + pragma_* TVFs; storage getters match bun :memory: defaults; compile_options/function_list content is sqlite-mem's",
+      "Statement + pragma_* TVFs; storage getters match bun :memory: defaults; compile_options/function_list content is sqlite-mem's; case_sensitive_like implemented",
   },
   "autoinc.html": {
     status: "VERIFIED",

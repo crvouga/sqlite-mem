@@ -76,8 +76,9 @@ From the repo root after that install: `bun run example`.
 import { Database, SqliteError } from "@crvouga/sqlite-mem";
 
 interface DatabaseOptions {
-  seed?: number | bigint;           // default 1 — PRNG for random() / randomblob()
-  now?: Date | (() => Date);        // default 2000-01-01T00:00:00.000Z
+  seed?: number | bigint;                 // default 1 — ignored when random is "os"
+  random?: "deterministic" | "os";        // default "deterministic"; "os" is CSPRNG like SQLite
+  now?: Date | (() => Date) | "system";   // default 2000-01-01T00:00:00.000Z; "system" is wall clock
 }
 
 interface Database {
@@ -171,7 +172,7 @@ Duplicate column names collapse in row objects (last write wins). Use `stmt.resu
 - Round-trips ordinary tables, views, indexes, change counters, PRNG state, and clock.
 - **Not** encoded: triggers, ATTACH’d schemas, virtual tables (FTS / RTREE / …), `userVersion`.
 - Cannot `restore()` while a transaction is open.
-- `restore()` replaces `now` with a fixed clock from the snapshot (a live `() => Date` is overwritten).
+- `restore()` replaces `now` with a fixed clock from the snapshot (a live `() => Date` is overwritten). `{ now: "system" }` stays live after restore.
 - Equivalent databases produce byte-identical snapshots (schema/rows sorted) **within a single library version**.
 - **Compatibility policy:** newer library versions can always restore older snapshots; older libraries cannot restore newer format versions (`snapshot_version` / `SQLITE_FORMAT`). Corrupt magic yields a distinct error.
 
@@ -181,8 +182,8 @@ The engine is deterministic by default. Invariants:
 
 | Source | Default | Override / notes |
 | --- | --- | --- |
-| `random()` / `randomblob()` | Seeded xorshift64* (`seed: 1`) | `new Database({ seed })` |
-| `date('now')` / friends | Fixed `2000-01-01T00:00:00.000Z` | `new Database({ now: Date \| (() => Date) })` |
+| `random()` / `randomblob()` | Seeded xorshift64* (`seed: 1`) | `new Database({ seed })` or `{ random: "os" }` for CSPRNG (not rolled back / not restored) |
+| `date('now')` / friends | Fixed `2000-01-01T00:00:00.000Z` | `new Database({ now: Date \| (() => Date) \| "system" })` — `"system"` is wall clock and is **not** frozen by `restore()` |
 | Table scans | Rowid order | Same order after `snapshot`/`restore` |
 | Snapshots | Sorted schema/rows + PRNG state + clock | Restored into PRNG and `now` |
 | Transactions | PRNG rolls back with `ROLLBACK`/`SAVEPOINT` | Matches data rollback |
@@ -209,14 +210,17 @@ The exports of the main entry (`@crvouga/sqlite-mem`) are **frozen**:
 
 Goal: drop-in SQL behavior vs SQLite **3.51.0**. Full matrix: [COMPATIBILITY.md](COMPATIBILITY.md).
 
-**Intentional differences:** custom `SQLM` snapshots; seeded `random()` / fixed `'now'`; no C API / on-disk DB / VFS.
+**Intentional differences:** custom `SQLM` snapshots; seeded `random()` / fixed `'now'` by default (`{ random: "os" }` / `{ now: "system" }` match SQLite entropy and wall clock); no C API / on-disk DB / VFS.
 
 **Know these thin or partial areas** (do not assume full oracle fidelity):
 
 - FTS3/4/5 — largely implemented; shadow-table change counters intentionally diverge; some edges partial
 - `EXPLAIN` / `EXPLAIN QUERY PLAN` — stub shapes, not real bytecode
-- `INDEXED BY` / `NOT INDEXED` — parsed and discarded
-- Unknown statement `PRAGMA` succeeds with an empty result (SQLite-like). All oracle-exposed `pragma_*` eponymous TVFs are supported (`SELECT * FROM pragma_table_info('t')`, bare `FROM pragma_database_list`, …), including **correlated** args such as `FROM table_list AS tl, pragma_table_info(tl.name) AS p` (Kysely SQLite introspector). Storage/journal getters return bun `:memory:`-compatible defaults.
+- `INDEXED BY` / `NOT INDEXED` — parsed and discarded (missing indexes do not error)
+- `ATTACH 'file'` — filename is recorded; schema is always a new empty in-memory database
+- `MATERIALIZED` / `NOT MATERIALIZED` — both execute as materialized
+- `PRAGMA compile_options` / `function_list` — sqlite-mem’s set, not Bun’s native build
+- Unknown statement `PRAGMA` succeeds with an empty result (SQLite-like). All oracle-exposed `pragma_*` eponymous TVFs are supported (`SELECT * FROM pragma_table_info('t')`, bare `FROM pragma_database_list`, …), including **correlated** args such as `FROM table_list AS tl, pragma_table_info(tl.name) AS p` (Kysely SQLite introspector). Storage/journal getters return bun `:memory:`-compatible defaults. `PRAGMA case_sensitive_like` is implemented.
 
 **Also supported (oracle-parity):** boolean literals **`TRUE` / `FALSE`** (any case → integers `1` / `0`) and **`IS [NOT] TRUE` / `IS [NOT] FALSE`** (SQLite truthiness, including NULL). A column named `true`/`false` shadows the literal.
 
@@ -226,8 +230,8 @@ Goal: drop-in SQL behavior vs SQLite **3.51.0**. Full matrix: [COMPATIBILITY.md]
 2. **No named-object binds and no sticky `bind()`** — pass positional rest args / arrays in declaration order to `query` / `run` / `all` / `get` / `result`.
 3. **`query` / `prepare` are single-statement only** — multi-statement scripts belong in `exec()` (which does not take bind parameters).
 4. **`exec` returns `void` and takes no params** — use `db.prepare(…).run(…)` or `db.query(…)` for binds; use `db.changes` / `stmt.run()` for counters.
-5. **`'now'` is not wall-clock** unless you pass `{ now: () => new Date() }`. Default is year 2000.
-6. **`random()` is seeded**, not OS entropy; snapshots restore the PRNG.
+5. **`'now'` is not wall-clock** unless you pass `{ now: "system" }` or `{ now: () => new Date() }`. Default is year 2000. `restore()` freezes a snapshot clock except when constructed with `"system"`.
+6. **`random()` is seeded**, not OS entropy, unless you pass `{ random: "os" }`. Snapshots restore the seeded PRNG; OS entropy is not rewound.
 7. **Snapshots are not `.sqlite` files** and do not round-trip FTS / triggers / ATTACH.
 8. **No better-sqlite3 extras** — no `iterate`, `pluck`/`raw`, `safeIntegers` option, `pragma()` helper, `loadExtension`, or SQLite-file `serialize()`.
 9. **Do not bind `Date` objects** — store unixepoch integers or ISO text. Do not bind `DataView` / non-`Uint8Array` typed arrays.

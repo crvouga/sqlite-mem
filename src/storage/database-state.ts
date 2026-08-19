@@ -74,6 +74,8 @@ export class DatabaseState {
   changes = 0;
   totalChanges = 0;
   foreignKeysEnabled = false;
+  /** When true, LIKE / like() are case-sensitive (SQLite `PRAGMA case_sensitive_like`). */
+  caseSensitiveLike = false;
   schemaVersion = 0;
   userVersion = 0;
 
@@ -564,6 +566,7 @@ export class DatabaseState {
     copy.changes = this.changes;
     copy.totalChanges = this.totalChanges;
     copy.foreignKeysEnabled = this.foreignKeysEnabled;
+    copy.caseSensitiveLike = this.caseSensitiveLike;
     copy.schemaVersion = this.schemaVersion;
     copy.userVersion = this.userVersion;
     return copy;
@@ -584,6 +587,7 @@ export class DatabaseState {
     copy.changes = this.changes;
     copy.totalChanges = this.totalChanges;
     copy.foreignKeysEnabled = this.foreignKeysEnabled;
+    copy.caseSensitiveLike = this.caseSensitiveLike;
     copy.schemaVersion = this.schemaVersion;
     copy.userVersion = this.userVersion;
     return copy;
@@ -652,6 +656,7 @@ export class DatabaseState {
     this.changes = copy.changes;
     this.totalChanges = copy.totalChanges;
     this.foreignKeysEnabled = copy.foreignKeysEnabled;
+    this.caseSensitiveLike = copy.caseSensitiveLike;
     this.schemaVersion = copy.schemaVersion;
     this.userVersion = copy.userVersion;
   }

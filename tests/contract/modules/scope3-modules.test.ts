@@ -65,3 +65,45 @@ parity(
 );
 
 parity("fts5_source_id present", [], "SELECT length(fts5_source_id()) > 5 AS ok");
+
+matrixBoth("dbstat columns match oracle when the module exists; pages are synthetic", (memory, sqlite) => {
+  expect(memory.exec("CREATE TABLE t(x)").ok).toBe(true);
+  expect(memory.exec("INSERT INTO t VALUES (1)").ok).toBe(true);
+  expect(memory.exec("CREATE VIRTUAL TABLE temp.stat USING dbstat").ok).toBe(true);
+  const mem = memory.query("SELECT * FROM temp.stat WHERE name = 't' LIMIT 1");
+  expect(mem.ok).toBe(true);
+  expect(mem.rows.length).toBeGreaterThan(0);
+  expect(mem.rows[0]?.name).toBe("t");
+
+  expect(sqlite.exec("CREATE TABLE t(x)").ok).toBe(true);
+  expect(sqlite.exec("INSERT INTO t VALUES (1)").ok).toBe(true);
+  const created = sqlite.exec("CREATE VIRTUAL TABLE temp.stat USING dbstat");
+  if (!created.ok) return;
+  const ora = sqlite.query("SELECT * FROM temp.stat WHERE name = 't' LIMIT 1");
+  expect(ora.ok).toBe(true);
+  expect(mem.columns).toEqual(ora.columns);
+});
+
+matrixBoth("bytecode virtual table is an empty cursor with oracle columns", (memory, sqlite) => {
+  const memCreate = memory.exec("CREATE VIRTUAL TABLE bc USING bytecode");
+  const oraCreate = sqlite.exec("CREATE VIRTUAL TABLE bc USING bytecode");
+  expect(memCreate.ok).toBe(true);
+  if (!oraCreate.ok) return;
+  const actual = memory.query("SELECT * FROM bc");
+  const oracle = sqlite.query("SELECT * FROM bc");
+  expect(actual.ok && oracle.ok).toBe(true);
+  expect(actual.columns).toEqual(oracle.columns);
+  expect(actual.rows).toEqual([]);
+});
+
+matrixBoth("tables_used virtual table is an empty cursor with oracle columns", (memory, sqlite) => {
+  const memCreate = memory.exec("CREATE VIRTUAL TABLE tu USING tables_used");
+  const oraCreate = sqlite.exec("CREATE VIRTUAL TABLE tu USING tables_used");
+  expect(memCreate.ok).toBe(true);
+  if (!oraCreate.ok) return;
+  const actual = memory.query("SELECT * FROM tu");
+  const oracle = sqlite.query("SELECT * FROM tu");
+  expect(actual.ok && oracle.ok).toBe(true);
+  expect(actual.columns).toEqual(oracle.columns);
+  expect(actual.rows).toEqual([]);
+});

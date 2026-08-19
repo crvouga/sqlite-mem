@@ -4,21 +4,24 @@ function escapeRegexChar(char: string): string {
   return /[\\^$.*+?()[\]{}|]/.test(char) ? `\\${char}` : char;
 }
 
-function likeLiteral(char: string): string {
-  const code = char.codePointAt(0)!;
-  if (code >= 65 && code <= 90) return `[${char}${char.toLowerCase()}]`;
-  if (code >= 97 && code <= 122) return `[${char}${char.toUpperCase()}]`;
+function likeLiteral(char: string, caseSensitive: boolean): string {
+  if (!caseSensitive) {
+    const code = char.codePointAt(0)!;
+    if (code >= 65 && code <= 90) return `[${char}${char.toLowerCase()}]`;
+    if (code >= 97 && code <= 122) return `[${char}${char.toUpperCase()}]`;
+  }
   return escapeRegexChar(char);
 }
 
 /**
- * SQLite LIKE matching. ASCII letters are case-insensitive.
+ * SQLite LIKE matching. ASCII letters are case-insensitive unless `caseSensitive`.
  *
  * @param text - Value to test.
  * @param pattern - Pattern with `%` / `_` wildcards.
  * @param escape - Optional single-character ESCAPE (or `null`).
+ * @param caseSensitive - When true, match like GLOB (SQLite `PRAGMA case_sensitive_like=ON`).
  */
-export function likeMatch(text: string, pattern: string, escape: string | null = null): boolean {
+export function likeMatch(text: string, pattern: string, escape: string | null = null, caseSensitive = false): boolean {
   if (escape !== null && [...escape].length !== 1) {
     throw new SqliteError("ESCAPE expression must be a single character", "other");
   }
@@ -29,13 +32,13 @@ export function likeMatch(text: string, pattern: string, escape: string | null =
     const char = chars[i]!;
     if (escape !== null && char === escape) {
       const next = chars[++i];
-      source += next === undefined ? likeLiteral(char) : likeLiteral(next);
+      source += next === undefined ? likeLiteral(char, caseSensitive) : likeLiteral(next, caseSensitive);
     } else if (char === "%") {
       source += "[\\s\\S]*";
     } else if (char === "_") {
       source += "[\\s\\S]";
     } else {
-      source += likeLiteral(char);
+      source += likeLiteral(char, caseSensitive);
     }
   }
   return new RegExp(`${source}$`).test(text);

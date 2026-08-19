@@ -93,11 +93,13 @@ Hardening pass (2026-08-19) — incompatibilities found & fixed:
   10. Collation-aware GROUP BY; FTS3 matchinfo format variants; external-content delete
 
 Remaining known differences / intentional:
-  Custom SQLM snapshots; deterministic random()/'now';
+  Custom SQLM snapshots; deterministic random()/'now' by default
+  (`random: "os"` / `now: "system"` match SQLite entropy and wall clock);
   EXPLAIN stubs (shape contracts only); INDEXED BY no-op (documented);
+  ATTACH file path records filename but opens empty in-memory schema;
   some PRAGMA storage no-ops; FTS shadow-table changes() diverge;
   MATERIALIZED/NOT MATERIALIZED stored but both materialize today;
-  PRAGMA case_sensitive_like not implemented;
+  compile_options / function_list content is sqlite-mem's;
   generate_series is sqlite-mem extension (not in bun:sqlite default);
   BigInt beyond Number.MAX_SAFE_INTEGER without bun safeIntegers;
   NOT APPLICABLE C API / on-disk / VFS surfaces; uri.html remapped N/A.

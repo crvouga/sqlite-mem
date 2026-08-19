@@ -6,9 +6,9 @@ import { castSqlValue } from "../functions/scalar.ts";
 import { compareWithCollation } from "../types/collation.ts";
 import {
   type Affinity,
+  affinityFromTypeName,
   applyComparisonAffinity,
   asSqlReal,
-  affinityFromTypeName,
   canonicalizeNumber,
   coerceToNumber,
   compareSql,
@@ -172,7 +172,7 @@ function evalBinary(op: BinaryOp, leftExpr: Expr, rightExpr: Expr, ctx: EvalCont
   if (op === "LIKE" || op === "NOT LIKE" || op === "GLOB" || op === "NOT GLOB") {
     if (left === null || right === null) return null;
     const matches = op.includes("LIKE")
-      ? likeMatch(textValue(left), textValue(right))
+      ? likeMatch(textValue(left), textValue(right), null, ctx.functionContext?.caseSensitiveLike === true)
       : globMatch(textValue(left), textValue(right));
     return booleanValue(op.startsWith("NOT") ? !matches : matches);
   }
@@ -491,7 +491,12 @@ export function evalExpr(expr: Expr, ctx: EvalContext): SqlValue {
       if (value === null || pattern === null || (escape === null && expr.escape !== null)) return null;
       const match =
         expr.op === "LIKE"
-          ? likeMatch(textValue(value), textValue(pattern), escape === null ? null : textValue(escape))
+          ? likeMatch(
+              textValue(value),
+              textValue(pattern),
+              escape === null ? null : textValue(escape),
+              ctx.functionContext?.caseSensitiveLike === true,
+            )
           : globMatch(textValue(value), textValue(pattern));
       return booleanValue(expr.not ? !match : match);
     }

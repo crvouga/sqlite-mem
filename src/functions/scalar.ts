@@ -306,12 +306,12 @@ const scalarFunctions: Record<string, ScalarFunction> = {
     requireArgs("load_extension", args, 1, 2);
     throw new SqliteError("not authorized", "misuse");
   },
-  like(args) {
+  like(args, context) {
     requireArgs("like", args, 2, 3);
     if (args[0] === null || args[1] === null || args[2] === null) return null;
     // like(pattern, string[, escape]) ≡ string LIKE pattern [ESCAPE escape]
     const escape = args[2] === undefined ? null : text(args[2]!);
-    return likeMatch(text(args[1]!), text(args[0]!), escape) ? 1 : 0;
+    return likeMatch(text(args[1]!), text(args[0]!), escape, context.caseSensitiveLike === true) ? 1 : 0;
   },
   glob(args) {
     requireArgs("glob", args, 2);

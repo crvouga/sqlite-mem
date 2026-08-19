@@ -18,6 +18,11 @@ export function executePragma(name: string, expr: Expr | null, env: ExecutionEnv
     if (!env.transactions.inTransaction) env.state.foreignKeysEnabled = coercePragmaTruthy(value);
     return emptyResult(0, env.state.lastInsertRowid);
   }
+  if (key === "case_sensitive_like" && expr !== null) {
+    const value = evalPragmaSetValue(expr, env);
+    env.state.caseSensitiveLike = coercePragmaTruthy(value);
+    return emptyResult(0, env.state.lastInsertRowid);
+  }
   if ((key === "user_version" || key === "schema_version") && expr !== null) {
     const value = evalPragmaSetValue(expr, env);
     const num = coercePragmaInt(value);

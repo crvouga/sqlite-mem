@@ -67,6 +67,36 @@ export class Prng {
   }
 }
 
+/**
+ * CSPRNG-backed entropy for `random()` / `randomblob()` when {@link DatabaseOptions.random}
+ * is `"os"`. `setState` is a no-op so ROLLBACK / snapshot restore do not rewind draws.
+ */
+export class OsEntropy extends Prng {
+  constructor() {
+    super(1);
+  }
+
+  override nextU64(): bigint {
+    const bytes = new Uint8Array(8);
+    crypto.getRandomValues(bytes);
+    let value = 0n;
+    for (let i = 0; i < 8; i++) {
+      value |= BigInt(bytes[i]!) << BigInt(i * 8);
+    }
+    return BigInt.asUintN(64, value);
+  }
+
+  override getState(): bigint {
+    return 0n;
+  }
+
+  override setState(_state: bigint): void {}
+
+  override clone(): Prng {
+    return new OsEntropy();
+  }
+}
+
 /** FNV-1a hash of `parts` as a signed 32-bit seed (for tests and custom PRNGs). */
 export function deriveSeed(...parts: Array<number | string | bigint>): number {
   let hash = 2166136261;

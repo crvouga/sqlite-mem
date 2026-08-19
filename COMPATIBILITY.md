@@ -76,7 +76,7 @@ Reference: **SQLite 3.51.0** (`bun:sqlite`). Inventory: `bun run scripts/fts-ora
 | FTS stateful fuzz | VERIFIED |
 | RTREE / dbstat / bytecode / tables_used | VERIFIED | dbstat synthetic pages; bytecode empty cursor |
 | ANALYZE / REINDEX / VACUUM | VERIFIED | `:memory:` observable parity |
-| EXPLAIN / INDEXED BY | PARTIALLY VERIFIED | Stub shapes / no-ops |
+| EXPLAIN / INDEXED BY | PARTIALLY VERIFIED | Stub shapes / no-ops (missing INDEXED BY errors documented) |
 | Prepared stmt schema invalidation | VERIFIED | Re-prepare after ALTER/DROP; `tests/contract/api/schema-invalidation.test.ts` |
 | On-disk file format / C API | NOT APPLICABLE | |
 

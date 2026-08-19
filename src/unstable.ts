@@ -13,16 +13,19 @@ export type { Expr } from "./ast/nodes.ts";
 export type { EvalContext } from "./expressions/context.ts";
 export { evalExpr } from "./expressions/eval.ts";
 export { globMatch, likeMatch } from "./expressions/like.ts";
-export { tokenize, type Token, type TokenKind } from "./lexer/tokenize.ts";
-export { parse, type ParsedStatement } from "./parser/index.ts";
+export { type Token, type TokenKind, tokenize } from "./lexer/tokenize.ts";
+export { type ParsedStatement, parse } from "./parser/index.ts";
 export {
   type Clock,
   DEFAULT_DATABASE_SEED,
   DEFAULT_NOW,
   deriveSeed,
   fixedClock,
+  OsEntropy,
   Prng,
+  type RandomMode,
   resolveClock,
+  systemClock,
 } from "./runtime/index.ts";
 export {
   type DecodedSnapshot,

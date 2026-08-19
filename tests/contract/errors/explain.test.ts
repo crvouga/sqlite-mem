@@ -22,6 +22,25 @@ matrixBoth("EXPLAIN QUERY PLAN exposes SQLite plan column shape with a documente
   expect(oracle.ok).toBe(true);
   expect(actual.columns).toEqual(oracle.columns);
   expect(actual.values).toEqual([[0, 0, 0, "EXECUTE SELECT"]]);
+  expect(JSON.stringify(oracle.values)).not.toEqual(JSON.stringify(actual.values));
+});
+
+matrixBoth("EXPLAIN INSERT uses the same bytecode columns and a statement-type stub", (memory, sqlite) => {
+  setupBoth(memory, sqlite, ["CREATE TABLE t(id INTEGER)"]);
+  const actual = memory.query("EXPLAIN INSERT INTO t VALUES (1)");
+  const oracle = sqlite.query("EXPLAIN INSERT INTO t VALUES (1)");
+  expect(actual.ok && oracle.ok).toBe(true);
+  expect(actual.columns).toEqual(oracle.columns);
+  expect(actual.values).toEqual([[0, "Execute", 0, 0, 0, "insert", 0, null]]);
+  expect((oracle.values?.length ?? 0) > 1).toBe(true);
+});
+
+matrixBoth("EXPLAIN QUERY PLAN CREATE TABLE is a stub, not a SQLite plan tree", (memory, sqlite) => {
+  const actual = memory.query("EXPLAIN QUERY PLAN CREATE TABLE t(id INTEGER)");
+  const oracle = sqlite.query("EXPLAIN QUERY PLAN CREATE TABLE t(id INTEGER)");
+  expect(actual.ok && oracle.ok).toBe(true);
+  expect(actual.columns).toEqual(oracle.columns);
+  expect(actual.values).toEqual([[0, 0, 0, "EXECUTE CREATE_TABLE"]]);
 });
 
 parity(
