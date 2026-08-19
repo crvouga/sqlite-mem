@@ -124,8 +124,9 @@ SQLITE_MEM_FUZZ_SEED=12345 SQLITE_MEM_FUZZ_PATH='0:1' bun test tests/fuzz
 
 | Command | Role |
 | --- | --- |
-| `bun run test:sqlite-compat` | Requirements + fail-closed gate + contract/fuzz/harness |
+| `bun run test:sqlite-compat` | Requirements + fail-closed gate + construct scenario catalog + contract/fuzz/harness |
 | `bun run inventory` | Oracle `pragma_function_list` / modules vs memory registries |
+| `bun run scenarios` | Construct-level scenario catalog (`compat/scenarios.ts`) |
 | `bun run requirements` | Refresh sqlite.org requirements → `compat/requirements.json` + `compat/coverage.json` |
 | `bun run fts-surface` | FTS oracle surface → `compat/fts-oracle-surface.json` |
 

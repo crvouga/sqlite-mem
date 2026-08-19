@@ -1,12 +1,12 @@
 # Differential parity gaps
 
-Checklist of where sqlite-mem’s **drop-in vs SQLite 3.51.0** claim is not yet proven by the differential suite. Update after each work session: tick items that land a named contract test, or move a **LIKELY DIVERGENCE** to [COMPATIBILITY.md](../COMPATIBILITY.md) if it is an intentional limitation.
+Construct-level coverage now lives in [`compat/scenarios.ts`](../compat/scenarios.ts). Run `bun run scenarios` for mapped vs promoted sections. IDs are `TOK-01`, `WIN-frame-04`, …; tests live under [`tests/contract/catalog/`](../tests/contract/catalog/). This file remains a historical P0 probe list.
 
-Parity is proven **only** by `parity` / `execParity` / `errorParity` / `sequenceParity` / `matrixBoth` against `bun:sqlite`. Isolated `new Database()` tests do not count.
+Parity is proven **only** by `parity` / `execParity` / `errorParity` / `sequenceParity` / `matrixBoth` against `bun:sqlite` (and `divergence()` for README-specified differences). Isolated `new Database()` tests do not count for SQL dialect IDs.
 
-Do not mark a [COMPATIBILITY.md](../COMPATIBILITY.md) row **VERIFIED** from this audit alone. Several current VERIFIED rows are page-level seeds, not construct-level proof.
+Do not mark a [COMPATIBILITY.md](../COMPATIBILITY.md) row **VERIFIED** from page-level `SOURCE_SEED` alone.
 
-**Session:** Goal 1.1 coverage audit (2026-08-18). No engine or test code was changed in this pass. Follow-up: merged implementation-audit facts (rowid never reused, AUTOINCREMENT ≡ plain IPK, INSTEAD OF never fires, OR ABORT/FAIL/ROLLBACK not distinguished).
+**Session:** Goal 1.1 coverage audit (2026-08-18), plus construct catalog (2026-08-19).
 
 ## Legend
 

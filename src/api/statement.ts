@@ -2,7 +2,7 @@ import type { Statement as AstStatement } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
 import { ExecutionEnv } from "../executor/env.ts";
 import { executeStatement } from "../executor/execute.ts";
-import type { ResultSet } from "../executor/result.ts";
+import { emptyResult, type ResultSet } from "../executor/result.ts";
 import { tokenize } from "../lexer/tokenize.ts";
 import { parse } from "../parser/index.ts";
 import type { BindValue, QueryRow } from "../types/value.ts";
@@ -107,7 +107,10 @@ export class Statement {
   private execute(params: readonly BindValue[], options?: { named?: boolean; maxRows?: number }): ResultSet {
     this.database.assertOpen();
     this.reprepareIfSchemaChanged();
-    if (this.statements.length === 0) throw new SqliteError("empty statement", "misuse");
+    if (this.statements.length === 0) {
+      if (options?.named) throw new SqliteError("empty statement", "misuse");
+      return emptyResult(this.database.state.changes, this.database.state.lastInsertRowid);
+    }
     this.namedPlan ??= planNamedParameters(this.sql);
     const expected = this.namedPlan.expectedCount;
     if (params.length > 0 && params.length !== expected) {

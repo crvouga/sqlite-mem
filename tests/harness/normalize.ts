@@ -246,6 +246,8 @@ export interface CompareOptions {
    * Default: exact Object.is. Do not enable for general SQL parity.
    */
   realEpsilon?: number;
+  /** Compare cells positionally; ignore result-column header spelling. */
+  ignoreColumnNames?: boolean;
 }
 
 export function deepCompareResults(
@@ -290,7 +292,7 @@ export function deepCompareResults(
     if (!positionalRowsEqual(na, nb, realEpsilon)) {
       return { equal: false, reason: "column count mismatch" };
     }
-  } else {
+  } else if (!options?.ignoreColumnNames) {
     for (let i = 0; i < na.columns.length; i++) {
       if (na.columns[i] !== nb.columns[i]) {
         return {

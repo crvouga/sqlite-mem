@@ -8,7 +8,7 @@ bun run test:sqlite-compat
 
 See [COMPATIBILITY-AUDIT.md](COMPATIBILITY-AUDIT.md) for the latest evidence-based audit report.
 
-Reference oracle: **SQLite 3.51.0** (`bun:sqlite`). Inventory: `bun run inventory`. Requirements matrix: `bun run requirements` → `compat/requirements.json` + `compat/coverage.json`.
+Reference oracle: **SQLite 3.51.0** (`bun:sqlite`). Inventory: `bun run inventory`. Construct catalog: `bun run scenarios` → [`compat/scenarios.ts`](compat/scenarios.ts). Requirements matrix: `bun run requirements` → `compat/requirements.json` + `compat/coverage.json`.
 
 ## Status vocabulary
 

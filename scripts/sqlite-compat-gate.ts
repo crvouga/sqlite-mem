@@ -6,6 +6,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildInventoryReport } from "./sqlite-inventory.ts";
+import { printScenarioSummary, validateScenarioCatalog } from "./sqlite-scenarios.ts";
 
 const ROOT = join(import.meta.dir, "..");
 const COMPAT = join(ROOT, "compat");
@@ -57,6 +58,10 @@ function main(): void {
     }
   }
 
+  const scenarios = validateScenarioCatalog();
+  printScenarioSummary(scenarios);
+  for (const failure of scenarios.failures) failures.push(failure);
+
   const inventory = buildInventoryReport();
   console.log(
     `oracle bun:sqlite ${inventory.referenceSqliteVersion} (bun ${Bun.version} ${process.platform}/${process.arch})`,
@@ -81,6 +86,7 @@ function main(): void {
     referenceSqliteVersion: inventory.referenceSqliteVersion,
     compileOptions: inventory.compileOptions,
     inventory,
+    scenarios: scenarios.stats,
     failures,
     ok: failures.length === 0,
   };
@@ -95,6 +101,7 @@ function main(): void {
   console.log(`  oracle ${inventory.referenceSqliteVersion}`);
   console.log(`  functions covered ${inventory.implementedOracleFunctions.length}`);
   console.log(`  modules covered ${inventory.memoryModules.length}`);
+  console.log(`  scenarios mapped ${scenarios.stats.mapped}/${scenarios.stats.total}`);
 }
 
 main();

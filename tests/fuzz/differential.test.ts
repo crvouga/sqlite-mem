@@ -1,3 +1,4 @@
+/** Coverage: FZZ-diff-01 FZZ-seed-01 FZZ-replay-01 */
 import { describe, expect, test } from "bun:test";
 import * as fc from "fast-check";
 import { InMemoryAdapter } from "../adapters/in-memory.ts";

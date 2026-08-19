@@ -1,8 +1,9 @@
-import { expect } from "bun:test";
+import { expect, test } from "bun:test";
+import { Database } from "../../src/index.ts";
 import { expectParity } from "../harness/assert.ts";
 import { matrixBoth } from "../harness/matrix.ts";
 import { expectStateParity } from "../harness/state-dump.ts";
-import type { ContractDb, ErrorCategory, SqlValue } from "../harness/types.ts";
+import type { CompareOptions } from "../harness/normalize.ts";
 
 export function setupBoth(memory: ContractDb, sqlite: ContractDb, statements: string[]): void {
   for (const sql of statements) {
@@ -13,10 +14,16 @@ export function setupBoth(memory: ContractDb, sqlite: ContractDb, statements: st
   }
 }
 
-export function parity(name: string, setup: string[], sql: string, params?: SqlValue[]): void {
+export function parity(
+  name: string,
+  setup: string[],
+  sql: string,
+  params?: SqlValue[],
+  options?: CompareOptions,
+): void {
   matrixBoth(name, (memory, sqlite) => {
     setupBoth(memory, sqlite, setup);
-    expectParity(memory.query(sql, params), sqlite.query(sql, params));
+    expectParity(memory.query(sql, params), sqlite.query(sql, params), options);
   });
 }
 
@@ -99,5 +106,35 @@ export function queryErrorParity(name: string, setup: string[], sql: string, cat
     expect(b.ok).toBe(false);
     expectParity(a, b);
     if (category) expect(a.error?.category).toBe(category);
+  });
+}
+
+/** Differential query plus typeof() of each result column. */
+export function parityTyped(name: string, setup: string[], sql: string, params?: SqlValue[]): void {
+  matrixBoth(name, (memory, sqlite) => {
+    setupBoth(memory, sqlite, setup);
+    const inner = sql.replace(/;\s*$/, "");
+    expectParity(memory.query(inner, params), sqlite.query(inner, params));
+    const sample = memory.query(inner, params);
+    if (!sample.ok || sample.columns.length === 0) return;
+    const typeSelect = sample.columns.map((column, index) => `typeof(${quoteIdent(column)}) AS t${index}`).join(", ");
+    const typedSql = `SELECT ${typeSelect} FROM (${inner})`;
+    expectParity(memory.query(typedSql, params), sqlite.query(typedSql, params));
+  });
+}
+
+function quoteIdent(name: string): string {
+  return `"${name.replaceAll('"', '""')}"`;
+}
+
+/** Documented divergence: assert sqlite-mem behavior, not oracle equality. */
+export function divergence(id: string, title: string, fn: (db: Database) => void): void {
+  test(`${id}: ${title}`, () => {
+    const db = new Database();
+    try {
+      fn(db);
+    } finally {
+      db.close();
+    }
   });
 }
