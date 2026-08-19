@@ -124,13 +124,15 @@ SQLITE_MEM_FUZZ_SEED=12345 SQLITE_MEM_FUZZ_PATH='0:1' bun test tests/fuzz
 
 | Command | Role |
 | --- | --- |
-| `bun run test:sqlite-compat` | Requirements + fail-closed gate + construct scenario catalog + contract/fuzz/harness |
+| `bun run test:sqlite-compat` | Requirements + fail-closed gate + construct catalog + 𝔇 + smoke ratchet + contract/fuzz/harness |
 | `bun run inventory` | Oracle `pragma_function_list` / modules vs memory registries |
-| `bun run scenarios` | Construct-level scenario catalog (`compat/scenarios.ts`) |
+| `bun run scenarios` | Construct-level scenario catalog (`compat/scenarios.ts`) + 𝔇 / smoke gates |
 | `bun run requirements` | Refresh sqlite.org requirements → `compat/requirements.json` + `compat/coverage.json` |
 | `bun run fts-surface` | FTS oracle surface → `compat/fts-oracle-surface.json` |
 
 Statuses: **VERIFIED** / **PARTIALLY VERIFIED** / **UNSUPPORTED** / **NOT APPLICABLE**. Do not market PARTIAL as complete. Coverage evidence is directory paths (e.g. `tests/contract/joins/`), not automatic from test filenames.
+
+**Catalog vs proof:** `tests/contract/catalog/` IDs must execute; smoke (`SELECT 1 AS v`) is tracked in `compat/smoke-baseline.json`. Documented divergences bind to `compat/divergences.json`. Generated operator/CAST matrices: `tests/contract/matrices/`. Stateful dump-after-each fuzz: `tests/fuzz/stateful.test.ts`. Oracle `sqlite_version()` must be 3.51.0 or 3.53.0.
 
 Details: [COMPATIBILITY.md](COMPATIBILITY.md), audit: [COMPATIBILITY-AUDIT.md](COMPATIBILITY-AUDIT.md).
 

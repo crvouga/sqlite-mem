@@ -1,6 +1,14 @@
 import { expectParity } from "./assert.ts";
 import type { ContractDb, QueryResult, SqlValue } from "./types.ts";
 
+const PRAGMA_KNOBS = [
+  "user_version",
+  "foreign_keys",
+  "defer_foreign_keys",
+  "recursive_triggers",
+  "application_id",
+] as const;
+
 /**
  * Canonical logical database dump for differential state comparison.
  * Ordered and deterministic so both adapters can be compared via deepCompareResults.
@@ -16,7 +24,7 @@ export function dumpLogicalState(db: ContractDb): QueryResult {
   );
   if (!tables.ok) return tables;
 
-  const tableBlocks: Array<{ name: string; rows: QueryResult; info: QueryResult }> = [];
+  const tableBlocks: Array<{ name: string; rows: QueryResult; info: QueryResult; types: QueryResult | null }> = [];
   for (const row of tables.rows) {
     const name = String(row.name);
     const quoted = quoteIdent(name);
@@ -28,7 +36,17 @@ export function dumpLogicalState(db: ContractDb): QueryResult {
       : `SELECT * FROM ${quoted} ORDER BY ${pkOrderColumns(info)}`;
     const rows = db.query(rowSql);
     if (!rows.ok) return rows;
-    tableBlocks.push({ name, rows, info });
+    const typeSelect = info.rows.map((col) => `typeof(${quoteIdent(String(col.name))})`).join(", ");
+    const types =
+      typeSelect.length > 0
+        ? db.query(
+            hasRowid
+              ? `SELECT ${typeSelect} FROM ${quoted} ORDER BY rowid`
+              : `SELECT ${typeSelect} FROM ${quoted} ORDER BY ${pkOrderColumns(info)}`,
+          )
+        : null;
+    if (types && !types.ok) return types;
+    tableBlocks.push({ name, rows, info, types });
   }
 
   const indexRows: Record<string, SqlValue>[] = [];
@@ -58,7 +76,6 @@ export function dumpLogicalState(db: ContractDb): QueryResult {
     outRows.push({
       section: "schema",
       key: `${row.type}:${row.name}`,
-      // Omit sql text — formatting differs across engines; structure is checked below.
       payload: String(row.tbl_name ?? ""),
     });
   }
@@ -73,10 +90,14 @@ export function dumpLogicalState(db: ContractDb): QueryResult {
     }
     for (let i = 0; i < block.rows.rows.length; i++) {
       const r = block.rows.rows[i]!;
+      const typeRow = block.types?.rows[i];
+      const typePayload = typeRow
+        ? `|types:${block.types!.columns.map((c) => String(typeRow[c] ?? "")).join(",")}`
+        : "";
       outRows.push({
         section: "row",
         key: `${block.name}#${i}`,
-        payload: serializeRow(block.rows.columns, r),
+        payload: `${serializeRow(block.rows.columns, r)}${typePayload}`,
       });
     }
   }
@@ -99,18 +120,50 @@ export function dumpLogicalState(db: ContractDb): QueryResult {
     });
   }
 
+  const sequence = db.query("SELECT name, seq FROM sqlite_sequence ORDER BY name");
+  if (sequence.ok) {
+    for (const row of sequence.rows) {
+      outRows.push({
+        section: "sqlite_sequence",
+        key: String(row.name),
+        payload: String(row.seq ?? ""),
+      });
+    }
+  }
+
+  for (const knob of PRAGMA_KNOBS) {
+    const pragma = db.query(`PRAGMA ${knob}`);
+    if (!pragma.ok) continue;
+    const value = pragma.rows[0] ? Object.values(pragma.rows[0])[0] : null;
+    outRows.push({
+      section: "pragma",
+      key: knob,
+      payload: String(value ?? ""),
+    });
+  }
+
+  outRows.push({
+    section: "session",
+    key: "inTransaction",
+    payload: db.inTransaction() ? "1" : "0",
+  });
+
   return {
     ok: true,
     columns,
     rows: outRows,
+    values: outRows.map((row) => columns.map((col) => row[col] ?? null)),
     changes: 0,
     lastInsertRowid: 0,
+    lastInsertRowidKind: "number",
+    totalChanges: 0,
+    inTransaction: db.inTransaction(),
   };
 }
 
 /** Compare logical dumps from two databases. */
 export function expectStateParity(memory: ContractDb, sqlite: ContractDb): void {
-  expectParity(dumpLogicalState(memory), dumpLogicalState(sqlite));
+  expectParity(dumpLogicalState(memory), dumpLogicalState(sqlite), { ignoreWriteCounters: true });
 }
 
 function quoteIdent(name: string): string {
@@ -118,7 +171,6 @@ function quoteIdent(name: string): string {
 }
 
 function isWithoutRowid(db: ContractDb, table: string): boolean {
-  // Prefer schema SQL when present; sqlite-mem may omit CREATE text.
   const schema = db.query(`SELECT sql FROM sqlite_master WHERE type='table' AND name=${sqlString(table)}`);
   if (schema.ok && schema.rows.length > 0) {
     const sql = String(schema.rows[0]!.sql ?? "");

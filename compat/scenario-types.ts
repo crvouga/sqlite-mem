@@ -36,12 +36,16 @@ export type SectionCode = (typeof SECTION_CODES)[number];
 
 export type ScenarioKind = "differential" | "documented_divergence" | "fuzz" | "property" | "ecosystem";
 
+export type ProofStrength = "proves" | "smoke";
+
 export interface Scenario {
   id: string;
   title: string;
   kind: ScenarioKind;
   evidence: string[];
   notes?: string;
+  divergenceId?: string;
+  strength?: ProofStrength;
 }
 
 export interface CatalogSection {

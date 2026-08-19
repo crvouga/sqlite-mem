@@ -8,7 +8,15 @@ bun run test:sqlite-compat
 
 See [COMPATIBILITY-AUDIT.md](COMPATIBILITY-AUDIT.md) for the latest evidence-based audit report.
 
-Reference oracle: **SQLite 3.51.0** (`bun:sqlite`). Inventory: `bun run inventory`. Construct catalog: `bun run scenarios` → [`compat/scenarios.ts`](compat/scenarios.ts). Requirements matrix: `bun run requirements` → `compat/requirements.json` + `compat/coverage.json`.
+Reference oracle: **SQLite 3.51.0** (`bun:sqlite`; Linux/Windows bun may report **3.53.0** — see 𝔇 `oracle-platform-sqlite-version`). Inventory: `bun run inventory`. Construct catalog: `bun run scenarios` → [`compat/scenarios.ts`](compat/scenarios.ts). Divergences: [`compat/divergences.json`](compat/divergences.json). Requirements matrix: `bun run requirements` → `compat/requirements.json` + `compat/coverage.json`.
+
+## Proof surface (Phase 1)
+
+Differential tests compare a **B-tuple**: rows (plus `typeof` where requested), column names, error category / sqliteCode / message (Tier A exact or Tier B prefix-normalized), `changes`, `total_changes`, `lastInsertRowid`, and autocommit, plus a **logical Dump** (`sqlite_master` names, `table_info`, row payloads with per-column `typeof`, `sqlite_sequence`, selected pragmas).
+
+A catalog ID appearing in a test file is **not** proof by itself. Cases whose SQL is `SELECT 1 AS v` are **smoke**; [`compat/smoke-baseline.json`](compat/smoke-baseline.json) ratchets that list downward. Generated matrices live under [`tests/contract/matrices/`](tests/contract/matrices/). Observed mem≠oracle diffs must be `known-divergence(id)` from 𝔇 or **FAILURE** — unexplained diffs are not allowed.
+
+Intentional differences are finite and machine-readable in `compat/divergences.json` (SQLM snapshots, seeded `random()`/`now`, ATTACH empty schema, EXPLAIN stubs, INDEXED BY discarded, MATERIALIZED hint ignored, FTS shadow counters, compile_options/function_list, `-0`, JS API extras, snapshot exclusions).
 
 ## Status vocabulary
 

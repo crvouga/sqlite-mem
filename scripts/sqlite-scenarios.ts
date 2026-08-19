@@ -5,8 +5,9 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { SCENARIO_CATALOG, knownScenarioIds } from "../compat/scenarios.ts";
 import { SCENARIO_ID_RE, SECTION_CODES, type SectionCode } from "../compat/scenario-types.ts";
+import { allScenarios, knownScenarioIds, SCENARIO_CATALOG } from "../compat/scenarios.ts";
+import { knownDivergenceIds, loadDivergences } from "../tests/harness/classify.ts";
 
 const ROOT = join(import.meta.dir, "..");
 
@@ -17,11 +18,94 @@ export interface ScenarioGateStats {
   promoted: number;
   total: number;
   mapped: number;
+  smoke: number;
 }
 
 export interface ScenarioGateResult {
   failures: string[];
   stats: ScenarioGateStats;
+}
+
+function catalogSlice(text: string, id: string): string {
+  const marker = `id: "${id}"`;
+  const idx = text.indexOf(marker);
+  if (idx < 0) return "";
+  const brace = text.lastIndexOf("{", idx);
+  if (brace < 0) return "";
+  let depth = 0;
+  for (let i = brace; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) return text.slice(brace, i + 1);
+    }
+  }
+  return text.slice(brace, brace + 400);
+}
+
+/** Stub cases that do not prove the scenario title. */
+export function isSmokeSlice(slice: string): boolean {
+  if (/sql:\s*"SELECT 1 AS v"/.test(slice)) return true;
+  if (/existsSync\(/.test(slice)) return true;
+  return false;
+}
+
+export function detectSmokeIds(root = ROOT): string[] {
+  const smoke: string[] = [];
+  for (const section of SCENARIO_CATALOG) {
+    const rel = join(root, `tests/contract/catalog/${section.code.toLowerCase()}.test.ts`);
+    if (!existsSync(rel)) continue;
+    const text = readFileSync(rel, "utf8");
+    for (const scenario of section.scenarios) {
+      if (isSmokeSlice(catalogSlice(text, scenario.id))) smoke.push(scenario.id);
+    }
+  }
+  return smoke;
+}
+
+function validateDivergences(root: string, failures: string[]): void {
+  const file = loadDivergences(root);
+  const ids = knownDivergenceIds();
+  const known = knownScenarioIds();
+  if (file.entries.length === 0) failures.push("compat/divergences.json has no entries");
+  const seen = new Set<string>();
+  for (const entry of file.entries) {
+    if (seen.has(entry.id)) failures.push(`Duplicate divergence id ${entry.id}`);
+    seen.add(entry.id);
+    if (entry.pinnedBy.length === 0) failures.push(`Divergence ${entry.id} has no pinnedBy`);
+    for (const pin of entry.pinnedBy) {
+      if (/^[A-Z]{3}-/.test(pin) && !known.has(pin)) {
+        failures.push(`Divergence ${entry.id} pinnedBy unknown scenario ${pin}`);
+      }
+    }
+  }
+  for (const scenario of allScenarios()) {
+    if (scenario.kind !== "documented_divergence") continue;
+    if (!scenario.divergenceId) {
+      failures.push(`${scenario.id} is documented_divergence without divergenceId`);
+      continue;
+    }
+    if (!ids.has(scenario.divergenceId)) {
+      failures.push(`${scenario.id} maps to unknown divergence ${scenario.divergenceId}`);
+    }
+  }
+}
+
+function validateSmokeRatchet(root: string, smoke: string[], failures: string[]): void {
+  const baselinePath = join(root, "compat/smoke-baseline.json");
+  if (!existsSync(baselinePath)) {
+    failures.push("compat/smoke-baseline.json missing");
+    return;
+  }
+  const baseline = JSON.parse(readFileSync(baselinePath, "utf8")) as { ids: string[] };
+  const allowed = new Set(baseline.ids);
+  if (smoke.length > baseline.ids.length) {
+    failures.push(`catalog smoke count increased: ${smoke.length} > ${baseline.ids.length}`);
+  }
+  for (const id of smoke) {
+    if (!allowed.has(id)) failures.push(`new smoke catalog case ${id} (ratchet forbids new stubs)`);
+  }
 }
 
 function walkTsFiles(dir: string): string[] {
@@ -72,6 +156,10 @@ export function validateScenarioCatalog(root = ROOT): ScenarioGateResult {
     }
   }
 
+  validateDivergences(root, failures);
+  const smoke = detectSmokeIds(root);
+  validateSmokeRatchet(root, smoke, failures);
+
   const testsDir = join(root, "tests");
   if (existsSync(testsDir)) {
     for (const file of walkTsFiles(testsDir)) {
@@ -90,6 +178,7 @@ export function validateScenarioCatalog(root = ROOT): ScenarioGateResult {
     promoted: SCENARIO_CATALOG.filter((section) => section.promoted).length,
     total: known.size,
     mapped,
+    smoke: smoke.length,
   };
   return { failures, stats };
 }
@@ -97,7 +186,7 @@ export function validateScenarioCatalog(root = ROOT): ScenarioGateResult {
 export function printScenarioSummary(result: ScenarioGateResult): void {
   const { stats } = result;
   console.log(
-    `scenario catalog: promoted ${stats.promoted}/${stats.sections} sections, mapped ${stats.mapped}/${stats.total} ids`,
+    `scenario catalog: promoted ${stats.promoted}/${stats.sections} sections, mapped ${stats.mapped}/${stats.total} ids, smoke ${stats.smoke}`,
   );
   for (const section of SCENARIO_CATALOG) {
     const mapped = section.scenarios.filter((scenario) =>

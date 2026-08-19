@@ -17,6 +17,16 @@ export type ErrorCategory =
   | "snapshot_version"
   | "other";
 
+export type ErrorPhase = "prepare" | "step";
+export type RowidJsKind = "number" | "bigint";
+
+export interface QueryError {
+  category: ErrorCategory;
+  message: string;
+  sqliteCode?: string;
+  phase?: ErrorPhase;
+}
+
 export interface QueryResult {
   ok: boolean;
   columns: string[];
@@ -25,7 +35,10 @@ export interface QueryResult {
   values?: SqlValue[][];
   changes: number;
   lastInsertRowid: number | bigint;
-  error?: { category: ErrorCategory; message: string };
+  lastInsertRowidKind?: RowidJsKind;
+  totalChanges?: number;
+  inTransaction?: boolean;
+  error?: QueryError;
 }
 
 export interface ContractStatement {
@@ -42,6 +55,8 @@ export interface ContractDb {
   snapshot(): Uint8Array;
   restore(bytes: Uint8Array): void;
   close(): void;
+  inTransaction(): boolean;
+  totalChanges(): number;
 }
 
 export type NormalizedValue =
@@ -57,5 +72,8 @@ export interface NormalizedResult {
   rows: NormalizedValue[][];
   changes: number;
   lastInsertRowid: number | bigint;
-  error?: { category: ErrorCategory; message: string };
+  lastInsertRowidKind?: RowidJsKind;
+  totalChanges?: number;
+  inTransaction?: boolean;
+  error?: QueryError;
 }

@@ -238,6 +238,16 @@ export class Database {
   }
 
   /**
+   * Cumulative rows changed by INSERT / UPDATE / DELETE (SQLite `total_changes()`).
+   *
+   * @throws {SqliteError} If the database is closed.
+   */
+  get totalChanges(): number {
+    this.assertOpen();
+    return this.state.totalChanges;
+  }
+
+  /**
    * Throw if {@link close} has already been called.
    * @internal
    * @throws {SqliteError} If the database is closed.

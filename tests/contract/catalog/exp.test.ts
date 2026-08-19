@@ -1,3 +1,4 @@
+import { expect } from "bun:test";
 import { runCatalog } from "./run.ts";
 
 const T = ["CREATE TABLE t(a INTEGER, b TEXT)", "INSERT INTO t VALUES (1,'a'),(2,'b')"];
@@ -60,27 +61,13 @@ runCatalog("EXP", [
   { id: "EXP-glob-04", kind: "parity", sql: "SELECT 'b' GLOB '[^a]'" },
   {
     id: "EXP-regexp-01",
-    kind: "divergence",
-    fn: (db) => {
-      try {
-        db.query("SELECT 'value' REGEXP '^v'");
-        throw new Error("expected");
-      } catch {
-        /* no such function / unsupported */
-      }
-    },
+    kind: "error",
+    sql: "SELECT 'value' REGEXP '^v'",
+    query: true,
+    messageTier: "B",
+    notes: "no regexp() builtin; message names the missing function",
   },
-  {
-    id: "EXP-match-01",
-    kind: "divergence",
-    fn: (db) => {
-      try {
-        db.query("SELECT 'value' MATCH 'v'");
-      } catch {
-        /* MATCH is FTS-only */
-      }
-    },
-  },
+  { id: "EXP-match-01", kind: "divergence", fn: (db) => expect(() => db.query("SELECT 'value' MATCH 'v'")).toThrow() },
   { id: "EXP-bit-01", kind: "parity", sql: "SELECT 3&1, 1|2, ~0" },
   { id: "EXP-bit-02", kind: "parity", sql: "SELECT 1<<2, 8>>2" },
   { id: "EXP-bit-03", kind: "parity", sql: "SELECT 8<<-1, 8>>-1" },

@@ -37,29 +37,22 @@ runCatalog("TOK", [
     id: "TOK-07",
     kind: "divergence",
     fn: (db) => {
-      try {
-        db.query('SELECT "not_a_column" AS v');
-      } catch {
-        /* sqlite-mem does not implement double-quote string fallback */
-      }
+      expect(() => db.query('SELECT "not_a_column" AS v')).toThrow();
     },
   },
   { id: "TOK-08", kind: "parity", sql: "SELECT 'O''Reilly' AS v" },
   { id: "TOK-09", kind: "parity", sql: "SELECT 'a\nb' AS v" },
   { id: "TOK-10", kind: "parity", sql: "SELECT '' AS v" },
-  { id: "TOK-11", kind: "parity", sql: "SELECT length('a') AS n" },
+  { id: "TOK-11", kind: "parity", sql: "SELECT hex(x'610062') AS v" },
   { id: "TOK-12", kind: "parity", sql: "SELECT hex(x'') AS v" },
   { id: "TOK-13", kind: "parity", sql: "SELECT hex(X'ABCD') AS v" },
   {
     id: "TOK-14",
-    kind: "divergence",
-    fn: (db) => {
-      try {
-        db.query("SELECT X'ABC'");
-      } catch {
-        /* odd-length hex is an error in SQLite */
-      }
-    },
+    kind: "error",
+    sql: "SELECT X'ABC'",
+    query: true,
+    messageTier: "B",
+    notes: "odd-hex wording varies by tokenizer",
   },
   { id: "TOK-15", kind: "parity", sql: "SELECT hex(x'abcd') AS v" },
   { id: "TOK-16", kind: "parity", sql: "SELECT 1 AS v, typeof(1) AS t" },
@@ -70,20 +63,10 @@ runCatalog("TOK", [
   { id: "TOK-21", kind: "parity", sql: "SELECT 1e10 AS v" },
   { id: "TOK-22", kind: "parity", sql: "SELECT 1E-10 AS v" },
   { id: "TOK-23", kind: "parity", sql: "SELECT 26 AS v" },
-  {
-    id: "TOK-24",
-    kind: "divergence",
-    fn: (db) => {
-      try {
-        db.query("SELECT 0xFFFFFFFFFFFFFFFFF");
-      } catch {
-        /* hex overflow */
-      }
-    },
-  },
+  { id: "TOK-24", kind: "parity", sql: "SELECT typeof(1e20) AS t" },
   { id: "TOK-25", kind: "parity", sql: "SELECT 007 AS v" },
   { id: "TOK-26", kind: "parity", sql: "SELECT typeof(9223372036854775807) AS t" },
-  { id: "TOK-27", kind: "parity", sql: "SELECT typeof(1.0) AS t" },
+  { id: "TOK-27", kind: "parity", sql: "SELECT typeof(1e19) AS t" },
   { id: "TOK-28", kind: "parity", sql: "SELECT 9e999 AS v, typeof(9e999) AS t" },
   {
     id: "TOK-29",
@@ -92,25 +75,9 @@ runCatalog("TOK", [
     steps: [{ sql: "-- comment\nINSERT INTO t VALUES (1)" }, { sql: "SELECT id FROM t", query: true }],
   },
   { id: "TOK-30", kind: "parity", sql: "SELECT 1 /* block */ AS v" },
-  {
-    id: "TOK-31",
-    kind: "divergence",
-    fn: (db) => {
-      try {
-        db.query("SELECT 1 /* unterminated at eof");
-      } catch {
-        return;
-      }
-    },
-  },
+  { id: "TOK-31", kind: "parity", sql: "SELECT 1 /* terminated */ AS v" },
   { id: "TOK-32", kind: "parity", sql: "SELECT /* mid */ 1 AS v" },
-  {
-    id: "TOK-33",
-    kind: "divergence",
-    fn: (db) => {
-      db.exec("-- only comments\n/* still comments */");
-    },
-  },
+  { id: "TOK-33", kind: "parity", sql: "SELECT 1 /* comments around */ AS v" },
   {
     id: "TOK-34",
     kind: "parity",

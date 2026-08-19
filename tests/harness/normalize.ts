@@ -1,4 +1,12 @@
-import type { ErrorCategory, NormalizedResult, NormalizedValue, QueryResult, SqlValue } from "./types.ts";
+import type {
+  ErrorCategory,
+  ErrorPhase,
+  NormalizedResult,
+  NormalizedValue,
+  QueryError,
+  QueryResult,
+  SqlValue,
+} from "./types.ts";
 
 export function normalizeValue(value: SqlValue): NormalizedValue {
   if (value === null) return { kind: "null" };
@@ -68,6 +76,12 @@ export function normalizeErrorMessageForCompare(message: string): string {
   if (lower.startsWith("no such table")) {
     return "no such table";
   }
+  if (/syntax error|unexpected token|near "/.test(lower)) {
+    return "syntax error";
+  }
+  if (lower.startsWith("unrecognized token")) {
+    return "unrecognized token";
+  }
   if (lower.startsWith("datatype mismatch")) {
     return "datatype mismatch";
   }
@@ -100,14 +114,60 @@ export function categorizeErrorMessage(message: string): ErrorCategory {
   return "other";
 }
 
+export function sqliteCodeFromMessage(message: string, category?: ErrorCategory): string {
+  const msg = normalizeErrorMessage(message).toLowerCase();
+  if (/unique constraint failed/.test(msg)) return "SQLITE_CONSTRAINT_UNIQUE";
+  if (/primary key constraint failed/.test(msg)) return "SQLITE_CONSTRAINT_PRIMARYKEY";
+  if (/not null constraint failed/.test(msg)) return "SQLITE_CONSTRAINT_NOTNULL";
+  if (/check constraint failed/.test(msg)) return "SQLITE_CONSTRAINT_CHECK";
+  if (/foreign key constraint failed/.test(msg)) return "SQLITE_CONSTRAINT_FOREIGNKEY";
+  if (/constraint failed/.test(msg)) return "SQLITE_CONSTRAINT";
+  if (/no such table/.test(msg)) return "SQLITE_ERROR";
+  if (/no such column/.test(msg)) return "SQLITE_ERROR";
+  if (/datatype mismatch|type mismatch/.test(msg)) return "SQLITE_MISMATCH";
+  if (/misuse|database is closed|empty statement|expected \d+ values/.test(msg)) return "SQLITE_MISUSE";
+  if (category === "syntax" || /syntax error|near "|incomplete input/.test(msg)) return "SQLITE_ERROR";
+  if (category === "transaction") return "SQLITE_ERROR";
+  if (category === "unsupported") return "SQLITE_ERROR";
+  if (category === "snapshot_version") return "SQLITE_FORMAT";
+  return "SQLITE_ERROR";
+}
+
+export function numericSqliteCodeToName(code: number): string {
+  switch (code) {
+    case 1:
+      return "SQLITE_ERROR";
+    case 8:
+      return "SQLITE_READONLY";
+    case 11:
+      return "SQLITE_CORRUPT";
+    case 13:
+      return "SQLITE_FULL";
+    case 19:
+      return "SQLITE_CONSTRAINT";
+    case 20:
+      return "SQLITE_MISMATCH";
+    case 21:
+      return "SQLITE_MISUSE";
+    case 26:
+      return "SQLITE_NOTADB";
+    default:
+      return `SQLITE_${code}`;
+  }
+}
+
 export function normalizeError(
   message: string,
   category?: ErrorCategory,
-): { category: ErrorCategory; message: string } {
+  extras?: { sqliteCode?: string; phase?: ErrorPhase },
+): QueryError {
   const normalizedMessage = normalizeErrorMessage(message);
+  const resolvedCategory = category ?? categorizeErrorMessage(normalizedMessage);
   return {
-    category: category ?? categorizeErrorMessage(normalizedMessage),
+    category: resolvedCategory,
     message: normalizedMessage,
+    sqliteCode: extras?.sqliteCode ?? sqliteCodeFromMessage(normalizedMessage, resolvedCategory),
+    ...(extras?.phase ? { phase: extras.phase } : {}),
   };
 }
 
@@ -125,10 +185,16 @@ export function normalizeQueryResult(result: QueryResult): NormalizedResult {
     rows: result.ok ? rows : [],
     changes: result.changes,
     lastInsertRowid: result.lastInsertRowid,
+    lastInsertRowidKind: result.lastInsertRowidKind,
+    totalChanges: result.totalChanges,
+    inTransaction: result.inTransaction,
   };
 
   if (result.error) {
-    normalized.error = normalizeError(result.error.message, result.error.category);
+    normalized.error = normalizeError(result.error.message, result.error.category, {
+      sqliteCode: result.error.sqliteCode,
+      phase: result.error.phase,
+    });
   }
 
   return normalized;
@@ -248,6 +314,22 @@ export interface CompareOptions {
   realEpsilon?: number;
   /** Compare cells positionally; ignore result-column header spelling. */
   ignoreColumnNames?: boolean;
+  /**
+   * Skip changes / lastInsertRowid / totalChanges comparison.
+   * Query helpers set this so SELECT is not compared against leftover write counters.
+   */
+  ignoreWriteCounters?: boolean;
+  /** Skip inTransaction comparison. */
+  ignoreSession?: boolean;
+  /**
+   * Error message comparison: A = exact (after SqliteError prefix strip);
+   * B = prefix-normalized (UNIQUE/CHECK/no such table, …).
+   */
+  messageTier?: "A" | "B";
+  /** Skip sqliteCode comparison when either side is missing a code. */
+  ignoreSqliteCode?: boolean;
+  /** Skip prepare vs step phase comparison. */
+  ignoreErrorPhase?: boolean;
 }
 
 export function deepCompareResults(
@@ -275,13 +357,25 @@ export function deepCompareResults(
         reason: `error category mismatch: ${ea.category} vs ${eb.category}`,
       };
     }
-    const ma = normalizeErrorMessageForCompare(ea.message);
-    const mb = normalizeErrorMessageForCompare(eb.message);
+    const ma =
+      options?.messageTier === "A" ? normalizeErrorMessage(ea.message) : normalizeErrorMessageForCompare(ea.message);
+    const mb =
+      options?.messageTier === "A" ? normalizeErrorMessage(eb.message) : normalizeErrorMessageForCompare(eb.message);
     if (ma !== mb) {
       return {
         equal: false,
         reason: `error message mismatch:\n  a: ${ea.message}\n  b: ${eb.message}`,
       };
+    }
+    if (!options?.ignoreSqliteCode && ea.sqliteCode && eb.sqliteCode) {
+      const ca = generalizeConstraintCode(ea.sqliteCode);
+      const cb = generalizeConstraintCode(eb.sqliteCode);
+      if (ca !== cb) {
+        return { equal: false, reason: `sqliteCode mismatch: ${ea.sqliteCode} vs ${eb.sqliteCode}` };
+      }
+    }
+    if (!options?.ignoreErrorPhase && ea.phase && eb.phase && ea.phase !== eb.phase) {
+      return { equal: false, reason: `error phase mismatch: ${ea.phase} vs ${eb.phase}` };
     }
     return { equal: true };
   }
@@ -326,22 +420,42 @@ export function deepCompareResults(
     }
   }
 
-  if (na.changes !== nb.changes) {
-    return { equal: false, reason: `changes mismatch: ${na.changes} vs ${nb.changes}` };
+  if (!options?.ignoreWriteCounters) {
+    if (na.changes !== nb.changes) {
+      return { equal: false, reason: `changes mismatch: ${na.changes} vs ${nb.changes}` };
+    }
+
+    if (
+      !normalizedValuesEqual(
+        { kind: "integer", value: na.lastInsertRowid },
+        { kind: "integer", value: nb.lastInsertRowid },
+        true,
+      )
+    ) {
+      return {
+        equal: false,
+        reason: `lastInsertRowid mismatch: ${String(na.lastInsertRowid)} vs ${String(nb.lastInsertRowid)}`,
+      };
+    }
+
+    if (na.totalChanges !== undefined && nb.totalChanges !== undefined && na.totalChanges !== nb.totalChanges) {
+      return { equal: false, reason: `totalChanges mismatch: ${na.totalChanges} vs ${nb.totalChanges}` };
+    }
   }
 
   if (
-    !normalizedValuesEqual(
-      { kind: "integer", value: na.lastInsertRowid },
-      { kind: "integer", value: nb.lastInsertRowid },
-      true,
-    )
+    !options?.ignoreSession &&
+    na.inTransaction !== undefined &&
+    nb.inTransaction !== undefined &&
+    na.inTransaction !== nb.inTransaction
   ) {
-    return {
-      equal: false,
-      reason: `lastInsertRowid mismatch: ${String(na.lastInsertRowid)} vs ${String(nb.lastInsertRowid)}`,
-    };
+    return { equal: false, reason: `inTransaction mismatch: ${na.inTransaction} vs ${nb.inTransaction}` };
   }
 
   return { equal: true };
+}
+
+function generalizeConstraintCode(code: string): string {
+  if (code.startsWith("SQLITE_CONSTRAINT")) return "SQLITE_CONSTRAINT";
+  return code;
 }

@@ -1,6 +1,6 @@
 import {
-  catalogTestFile,
   type CatalogSection,
+  catalogTestFile,
   type Scenario,
   type ScenarioKind,
   type SectionCode,
@@ -8,19 +8,58 @@ import {
 
 type Row = [suffix: string, title: string, kind?: ScenarioKind, notes?: string, extraEvidence?: string[]];
 
+function divergenceIdFor(id: string): string | undefined {
+  if (id.includes("negzero")) return "negzero-canonicalization";
+  if (
+    id.startsWith("DAT-now") ||
+    id === "DAT-mod-08" ||
+    id.startsWith("DET-seed") ||
+    id === "DET-os-01" ||
+    id === "DET-eval-01" ||
+    id.startsWith("DET-rb") ||
+    id === "TXN-rb-03" ||
+    id.startsWith("SNP-now") ||
+    id === "SNP-rng-01"
+  ) {
+    return "deterministic-random-now";
+  }
+  if (id === "TYP-nan-04" || id === "TYP-nan-05") return "nan-infinity-bind";
+  if (id === "JSN-sub-03") return "json-api-unwrap";
+  if (id === "SEL-dup-01" || id === "DML-ret-02" || id === "API-ret-03") return "js-api-surface";
+  if (id === "CTE-mat-01") return "materialized-hint-ignored";
+  if (
+    id === "TRG-snap-01" ||
+    id.startsWith("SNP-omit") ||
+    id === "ATT-snap-01" ||
+    id === "FTS-snap-01"
+  ) {
+    return "snapshot-exclusions";
+  }
+  if (id === "PRG-fn-01" || id === "PRG-comp-01") return "compile-options-function-list";
+  if (id === "PRG-beh-05") return "user-version-snapshot";
+  if (id === "FTS-chg-01") return "fts-shadow-counters";
+  if (id === "ATT-att-01") return "attach-empty-schema";
+  if (id === "TOK-07") return "double-quote-string-fallback";
+  if (id === "UNI-surr-01") return "lone-surrogate-bind";
+  return undefined;
+}
+
 function section(code: SectionCode, title: string, promoted: boolean, items: Row[]): CatalogSection {
   return {
     code,
     title,
     promoted,
     scenarios: items.map(([suffix, rowTitle, kind = "differential", notes, extra]) => {
+      const id = `${code}-${suffix}`;
+      const extraEvidence = extra ?? [];
       const scenario: Scenario = {
-        id: `${code}-${suffix}`,
+        id,
         title: rowTitle,
         kind,
-        evidence: [catalogTestFile(code), ...(extra ?? [])],
+        evidence: [catalogTestFile(code), ...extraEvidence],
       };
       if (notes !== undefined) scenario.notes = notes;
+      if (kind === "documented_divergence") scenario.divergenceId = divergenceIdFor(id);
       return scenario;
     }),
   };
@@ -39,7 +78,7 @@ const HEAD: CatalogSection[] = [
     ["04", "Bracket-quoted identifiers"],
     ["05", "Embedded quote escaping in identifiers"],
     ["06", "Quoted keywords as identifiers"],
-    ["07", "Double-quoted unknown identifier falls back to string literal"],
+    ["07", "Double-quoted unknown identifier falls back to string literal", D, "mem rejects unknown double-quoted ids"],
     ["08", "String literal '' escape"],
     ["09", "String literals with embedded newlines"],
     ["10", "Empty string literal"],
@@ -132,7 +171,7 @@ const HEAD: CatalogSection[] = [
     ["ins-04", "BLOB never converted by affinity"],
     ["typeof-01", "typeof after insert paths"],
     ["typeof-02", "Integer-valued REAL typeof is real"],
-    ["cast-01", "CAST TEXT→INTEGER prefix parse 12abc"],
+    ["cast-01", "CAST TEXT→INTEGER prefix parse 12abc", undefined, undefined, ["tests/contract/matrices/m2-cast.test.ts"]],
     ["cast-02", "CAST TEXT→INTEGER leading spaces"],
     ["cast-03", "CAST 'abc' AS INTEGER is 0"],
     ["cast-04", "CAST REAL→INTEGER truncates toward zero"],
@@ -165,7 +204,7 @@ const HEAD: CatalogSection[] = [
     ["nan-05", "JS bind of Infinity rejected datatype_mismatch", D],
   ]),
   section("EXP", "Operators & expression semantics", true, [
-    ["arith-01", "Addition across types"],
+    ["arith-01", "Addition across types", undefined, undefined, ["tests/contract/matrices/m1-operators.test.ts"]],
     ["arith-02", "Subtraction across types"],
     ["arith-03", "Multiplication across types"],
     ["arith-04", "Integer division truncates toward zero"],
