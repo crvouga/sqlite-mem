@@ -68,7 +68,7 @@ jobs:
 
       - name: Validate PR title
         if: github.event_name == 'pull_request'
-        uses: amannn/action-semantic-pull-request@v5
+        uses: amannn/action-semantic-pull-request@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -172,10 +172,11 @@ jobs:
           path: benchmarks/results/ci-latest.json
 
   # Maintainer secrets: Trusted Publishing (OIDC) — docs/SECRETS.md — bun run secrets:doctor
+  # Publish when tests pass; do not skip release if the benchmark job fails.
   release:
     name: Release
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [commitlint, test, benchmark]
+    needs: [commitlint, test]
     runs-on: ubuntu-latest
     permissions:
       contents: write
