@@ -73,7 +73,7 @@ export class Fts5VirtualTable {
     // Special command: INSERT INTO t(t) VALUES('optimize') etc.
     const command = this.detectCommand(values);
     if (command !== null) {
-      this.runCommand(command, values);
+      this.runCommand(command, values, rowid);
       // Match SQLite: special commands report lastInsertRowid 0
       return 0;
     }
@@ -249,19 +249,63 @@ export class Fts5VirtualTable {
     return parts.join(" ");
   }
 
-  /** FTS3 matchinfo default format 'pcx' simplified → blob of 32-bit LE ints. */
-  matchinfo(cursor: FtsMatchCursor, _format = "pcx"): Uint8Array {
+  /** FTS3 matchinfo format encoded as native-style 32-bit little-endian integers. */
+  matchinfo(cursor: FtsMatchCursor, format = "pcx"): Uint8Array {
     const row = this.rows.get(cursor.rowid);
     const nPhrase = Math.max(1, cursor.phraseTerms.length);
     const nCol = this.columns.length;
-    const values: number[] = [nPhrase, nCol];
-    // hits for phrase 0 col 0 roughly
-    for (let p = 0; p < nPhrase; p++) {
-      for (let c = 0; c < nCol; c++) {
-        const col = this.columns[c]!;
-        const term = cursor.phraseTerms[p]?.[0] ?? "";
-        const tf = row ? this.termFreq(row, col, term) : 0;
-        values.push(tf);
+    const values: number[] = [];
+    for (const request of format) {
+      switch (request) {
+        case "p":
+          values.push(nPhrase);
+          break;
+        case "c":
+          values.push(nCol);
+          break;
+        case "s":
+          for (let c = 0; c < nCol; c++) {
+            let longest = 0;
+            let run = 0;
+            for (let p = 0; p < nPhrase; p++) {
+              const phrase = cursor.phraseTerms[p] ?? [];
+              if (row && this.phraseFreq(row, this.columns[c]!, phrase) > 0) {
+                run++;
+                longest = Math.max(longest, run);
+              } else {
+                run = 0;
+              }
+            }
+            values.push(longest);
+          }
+          break;
+        case "x":
+          for (let p = 0; p < nPhrase; p++) {
+            const phrase = cursor.phraseTerms[p] ?? [];
+            for (let c = 0; c < nCol; c++) {
+              const column = this.columns[c]!;
+              const localHits = row ? this.phraseFreq(row, column, phrase) : 0;
+              let globalHits = 0;
+              let matchingRows = 0;
+              for (const candidate of this.rows.values()) {
+                const hits = this.phraseFreq(candidate, column, phrase);
+                globalHits += hits;
+                if (hits > 0) matchingRows++;
+              }
+              values.push(localHits, globalHits, matchingRows);
+            }
+          }
+          break;
+        case "y":
+          for (let p = 0; p < nPhrase; p++) {
+            const phrase = cursor.phraseTerms[p] ?? [];
+            for (let c = 0; c < nCol; c++) {
+              values.push(row ? this.phraseFreq(row, this.columns[c]!, phrase) : 0);
+            }
+          }
+          break;
+        default:
+          throw new SqliteError(`unrecognized matchinfo request: ${request}`, "other");
       }
     }
     const buf = new Uint8Array(values.length * 4);
@@ -315,15 +359,10 @@ export class Fts5VirtualTable {
     if (!values.has(key)) return null;
     const v = values.get(key);
     if (typeof v !== "string") return null;
-    // Command inserts typically only supply the table-name column
-    const otherContent = [...values.entries()].some(
-      ([k, val]) => k !== key && val !== null && this.columns.some((c) => c.toLowerCase() === k),
-    );
-    if (otherContent) return null;
     return v;
   }
 
-  private runCommand(command: string, _values: Map<string, SqlValue>): void {
+  private runCommand(command: string, _values: Map<string, SqlValue>, rowid?: Rowid): void {
     const cmd = command.toLowerCase();
     if (cmd === "optimize") return;
     if (cmd === "rebuild") {
@@ -345,7 +384,8 @@ export class Fts5VirtualTable {
       throw new SqliteError("SQL logic error", "other");
     }
     if (cmd === "delete") {
-      // delete by rowid via other columns — handled elsewhere
+      if (rowid === undefined) throw new SqliteError("SQL logic error", "other");
+      this.delete(rowid);
       return;
     }
     // Unknown command string may be treated as content insert into table-named column — ignore as no-op command fail
@@ -598,12 +638,6 @@ export class Fts5VirtualTable {
       }
     }
     return n;
-  }
-
-  private termFreq(row: Fts5Row, column: string, term: string): number {
-    const needle = this.normalizeQueryTerm(term);
-    const tokens = row.tokensByColumn.get(column.toLowerCase()) ?? [];
-    return tokens.filter((t) => t.term === needle || t.term.startsWith(needle)).length;
   }
 
   private docLength(row: Fts5Row): number {

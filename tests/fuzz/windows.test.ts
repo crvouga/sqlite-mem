@@ -39,4 +39,47 @@ describe("window differential fuzz", () => {
       fuzzAssertConfig(30),
     );
   });
+
+  test("random FILTER predicates and ROWS frames match SQLite", () => {
+    fc.assert(
+      fc.property(
+        fc.array(rowArb, { minLength: 1, maxLength: 8 }),
+        intArb,
+        fc.integer({ min: 0, max: 3 }),
+        (rows, threshold, preceding) => {
+          withDatabases((memory, sqlite) => {
+            for (const db of [memory, sqlite]) {
+              db.exec("CREATE TABLE scores(id INTEGER PRIMARY KEY, team TEXT, name TEXT, score INTEGER)");
+              rows.forEach((row, index) => {
+                db.exec("INSERT INTO scores(id, team, name, score) VALUES (?, ?, ?, ?)", [
+                  index + 1,
+                  row.team,
+                  row.name,
+                  row.score,
+                ]);
+              });
+            }
+
+            const sql = [
+              "SELECT id, team, score,",
+              `sum(score) FILTER (WHERE score >= ${threshold}) OVER (`,
+              `PARTITION BY team ORDER BY score, id ROWS BETWEEN ${preceding} PRECEDING AND CURRENT ROW`,
+              ") AS filtered_running,",
+              `count(*) FILTER (WHERE score < ${threshold}) OVER (PARTITION BY team) AS filtered_count`,
+              "FROM scores ORDER BY id",
+            ].join(" ");
+
+            compareOrReport(
+              "window-filter-frame",
+              sql,
+              { rows, threshold, preceding },
+              memory.query(sql),
+              sqlite.query(sql),
+            );
+          });
+        },
+      ),
+      fuzzAssertConfig(30),
+    );
+  });
 });

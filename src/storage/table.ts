@@ -63,6 +63,8 @@ export class Table {
   private scanCache: Row[] | null = null;
   /** Lazy covering hashes: column nameLower → serializeIndexKey → rowids. */
   private equalityHashes: Map<string, Map<string, Rowid[]>> | null = null;
+  /** Cached maximum rowid. `undefined` means recompute after deleting the maximum. */
+  private maximumRowid: Rowid | null | undefined = null;
   frozen = false;
 
   constructor(name: string, columns: ColumnInfo[], options: TableOptions = {}) {
@@ -292,7 +294,12 @@ export class Table {
     if (alias) values.set(normalizeColumnName(alias.name), targetKey);
     const candidate: Row = { rowid: targetKey, values };
     this.validate(candidate, key);
-    if (targetKey !== key) this.rows.delete(key);
+    if (targetKey !== key) {
+      this.rows.delete(key);
+      if (this.maximumRowid !== null && this.maximumRowid !== undefined && sameRowid(key, this.maximumRowid)) {
+        this.maximumRowid = undefined;
+      }
+    }
     this.rows.set(targetKey, candidate);
     this.advanceNextRowid(targetKey);
     this.reindexEquality(existing, candidate);
@@ -307,6 +314,9 @@ export class Table {
     if (this.withoutRowid) this.clusteredRows.delete(this.makeClusterKey(existing.values));
     this.unindexEquality(existing);
     this.invalidateScan();
+    if (this.maximumRowid !== null && this.maximumRowid !== undefined && sameRowid(key, this.maximumRowid)) {
+      this.maximumRowid = undefined;
+    }
     return this.rows.delete(key);
   }
 
@@ -330,6 +340,7 @@ export class Table {
       strict: this.strict,
     });
     copy.nextRowid = this.nextRowid;
+    copy.maximumRowid = this.maximumRowid;
     for (const [rowid, row] of this.rows) copy.rows.set(rowid, cloneRow(row));
     for (const [clusterKey, row] of this.clusteredRows) copy.clusteredRows.set(clusterKey, cloneRow(row));
     return copy;
@@ -345,6 +356,7 @@ export class Table {
 
   /** Rebuild clustered storage after snapshot decode or bulk load. */
   rebuildClusteredRows(): void {
+    this.maximumRowid = undefined;
     if (!this.withoutRowid) return;
     this.clusteredRows.clear();
     for (const row of this.rows.values()) {
@@ -476,12 +488,27 @@ export class Table {
   }
 
   private allocateRowid(): Rowid {
+    if (!this.columns.some((column) => column.autoincrement)) {
+      if (this.maximumRowid === undefined) {
+        this.maximumRowid = null;
+        for (const rowid of this.rows.keys()) {
+          if (this.maximumRowid === null || compareRowids(rowid, this.maximumRowid) > 0) this.maximumRowid = rowid;
+        }
+      }
+      return this.maximumRowid === null ? 1 : incrementRowid(this.maximumRowid);
+    }
     let candidate = canonicalRowid(this.nextRowid);
     while (this.rows.has(candidate)) candidate = incrementRowid(candidate);
     return candidate;
   }
 
   private advanceNextRowid(rowid: Rowid): void {
+    if (
+      this.maximumRowid === null ||
+      (this.maximumRowid !== undefined && compareRowids(rowid, this.maximumRowid) > 0)
+    ) {
+      this.maximumRowid = rowid;
+    }
     if (compareRowids(rowid, this.nextRowid) >= 0) this.nextRowid = incrementRowid(rowid);
   }
 }

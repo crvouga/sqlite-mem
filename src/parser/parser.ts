@@ -356,14 +356,21 @@ export class Parser {
       return { type: "explain", queryPlan, statement: stmt };
     }
 
-    if (this.check("WITH", "SELECT")) return this.parseSelectStmt();
+    if (this.at("WITH")) {
+      const withClause = this.parseWithClause();
+      if (this.at("SELECT")) return this.parseSelectStmt(withClause);
+      if (this.at("INSERT") || this.at("REPLACE")) return this.parseInsertStmt(withClause);
+      if (this.at("UPDATE")) return this.parseUpdateStmt(withClause);
+      if (this.at("DELETE")) return this.parseDeleteStmt(withClause);
+      this.syntaxError("expected SELECT, INSERT, UPDATE, or DELETE after WITH clause");
+    }
     if (this.at("SELECT")) return this.parseSelectStmt();
 
-    if (this.check("WITH", "INSERT") || this.at("INSERT") || this.at("REPLACE")) {
+    if (this.at("INSERT") || this.at("REPLACE")) {
       return this.parseInsertStmt();
     }
-    if (this.check("WITH", "UPDATE") || this.at("UPDATE")) return this.parseUpdateStmt();
-    if (this.check("WITH", "DELETE") || this.at("DELETE")) return this.parseDeleteStmt();
+    if (this.at("UPDATE")) return this.parseUpdateStmt();
+    if (this.at("DELETE")) return this.parseDeleteStmt();
 
     if (this.at("CREATE")) return this.parseCreateStmt();
     if (this.at("DROP")) return this.parseDropStmt();
@@ -435,12 +442,19 @@ export class Parser {
         this.expect("RPAREN");
       }
       this.expect("AS");
-      if (this.match("NOT")) this.expect("MATERIALIZED", "expected MATERIALIZED after NOT");
-      else this.match("MATERIALIZED");
+      let materialized: Cte["materialized"] = null;
+      if (this.match("NOT")) {
+        this.expect("MATERIALIZED", "expected MATERIALIZED after NOT");
+        materialized = "not_materialized";
+      } else if (this.match("MATERIALIZED")) materialized = "materialized";
       this.expect("LPAREN");
-      const select = this.at("VALUES") ? this.parseValuesAsSelect() : this.parseSelectCore();
+      const select = this.at("VALUES")
+        ? this.parseValuesAsSelect()
+        : this.at("WITH")
+          ? this.parseSelectStmt()
+          : this.parseSelectCore();
       this.expect("RPAREN");
-      ctes.push({ name, columns, select });
+      ctes.push({ name, columns, materialized, select });
     } while (this.match("COMMA"));
     return { recursive, ctes };
   }
@@ -451,8 +465,7 @@ export class Parser {
 
   // ── SELECT ──────────────────────────────────────────────────────────────
 
-  parseSelectStmt(): SelectStmt {
-    const withClause = this.parseOptionalWith();
+  parseSelectStmt(withClause = this.parseOptionalWith()): SelectStmt {
     const select = this.parseSelectCore();
     select.with = withClause;
     return select;
@@ -790,8 +803,7 @@ export class Parser {
 
   // ── INSERT / REPLACE ────────────────────────────────────────────────────
 
-  private parseInsertStmt(): InsertStmt {
-    const withClause = this.parseOptionalWith();
+  private parseInsertStmt(withClause = this.parseOptionalWith()): InsertStmt {
     let mode: InsertStmt["mode"] = "insert";
 
     if (this.match("REPLACE")) {
@@ -907,8 +919,7 @@ export class Parser {
 
   // ── UPDATE ──────────────────────────────────────────────────────────────
 
-  private parseUpdateStmt(): UpdateStmt {
-    const withClause = this.parseOptionalWith();
+  private parseUpdateStmt(withClause = this.parseOptionalWith()): UpdateStmt {
     this.expect("UPDATE");
     const or = this.mapUpdateOr(this.parseOrConflict());
     const table = this.parseTableName();
@@ -925,8 +936,7 @@ export class Parser {
 
   // ── DELETE ──────────────────────────────────────────────────────────────
 
-  private parseDeleteStmt(): DeleteStmt {
-    const withClause = this.parseOptionalWith();
+  private parseDeleteStmt(withClause = this.parseOptionalWith()): DeleteStmt {
     this.expect("DELETE");
     this.expect("FROM");
     const table = this.parseTableName();
@@ -1688,6 +1698,24 @@ export class Parser {
           left = this.parseLikeRhs(left, true, "GLOB");
           continue;
         }
+        if (n.kind === "REGEXP") {
+          this.advance();
+          this.advance();
+          const pattern = this.parseExprPrec(PREC.IS_IN_LIKE + 1);
+          left = {
+            type: "unary",
+            op: "NOT",
+            expr: {
+              type: "function",
+              name: "REGEXP",
+              distinct: false,
+              args: [pattern, left],
+              orderBy: [],
+              filter: null,
+            },
+          };
+          continue;
+        }
         if (n.kind === "BETWEEN") {
           this.advance();
           this.advance();
@@ -1743,6 +1771,12 @@ export class Parser {
       if (this.at("GLOB") && PREC.IS_IN_LIKE >= minPrec) {
         this.advance();
         left = this.parseLikeRhs(left, false, "GLOB");
+        continue;
+      }
+      if (this.at("REGEXP") && PREC.IS_IN_LIKE >= minPrec) {
+        this.advance();
+        const pattern = this.parseExprPrec(PREC.IS_IN_LIKE + 1);
+        left = { type: "function", name: "REGEXP", distinct: false, args: [pattern, left], orderBy: [], filter: null };
         continue;
       }
       if (this.at("MATCH") && PREC.IS_IN_LIKE >= minPrec) {
@@ -1916,7 +1950,7 @@ export class Parser {
 
     if (this.at("CURRENT_DATE") || this.at("CURRENT_TIME") || this.at("CURRENT_TIMESTAMP")) {
       const tok = this.advance();
-      return { type: "function", name: tok.value, distinct: false, args: [], filter: null };
+      return { type: "function", name: tok.value, distinct: false, args: [], orderBy: [], filter: null };
     }
 
     if (this.at("NUMBER")) {
@@ -2009,6 +2043,7 @@ export class Parser {
         } while (this.match("COMMA"));
       }
     }
+    const orderBy = this.parseOrderBy();
     this.expect("RPAREN");
 
     if (this.match("FILTER")) {
@@ -2034,15 +2069,15 @@ export class Parser {
         this.expect("RPAREN");
       }
       const func = isAgg
-        ? { type: "aggregate" as const, name: upper, distinct, args, filter }
-        : { type: "function" as const, name, distinct, args, filter };
+        ? { type: "aggregate" as const, name: upper, distinct, args, orderBy, filter }
+        : { type: "function" as const, name, distinct, args, orderBy, filter };
       return { type: "window", func, window };
     }
 
     if (isAgg) {
-      return { type: "aggregate", name: upper, distinct, args, filter };
+      return { type: "aggregate", name: upper, distinct, args, orderBy, filter };
     }
-    return { type: "function", name, distinct, args, filter };
+    return { type: "function", name, distinct, args, orderBy, filter };
   }
 
   private parseCaseExpr(base: Expr | null): CaseExpr {

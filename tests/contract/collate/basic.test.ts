@@ -12,6 +12,12 @@ parity("equality applies explicit NOCASE collation", [], "SELECT 'a' = 'A' COLLA
 parity("RTRIM ignores trailing spaces", [], "SELECT 'abc' = 'abc  ' COLLATE RTRIM AS equal");
 
 parity(
+  "GROUP BY applies explicit NOCASE collation",
+  ["CREATE TABLE words(value TEXT)", "INSERT INTO words VALUES ('aa'),('AA'),('x')"],
+  "SELECT value COLLATE NOCASE AS key, count(*) AS n FROM words GROUP BY key ORDER BY key, min(rowid)",
+);
+
+parity(
   "BINARY comparison remains case-sensitive",
   [],
   "SELECT 'a' = 'A' AS equal, 'a' = 'A' COLLATE BINARY AS explicit_equal",

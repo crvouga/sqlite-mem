@@ -7,14 +7,14 @@ import type {
   SelectStmt,
   WindowExpr,
   WindowSpec,
+  WithClause,
 } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
 import type { EvalContext } from "../expressions/context.ts";
 import { evalExpr } from "../expressions/eval.ts";
 import { isPragmaTvfName } from "../functions/pragma-tvf.ts";
 import { evaluateTableFunction, hasTableValuedFunction, tableValuedColumns } from "../functions/table-valued.ts";
-import { buildSqliteMaster, buildSqliteSchema } from "../schema/catalog.ts";
-import type { DatabaseState } from "../storage/database-state.ts";
+import { serializeIndexKey } from "../indexes/index.ts";
 import {
   tryIndexedOrder,
   tryIndexedTableRows,
@@ -22,7 +22,8 @@ import {
   tryJoinProbe,
   whereFullyCovered,
 } from "../planner/access.ts";
-import { serializeIndexKey } from "../indexes/index.ts";
+import { buildSqliteMaster, buildSqliteSchema } from "../schema/catalog.ts";
+import type { DatabaseState } from "../storage/database-state.ts";
 import type { Row } from "../storage/row.ts";
 import type { Table } from "../storage/table.ts";
 import { compareWithCollation, normalizeForCollation } from "../types/collation.ts";
@@ -58,7 +59,7 @@ export function executeSelect(stmt: SelectStmt, env: ExecutionEnv, parent?: Eval
   }
   const savedCtes = new Map(env.ctes);
   try {
-    if (stmt.with) executeWith(stmt, env, parent);
+    if (stmt.with) executeWith(stmt.with, env, parent);
     const base = executeSelectCore(
       {
         ...stmt,
@@ -115,25 +116,44 @@ export function executeSelect(stmt: SelectStmt, env: ExecutionEnv, parent?: Eval
   }
 }
 
-function executeWith(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalContext): void {
-  for (const cte of stmt.with!.ctes) {
+export function executeWith(withClause: WithClause, env: ExecutionEnv, parent?: EvalContext): void {
+  for (const cte of withClause.ctes) {
     const key = cte.name.toLowerCase();
-    if (stmt.with!.recursive && referencesTable(cte.select, cte.name) && cte.select.compound) {
+    if (withClause.recursive && referencesTable(cte.select, cte.name) && cte.select.compound) {
       const anchor = executeSelect({ ...cte.select, compound: null }, env, parent);
       const columns = cte.columns ?? anchor.columns;
-      let accumulated = resultValues(anchor);
-      let delta = accumulated;
-      while (true) {
-        env.ctes.set(key, valuesToResult(columns, delta));
-        const nextResult = executeSelect(cte.select.compound.select, env, parent);
+      const recursive = cte.select.compound.select;
+      const limit = recursive.limit
+        ? toInteger(evalExpr(recursive.limit.limit, env.createEvalContext(null, parent)))
+        : null;
+      if (recursive.limit && limit === null) throw new SqliteError("datatype mismatch", "datatype_mismatch");
+      const maxRows = limit === null || Number(limit) < 0 ? Number.POSITIVE_INFINITY : Number(limit);
+      const queue = resultValues(anchor);
+      const discovered = [...queue];
+      const accumulated: SqlValue[][] = [];
+      if (recursive.orderBy.length > 0) {
+        queue.sort((left, right) => compareCteQueueRows(left, right, columns, recursive.orderBy, env, parent));
+      }
+      while (queue.length > 0 && accumulated.length < maxRows) {
+        const current = queue.shift()!;
+        accumulated.push(current);
+        env.ctes.set(key, valuesToResult(columns, [current]));
+        const nextResult = executeSelect({ ...recursive, orderBy: [], limit: null }, env, parent);
         const candidates = resultValues(nextResult);
-        const additions =
-          cte.select.compound.op === "UNION ALL"
-            ? candidates
-            : candidates.filter((row) => !accumulated.some((existing) => rowsEqual(existing, row)));
-        if (additions.length === 0) break;
-        accumulated = [...accumulated, ...additions];
-        delta = additions;
+        const additions: SqlValue[][] = [];
+        for (const candidate of candidates) {
+          if (
+            cte.select.compound.op !== "UNION ALL" &&
+            [...discovered, ...additions].some((existing) => rowsEqual(existing, candidate))
+          )
+            continue;
+          additions.push(candidate);
+        }
+        discovered.push(...additions);
+        queue.push(...additions);
+        if (recursive.orderBy.length > 0) {
+          queue.sort((left, right) => compareCteQueueRows(left, right, columns, recursive.orderBy, env, parent));
+        }
       }
       env.ctes.set(key, valuesToResult(columns, accumulated));
     } else {
@@ -142,6 +162,34 @@ function executeWith(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalContext):
       env.ctes.set(key, valuesToResult(columns, resultValues(result)));
     }
   }
+}
+
+function compareCteQueueRows(
+  left: SqlValue[],
+  right: SqlValue[],
+  columns: string[],
+  order: OrderByItem[],
+  env: ExecutionEnv,
+  parent?: EvalContext,
+): number {
+  const scope = (values: SqlValue[]): ScopeRow => ({
+    cells: columns.map((name, index) => ({ table: null, name, value: values[index] ?? null })),
+  });
+  const leftScope = scope(left);
+  const rightScope = scope(right);
+  for (const item of order) {
+    if (item.expr.type === "literal" && typeof item.expr.value === "number" && Number.isInteger(item.expr.value)) {
+      const index = item.expr.value - 1;
+      const result = compareNullable(left[index] ?? null, right[index] ?? null, item);
+      if (result !== 0) return result;
+      continue;
+    }
+    const a = evalExpr(item.expr, env.createEvalContext(leftScope, parent));
+    const b = evalExpr(item.expr, env.createEvalContext(rightScope, parent));
+    const result = compareNullable(a, b, item, leftScope);
+    if (result !== 0) return result;
+  }
+  return 0;
 }
 
 function executeSelectCore(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalContext): ResultSet {
@@ -207,10 +255,18 @@ function executeSelectCore(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalCon
     }
   }
   const groupBy = stmt.groupBy.map((expr) => {
-    if (expr.type !== "literal" || typeof expr.value !== "number" || !Number.isInteger(expr.value)) return expr;
-    const column = stmt.columns[expr.value - 1];
-    if (column?.type !== "expr") throw new SqliteError(`${expr.value}th GROUP BY term out of range`, "other");
-    return column.expr;
+    if (expr.type === "literal" && typeof expr.value === "number" && Number.isInteger(expr.value)) {
+      const column = stmt.columns[expr.value - 1];
+      if (column?.type !== "expr") throw new SqliteError(`${expr.value}th GROUP BY term out of range`, "other");
+      return column.expr;
+    }
+    if (expr.type === "column" && expr.table === null) {
+      const column = stmt.columns.find(
+        (candidate) => candidate.type === "expr" && candidate.alias?.toLowerCase() === expr.name.toLowerCase(),
+      );
+      if (column?.type === "expr") return column.expr;
+    }
+    return expr;
   });
   const groups = aggregate ? groupRows(scopes, groupBy, env, parent) : scopes.map((scope) => [scope]);
   const windowScopes = aggregate ? groups.map((group) => group[0] ?? { cells: [] }) : scopes;
@@ -747,7 +803,10 @@ function groupRows(rows: ScopeRow[], expressions: Expr[], env: ExecutionEnv, par
   const groups: ScopeRow[][] = [];
   const indexByKey = new Map<string, number>();
   for (const row of rows) {
-    const keyValues = expressions.map((expr) => evalExpr(expr, env.createEvalContext(row, parent)));
+    const keyValues = expressions.map((expr) => {
+      const value = evalExpr(expr, env.createEvalContext(row, parent));
+      return expr.type === "collate" ? normalizeForCollation(value, expr.collation) : value;
+    });
     const key = valueKey(keyValues);
     const index = indexByKey.get(key);
     if (index === undefined) {
@@ -780,7 +839,9 @@ function aggregateValue(expr: AggregateExpr, rows: ScopeRow[], env: ExecutionEnv
   const accumulator = env.functions.createAggregate(expr.name);
   if (!accumulator) throw new SqliteError(`no such aggregate function: ${expr.name}`, "other");
   const seen: SqlValue[][] = [];
-  for (const row of rows) {
+  const orderedRows =
+    expr.orderBy.length > 0 ? [...rows].sort((a, b) => compareScopes(a, b, expr.orderBy, env, parent)) : rows;
+  for (const row of orderedRows) {
     const ctx = env.createEvalContext(row, parent);
     if (expr.filter && isTruthySql(evalExpr(expr.filter, ctx)) !== true) continue;
     const args = expr.args === "*" ? [] : expr.args.map((arg) => evalExpr(arg, ctx));
@@ -914,8 +975,10 @@ function frameBounds(
   if (!spec.frame) return [0, spec.orderBy.length > 0 ? defaultFrameEnd : Math.max(0, length - 1)];
   const isRangeLike = spec.frame.type === "RANGE" || spec.frame.type === "GROUPS";
   let peerFirst = index;
+  let peerLast = index;
   if (isRangeLike && spec.orderBy.length > 0) {
     while (peerFirst > 0 && rowsEqual(orderKeys[peerFirst]!, orderKeys[peerFirst - 1]!)) peerFirst--;
+    while (peerLast + 1 < length && rowsEqual(orderKeys[peerLast]!, orderKeys[peerLast + 1]!)) peerLast++;
   }
   const bound = (
     item: WindowSpec["frame"] extends infer _ ? NonNullable<WindowSpec["frame"]>["start"] : never,
@@ -927,12 +990,63 @@ function frameBounds(
       case "unbounded_following":
         return Math.max(0, length - 1);
       case "current_row":
-        if (isRangeLike) return isStart ? peerFirst : defaultFrameEnd;
+        if (isRangeLike) return isStart ? peerFirst : peerLast;
         return index;
       case "preceding":
-        return Math.max(0, index - Number(toInteger(evalExpr(item.expr, ctx)) ?? 0));
-      case "following":
-        return Math.min(Math.max(0, length - 1), index + Number(toInteger(evalExpr(item.expr, ctx)) ?? 0));
+      case "following": {
+        const offset = Number(evalExpr(item.expr, ctx));
+        if (spec.frame?.type === "GROUPS") {
+          const groups: Array<{ first: number; last: number }> = [];
+          for (let i = 0; i < length; ) {
+            let last = i;
+            while (last + 1 < length && rowsEqual(orderKeys[last]!, orderKeys[last + 1]!)) last++;
+            groups.push({ first: i, last });
+            i = last + 1;
+          }
+          const currentGroup = groups.findIndex((group) => index >= group.first && index <= group.last);
+          const delta = item.kind === "preceding" ? -offset : offset;
+          const target = groups[Math.max(0, Math.min(groups.length - 1, currentGroup + delta))]!;
+          return isStart ? target.first : target.last;
+        }
+        if (spec.frame?.type === "RANGE" && spec.orderBy.length === 1) {
+          const rawCurrent = orderKeys[index]?.[0];
+          const current =
+            typeof rawCurrent === "number"
+              ? rawCurrent
+              : typeof rawCurrent === "bigint"
+                ? Number(rawCurrent)
+                : rawCurrent && typeof rawCurrent === "object" && "value" in rawCurrent
+                  ? Number(rawCurrent.value)
+                  : Number.NaN;
+          if (!Number.isFinite(current) || !Number.isFinite(offset)) return isStart ? peerFirst : peerLast;
+          const descending = spec.orderBy[0]?.dir === "DESC";
+          const signed = item.kind === "preceding" ? -offset : offset;
+          const target = current + (descending ? -signed : signed);
+          const numericKey = (position: number): number => {
+            const value = orderKeys[position]?.[0];
+            if (typeof value === "number") return value;
+            if (typeof value === "bigint") return Number(value);
+            if (value && typeof value === "object" && "value" in value) return Number(value.value);
+            return Number.NaN;
+          };
+          if (isStart) {
+            for (let i = 0; i < length; i++) {
+              const value = numericKey(i);
+              if ((descending && value <= target) || (!descending && value >= target)) return i;
+            }
+            return length;
+          }
+          for (let i = length - 1; i >= 0; i--) {
+            const value = numericKey(i);
+            if ((descending && value >= target) || (!descending && value <= target)) return i;
+          }
+          return -1;
+        }
+        const rowOffset = Number(toInteger(evalExpr(item.expr, ctx)) ?? 0);
+        return item.kind === "preceding"
+          ? Math.max(0, index - rowOffset)
+          : Math.min(Math.max(0, length - 1), index + rowOffset);
+      }
     }
   };
   return [bound(spec.frame.start, true), bound(spec.frame.end, false)];

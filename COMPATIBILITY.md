@@ -36,9 +36,9 @@ Oracle builtins (math, string extras, uuid, ieee754, …) and modules (FTS3/4/5,
 | Core DML / SELECT / joins / CTE / UPSERT / RETURNING | VERIFIED | Contract + fuzz |
 | STRICT tables / indexes | VERIFIED | STRICT types; partial + expression indexes; leftmost prefix |
 | Expressions / operators / `->` `->>` / row values | VERIFIED | Row-value + precedence contracts |
-| Affinity / NULL / COLLATE | VERIFIED | |
-| Constraints / FK / triggers / views / ATTACH | VERIFIED | Deferred FK, composite FK |
-| Windows (incl. ntile/cume_dist/percent_rank) | VERIFIED | EXCLUDE NO OTHERS/CURRENT ROW/GROUP/TIES |
+| Affinity / NULL / COLLATE | VERIFIED | Comparison affinity + collation on GROUP BY/JOIN |
+| Constraints / FK / triggers / views / ATTACH | VERIFIED | Deferred FK, composite FK, INSTEAD OF, OR ROLLBACK/FAIL |
+| Windows (incl. ntile/cume_dist/percent_rank) | VERIFIED | EXCLUDE; GROUPS/RANGE frames; window FILTER |
 | JSON1 / JSONB / TVFs | VERIFIED | |
 | Math / string / date extras / uuid / ieee754 | VERIFIED | Scope-3 inventory |
 | FTS3 / FTS4 / FTS5 + MATCH | PARTIALLY VERIFIED | Differential FTS suite + fuzz vs 3.51.0; see FTS matrix below. Shadow-table change counters intentionally diverge. |
@@ -62,11 +62,11 @@ Reference: **SQLite 3.51.0** (`bun:sqlite`). Inventory: `bun run scripts/fts-ora
 | Column filters | VERIFIED |
 | Ranking / bm25 / rank | VERIFIED |
 | highlight / snippet | VERIFIED |
-| matchinfo / offsets (FTS3/4) | PARTIALLY VERIFIED |
+| matchinfo / offsets (FTS3/4) | PARTIALLY VERIFIED | Default + common format strings verified; some FTS4-only formats thinner |
 | Contentless tables | VERIFIED |
-| External content | PARTIALLY VERIFIED |
+| External content | PARTIALLY VERIFIED | Canonical delete/sync covered; backfill/projection edges thinner |
 | Content tables | VERIFIED |
-| Triggers + FTS | PARTIALLY VERIFIED |
+| Triggers + FTS | PARTIALLY VERIFIED | Maintenance sequences covered; advanced edges thinner |
 | Special commands (optimize/rebuild/integrity-check) | VERIFIED |
 | Prefix indexes | VERIFIED |
 | Unicode / adversarial corpus | VERIFIED |

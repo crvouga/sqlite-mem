@@ -36,6 +36,7 @@ const NA_SOURCE_PREFIXES = [
   "wal.html",
   "atomiccommit.html",
   "lockingv3.html",
+  "uri.html",
   "psow.html",
   "malloc.html",
   "mutex.html",
@@ -515,7 +516,7 @@ const SOURCE_SEED: Record<string, { status: CoverageStatus; evidence: string[]; 
   },
   "lang_explain.html": {
     status: "PARTIALLY_VERIFIED",
-    evidence: [],
+    evidence: ["tests/contract/errors/explain.test.ts"],
     notes: "Column shapes stubbed; not plan-identical",
   },
   "lang_indexedby.html": {
@@ -638,7 +639,7 @@ const SOURCE_SEED: Record<string, { status: CoverageStatus; evidence: string[]; 
   },
   "eqp.html": {
     status: "PARTIALLY_VERIFIED",
-    evidence: [],
+    evidence: ["tests/contract/errors/explain.test.ts"],
     notes: "EXPLAIN QUERY PLAN stub shapes",
   },
   "nulls.html": {
@@ -859,6 +860,11 @@ async function main(): Promise<void> {
     );
     process.exit(1);
   }
+
+  // Reclassify committed fallback data when the source mapping gains a new non-SQL document.
+  requirements = requirements.map((requirement) =>
+    isNotApplicable(requirement.source) ? { ...requirement, classification: "NOT_APPLICABLE" } : requirement,
+  );
 
   writeFileSync(
     requirementsPath,

@@ -11,7 +11,12 @@ interface PerformanceMemory {
 
 export function maybeGc(): void {
   const gc = (globalThis as { gc?: () => void }).gc;
-  if (typeof gc === "function") gc();
+  if (typeof gc === "function") {
+    gc();
+    return;
+  }
+  const bun = (globalThis as { Bun?: { gc?: (sync: boolean) => void } }).Bun;
+  bun?.gc?.(true);
 }
 
 export function sampleMemory(): MemorySample {

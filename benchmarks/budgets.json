@@ -1,0 +1,7 @@
+{
+  "smallRows100k": {
+    "rows": 100000,
+    "maxHeapBytes": 130000000,
+    "maxBytesPerRow": 1300
+  }
+}

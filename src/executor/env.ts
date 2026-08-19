@@ -130,8 +130,13 @@ export class ExecutionEnv {
   createEvalContext(row: ScopeRow | null = null, parent?: EvalContext): EvalContext {
     const scope = row ?? this.triggerScope;
     const cells = scope?.cells ?? [];
+    const inheritedParent =
+      parent ??
+      (row !== null && this.triggerScope !== null && row !== this.triggerScope
+        ? this.createEvalContext(this.triggerScope)
+        : undefined);
     const context: EvalContext = {
-      parent,
+      parent: inheritedParent,
       ftsMatch: scope?.ftsMatch ?? null,
       functions: this.functions,
       functionContext: {
@@ -208,6 +213,17 @@ export class ExecutionEnv {
         if (matches.length > 1 && table === null) throw new SqliteError(`ambiguous column name: ${name}`, "other");
         const cell = matches[0]!;
         return cell.affinity === "REAL" && typeof cell.value === "number" ? "real" : storageClassOf(cell.value);
+      },
+      resolveAffinity: (table, name) => {
+        const key = name.toLowerCase();
+        const tableKey = table?.toLowerCase();
+        const matches = cells.filter((cell) => {
+          if ((cell.nameLower ?? cell.name.toLowerCase()) !== key) return false;
+          if (table === null) return !cell.hiddenByUsing;
+          return (cell.tableLower ?? cell.table?.toLowerCase()) === tableKey;
+        });
+        if (matches.length !== 1) return null;
+        return matches[0]!.affinity ?? null;
       },
       resolveCollation: (table, name) => {
         const key = name.toLowerCase();

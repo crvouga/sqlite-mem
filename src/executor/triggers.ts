@@ -64,7 +64,7 @@ export function fireInsertTriggers(
 }
 
 export function fireUpdateTriggers(
-  timing: "BEFORE" | "AFTER",
+  timing: "BEFORE" | "AFTER" | "INSTEAD",
   table: Table,
   oldRow: Row,
   newValues: Map<string, SqlValue>,
@@ -75,7 +75,7 @@ export function fireUpdateTriggers(
 }
 
 export function fireDeleteTriggers(
-  timing: "BEFORE" | "AFTER",
+  timing: "BEFORE" | "AFTER" | "INSTEAD",
   table: Table,
   oldRow: Row,
   env: ExecutionEnv,
@@ -128,6 +128,7 @@ function executeTriggerProgram(
   }
   env.triggerDepth++;
   const savedScope = env.triggerScope;
+  const savedLastInsertRowid = env.state.lastInsertRowid;
   env.triggerScope = triggerScope(table, oldRow, newValues);
   try {
     for (const statement of trigger.body) {
@@ -145,6 +146,7 @@ function executeTriggerProgram(
     }
     throw error;
   } finally {
+    env.state.lastInsertRowid = savedLastInsertRowid;
     env.triggerScope = savedScope;
     env.triggerDepth--;
   }

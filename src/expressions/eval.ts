@@ -5,7 +5,10 @@ import { defaultFunctionRegistry } from "../functions/registry.ts";
 import { castSqlValue } from "../functions/scalar.ts";
 import { compareWithCollation } from "../types/collation.ts";
 import {
+  type Affinity,
+  applyComparisonAffinity,
   asSqlReal,
+  affinityFromTypeName,
   canonicalizeNumber,
   coerceToNumber,
   compareSql,
@@ -82,7 +85,15 @@ function sqlOr(left: SqlValue, right: () => SqlValue): SqlValue {
   return 0;
 }
 
-function compareResult(op: BinaryOp, left: SqlValue, right: SqlValue, collation?: string): SqlValue {
+function compareResult(
+  op: BinaryOp,
+  left: SqlValue,
+  right: SqlValue,
+  collation?: string,
+  leftAffinity: Affinity | null = null,
+  rightAffinity: Affinity | null = null,
+): SqlValue {
+  [left, right] = applyComparisonAffinity(left, right, leftAffinity, rightAffinity);
   if (op === "IS" || op === "IS NOT" || op === "IS DISTINCT FROM" || op === "IS NOT DISTINCT FROM") {
     const equal =
       left === null || right === null
@@ -149,7 +160,14 @@ function evalBinary(op: BinaryOp, leftExpr: Expr, rightExpr: Expr, ctx: EvalCont
       op,
     )
   ) {
-    return compareResult(op, left, right, resolveComparisonCollation(leftExpr, rightExpr, ctx) ?? undefined);
+    return compareResult(
+      op,
+      left,
+      right,
+      resolveComparisonCollation(leftExpr, rightExpr, ctx) ?? undefined,
+      resolveComparisonAffinity(leftExpr, ctx),
+      resolveComparisonAffinity(rightExpr, ctx),
+    );
   }
   if (op === "LIKE" || op === "NOT LIKE" || op === "GLOB" || op === "NOT GLOB") {
     if (left === null || right === null) return null;
@@ -355,14 +373,29 @@ function inheritedCollation(expr: Expr, ctx: EvalContext): string | null {
   }
 }
 
-function evalIn(left: SqlValue, values: SqlValue[], not: boolean): SqlValue {
+function resolveComparisonAffinity(expr: Expr, ctx: EvalContext): Affinity | null {
+  switch (expr.type) {
+    case "column":
+      return (
+        ctx.resolveAffinity?.(expr.table, expr.name) ?? ctx.parent?.resolveAffinity?.(expr.table, expr.name) ?? null
+      );
+    case "cast":
+      return affinityFromTypeName(expr.typeName);
+    case "collate":
+      return resolveComparisonAffinity(expr.expr, ctx);
+    default:
+      return null;
+  }
+}
+
+function evalIn(left: SqlValue, values: SqlValue[], not: boolean, leftAffinity: Affinity | null): SqlValue {
   if (values.length === 0) return booleanValue(not);
   if (left === null) return null;
   let sawNull = false;
   for (const value of values) {
     if (value === null) {
       sawNull = true;
-    } else if (compareSql(left, value) === 0) {
+    } else if (compareSql(...applyComparisonAffinity(left, value, leftAffinity, null)) === 0) {
       return booleanValue(!not);
     }
   }
@@ -418,8 +451,9 @@ export function evalExpr(expr: Expr, ctx: EvalContext): SqlValue {
         resolveComparisonCollation(expr.expr, expr.lower, ctx) ??
         resolveComparisonCollation(expr.expr, expr.upper, ctx) ??
         undefined;
-      const lower = compareResult(">=", value, evalExpr(expr.lower, ctx), collation);
-      const result = sqlAnd(lower, () => compareResult("<=", value, evalExpr(expr.upper, ctx), collation));
+      const affinity = resolveComparisonAffinity(expr.expr, ctx);
+      const lower = compareResult(">=", value, evalExpr(expr.lower, ctx), collation, affinity);
+      const result = sqlAnd(lower, () => compareResult("<=", value, evalExpr(expr.upper, ctx), collation, affinity));
       if (result === null) return null;
       return expr.not ? booleanValue(result === 0) : result;
     }
@@ -448,7 +482,7 @@ export function evalExpr(expr: Expr, ctx: EvalContext): SqlValue {
       const values = Array.isArray(expr.values)
         ? expr.values.map((value) => evalExpr(value, ctx))
         : executeSelect(ctx, expr.values).rows.map((row) => row[0] ?? null);
-      return evalIn(left, values, expr.not);
+      return evalIn(left, values, expr.not, resolveComparisonAffinity(expr.expr, ctx));
     }
     case "like": {
       const value = evalExpr(expr.expr, ctx);

@@ -232,6 +232,7 @@ await runStep("CI benchmarks", [
     await runStep("Regression gate", ["bun", "run", "benchmarks/compare-ci.ts"]);
   }
 }
+await runStep("Memory budget", ["bun", "run", "benchmarks/check-budgets.ts"]);
 
 const total = finished.reduce((sum, step) => sum + step.seconds, 0);
 const useColor = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;

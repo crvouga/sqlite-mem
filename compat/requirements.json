@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-18T15:54:12.225Z",
+  "generatedAt": "2026-08-19T09:44:57.570Z",
   "sourceUrl": "https://www.sqlite.org/requirements.html",
   "count": 3487,
   "requirements": [
@@ -7,7 +7,7 @@
       "id": "R-00013-61831-22423-62410-56475-12017-42000-15640",
       "text": "The key comes first and is separated from the value by a single \"=\" character.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-00041-06536-06136-27539-15037-63357-02924-13585",
@@ -613,7 +613,7 @@
       "id": "R-01750-40559-52065-12470-48383-41757-44468-25443",
       "text": "SQLite always opens immutable database files read-only and it skips all file locking and change detection on immutable database files.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-01766-15387-49282-35089-26578-35550-62519-17422",
@@ -1003,7 +1003,7 @@
       "id": "R-02982-34736-45462-50381-10151-04149-50124-39087",
       "text": "In order to maintain full backwards compatibility for legacy applications, the URI filename capability is disabled by default.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-03014-26414-56458-20281-20451-13984-34730-16215",
@@ -1417,7 +1417,7 @@
       "id": "R-04239-46396-01814-35437-09500-15330-29656-29388",
       "text": "A single zero-byte separates the xOpen filename argument from the key of the first query parameters, each key and value, and each subsequent key from the prior value.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-04240-13860-65376-64948-20761-30630-14399-44960",
@@ -1999,7 +1999,7 @@
       "id": "R-06268-22533-04308-14386-21741-11230-29946-31155",
       "text": "The cache query parameter determines if the new database is opened using shared cache mode or with a private cache.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-06289-57229-11447-28178-35750-27104-36074-23089",
@@ -3895,7 +3895,7 @@
       "id": "R-12831-20703-43607-22542-46423-65070-13678-01417",
       "text": "The query string consists of text following the first \"?\" character but excluding the optional fragment that begins with \"#\".",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-12881-55998-05997-62769-52407-41437-37652-18188",
@@ -4807,7 +4807,7 @@
       "id": "R-15825-58263-40535-43132-40682-17971-55847-38484",
       "text": "The psow query parameter overrides the powersafe overwrite property of the database file being opened.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-15842-53296-08003-60856-35696-17823-54223-09480",
@@ -5509,7 +5509,7 @@
       "id": "R-18043-40700-22598-52813-64197-51522-53393-10304",
       "text": "The psow query parameter works with the default windows and unix VFSes but might be a no-op for other proprietary or non-standard VFSes.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-18085-46797-38544-57069-39269-06542-00638-19188",
@@ -6589,7 +6589,7 @@
       "id": "R-21426-10262-16472-16411-19241-49098-31695-43338",
       "text": "The path component of the URI specifies the disk file that is the SQLite database to be opened.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-21490-41092-09920-20398-33812-50363-51367-35594",
@@ -6655,7 +6655,7 @@
       "id": "R-21827-30701-03148-53639-55860-16366-16292-16032",
       "text": "The vfs query parameter causes the database connection to be opened using the VFS called NAME.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-21827-60920-49018-16791-65129-33759-13224-63617",
@@ -7267,7 +7267,7 @@
       "id": "R-23702-41282-42393-06958-42086-21645-30380-61682",
       "text": "The path is optional if the authority is present.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-23735-03107-03121-47557-18096-07566-30916-33769",
@@ -7381,7 +7381,7 @@
       "id": "R-24023-61156-56094-16008-29634-01440-59018-40109",
       "text": "The mode query parameter determines if the new database is opened read-only, read-write, read-write and created if it does not exist, or that the database is a pure in-memory database that never interacts with disk, respectively.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-24078-09375-10188-46060-61284-00703-09304-21721",
@@ -7675,7 +7675,7 @@
       "id": "R-24784-09209-65529-37322-41810-39114-37590-65280",
       "text": "The authority may be omitted, may be blank, or may be \"localhost\". Any other authority results in an error.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-24843-55391-00331-31917-58094-58865-54184-39062",
@@ -8053,7 +8053,7 @@
       "id": "R-26031-07851-20661-23903-48754-42738-42414-42677",
       "text": "URIs are processed as UTF8 text.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-26078-30979-29806-34785-43846-23819-01793-57552",
@@ -8299,7 +8299,7 @@
       "id": "R-26810-60950-31083-35442-30714-31340-57644-05934",
       "text": "If the authority section is present, then the path is always an absolute pathname.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-26835-10964-22323-42888-35777-38355-20607-28933",
@@ -9289,7 +9289,7 @@
       "id": "R-29753-05667-59108-06137-58483-55469-25582-30166",
       "text": "The text of query parameters is appended to the filename argument of the xOpen method of the VFS.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-29765-45832-49120-26582-31576-30942-45829-65039",
@@ -10027,7 +10027,7 @@
       "id": "R-31883-14373-53297-17557-08649-10879-14648-40339",
       "text": "If the path component is omitted, then the database is stored in a temporary file that will be automatically deleted when the database connection closes.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-31884-19145-46591-63123-39712-55381-35148-20037",
@@ -10051,7 +10051,7 @@
       "id": "R-31984-08010-07046-54406-16085-56792-07633-10679",
       "text": "On windows, if the absolute path begins with \"/X:/\" where X is any single ASCII alphabetic character (\"a\" through \"z\" or \"A\" through \"Z\") then the \"X:\" is understood to be the drive letter of the volume containing the file, not the toplevel directory.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-31989-51162-12344-35872-57783-63477-65151-09543",
@@ -10639,7 +10639,7 @@
       "id": "R-34023-52929-12261-02515-22772-45177-48508-47679",
       "text": "The query string is optional.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-34027-00617-24854-21763-47858-39540-20896-63477",
@@ -10861,7 +10861,7 @@
       "id": "R-34706-05629-19212-06603-14274-22035-31068-37221",
       "text": "The open attempt fails if NAME is not the name of a VFS that is built into SQLite or that has been previously registered using sqlite3_vfs_register().",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-34730-53445-15838-11944-46041-12438-53750-14468",
@@ -11593,7 +11593,7 @@
       "id": "R-37099-37053-38363-03939-37447-24344-49731-34436",
       "text": "Similarly, if URI filenames are not recognized when the database connection is first opened, they will not be recognized by ATTACH.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-37127-14782-63396-43128-39237-20363-34771-13214",
@@ -11755,7 +11755,7 @@
       "id": "R-37783-42715-27194-59163-53660-14941-49401-50024",
       "text": "Any %HH escape sequences in the query parameters are resolved prior to being appended to the xOpen filename.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-37795-21752-00915-21672-38602-04515-27824-24579",
@@ -12037,7 +12037,7 @@
       "id": "R-38577-07276-49824-55947-21917-12317-50155-56118",
       "text": "If the query string is present, then all query parameters are passed through into the xOpen method of the underlying VFS.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-38578-34175-46775-59738-25546-18239-05883-23898",
@@ -12073,7 +12073,7 @@
       "id": "R-38650-02327-39862-58764-51816-33051-52085-34596",
       "text": "The immutable query parameter is a boolean that signals to SQLite that the underlying database file is held on read-only media and cannot be modified, even by another process with elevated privileges.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-38720-18127-00182-16789-56682-25353-36594-39383",
@@ -12091,7 +12091,7 @@
       "id": "R-38799-08373-51877-49685-25873-19436-11233-20221",
       "text": "URI filenames can be enabled or disabled using the SQLITE_USE_URI=1 or SQLITE_USE_URI=0 compile-time options.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-38815-48046-28937-36081-10893-02265-15426-25349",
@@ -12349,7 +12349,7 @@
       "id": "R-39448-56079-43024-42660-00434-04264-13777-54050",
       "text": "The filename argument sqlite3_open16() is converted from UTF16 native byte order into UTF8 prior to processing.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-39464-12723-18801-15682-15503-09131-15880-06935",
@@ -12553,7 +12553,7 @@
       "id": "R-40233-33496-43567-58551-03815-59938-27256-59385",
       "text": "The nolock query parameter is a boolean that disables all calls to the xLock, xUnlock, and xCheckReservedLock methods of the VFS when true.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-40235-17052-28075-57665-18059-48204-40601-49682",
@@ -14131,7 +14131,7 @@
       "id": "R-44270-63173-43365-51432-46246-26535-62506-06270",
       "text": "Both key and value may contain %HH escape sequences.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-44272-02265-45662-49730-44670-47137-63900-27537",
@@ -14143,7 +14143,7 @@
       "id": "R-44289-63209-61315-10942-18523-19279-36717-48244",
       "text": "If the authority is omitted then the path is required.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-44294-52863-08300-09780-12014-19647-27880-25111",
@@ -15313,7 +15313,7 @@
       "id": "R-47688-18802-24758-22650-17797-24943-61288-58043",
       "text": "The query string is divided into key/value pairs.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-47709-27231-29719-54015-39691-57688-49858-37109",
@@ -15487,7 +15487,7 @@
       "id": "R-48245-15045-20041-46563-30518-58270-45669-62749",
       "text": "A filename that is not a well-formed URI is interpreted as an ordinary filename.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-48254-42943-07993-04131-52492-34370-46050-41806",
@@ -16195,7 +16195,7 @@
       "id": "R-50436-30597-52741-48231-49256-06993-48572-34850",
       "text": "The list of query parameters appended to the xOpen filename is terminated by a single zero-length key.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-50437-53270-64199-48076-12233-35385-13777-56267",
@@ -16321,7 +16321,7 @@
       "id": "R-50779-31451-02741-56798-14558-26402-32929-36548",
       "text": "Regardless of the compile-time or start-time settings, URI filenames can be enabled for individual database connections by including the SQLITE_OPEN_URI bit in the set of bits passed as the F parameter to sqlite3_open_v2(N,P,F,V).",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-50786-24793-54635-21021-11581-63558-51983-08230",
@@ -16417,7 +16417,7 @@
       "id": "R-51132-22354-55296-53634-47929-60689-49370-19301",
       "text": "The fragment is optional. If present, it is ignored.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-51136-58806-61234-62019-55007-59360-42389-06217",
@@ -16501,7 +16501,7 @@
       "id": "R-51332-60960-52674-22540-45151-35167-25354-18137",
       "text": "Zero or more escape sequences of the form \"%HH\" (where H represents any hexadecimal digit) can occur in the path, query string, or fragment.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-51343-23764-31964-03774-37293-59817-59078-38155",
@@ -16945,7 +16945,7 @@
       "id": "R-52830-19955-18632-16869-37447-04753-28772-23279",
       "text": "A URI filename can optionally be followed by a query string.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-52843-09507-00185-40399-22075-19673-59320-05443",
@@ -17329,7 +17329,7 @@
       "id": "R-53994-49363-33213-19869-13324-28404-40753-33810",
       "text": "If the authority section is omitted, then the path is an absolute pathname if it begins with the \"/\" character (ASCII code 0x2f) and is a relative pathname otherwise.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-54020-18969-35305-43404-58494-09530-16898-08730",
@@ -17803,7 +17803,7 @@
       "id": "R-55548-33817-29284-24020-20403-44127-42701-15933",
       "text": "The compile-time setting for URI filenames can be changed at start-time using the sqlite3_config(SQLITE_CONFIG_URI,1) or sqlite3_config(SQLITE_CONFIG_URI,0) configuration calls.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-55594-21030-55644-51033-26913-03312-40389-27101",
@@ -18283,7 +18283,7 @@
       "id": "R-57313-56280-52259-04296-10229-37412-19300-33360",
       "text": "If URI filenames are recognized when the database connection is originally opened, then URI filenames will also be recognized on ATTACH statements.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-57343-49114-15055-13437-46054-52631-22669-49552",
@@ -18433,7 +18433,7 @@
       "id": "R-57884-37496-29952-23489-26945-21299-05103-05410",
       "text": "The scheme of the URI must be \"file:\". Any other scheme results in the input being treated as an ordinary filename.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-57928-57565-35172-43517-28321-39002-52243-13899",
@@ -19195,7 +19195,7 @@
       "id": "R-60324-39271-63103-21591-25385-29112-09183-41163",
       "text": "Key/value pairs are separated by a single \"&\" character.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-60334-12880-45954-16548-05057-35188-10924-38811",
@@ -19285,7 +19285,7 @@
       "id": "R-60626-59740-27448-56337-63939-00650-38940-26585",
       "text": "All query parameters are always passed through into the xOpen method of the VFS even if they are previously read and interpreted by the SQLite core.",
       "source": "uri.html",
-      "classification": "SQL_BEHAVIOR"
+      "classification": "NOT_APPLICABLE"
     },
     {
       "id": "R-60642-04082-57988-56847-11396-02756-59286-18214",

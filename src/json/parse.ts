@@ -33,16 +33,20 @@ export function jsonErrorPosition(input: string): number {
 }
 
 export function isValidJsonText(input: string, flags = 0): boolean {
-  // flags bit 0x01 = JSON5 accepted as valid when set; without it, only RFC8259
-  const allowJson5 = (flags & 0x02) !== 0 || (flags & 0x01) !== 0;
+  // SQLite flags: 0x01 accepts canonical RFC-8259 JSON and 0x02 accepts
+  // JSON5. With no explicit flags json_valid() uses canonical JSON.
+  const allowCanonical = flags === 0 || (flags & 0x01) !== 0;
+  const allowJson5 = (flags & 0x02) !== 0;
   try {
     if (allowJson5) {
       parseJsonText(input);
       return true;
     }
-    // Canonical: reject JSON5 extensions by re-checking with a strict mode
-    parseJsonText(input, { strictCanonical: true });
-    return true;
+    if (allowCanonical) {
+      parseJsonText(input, { strictCanonical: true });
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }

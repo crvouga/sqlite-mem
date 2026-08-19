@@ -161,6 +161,9 @@ jobs:
             bun run benchmarks/compare-ci.ts
           fi
 
+      - name: Memory budget
+        run: bun run benchmarks/check-budgets.ts
+
       - name: Upload CI bench results
         if: always()
         uses: actions/upload-artifact@v7

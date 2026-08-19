@@ -234,7 +234,7 @@ Goal: drop-in SQL behavior vs SQLite **3.51.0**. Full matrix: [COMPATIBILITY.md]
 10. **Do not use `Number.isInteger` for SQL REAL vs INTEGER** — use SQL `typeof()`.
 11. **Do not import `@crvouga/sqlite-mem/unstable` in application code** unless you accept breakage in any release.
 
-Working examples beyond this README: `examples/react-vite`, `tests/contract/api/`, `tests/contract/parameters/`, `tests/browser/run.ts`.
+Working examples beyond this README: `examples/react-vite`, `tests/contract/api/`, and `tests/contract/parameters/`.
 
 ## Development
 
@@ -252,7 +252,6 @@ bun run typecheck
 bun run test:sqlite-compat   # requirements + inventory gate + differential suite
 bun test                     # contract + fuzz + harness
 bun run build
-bun run test:browser         # Playwright smoke (Chrome/Firefox/Safari; CI uses Chromium)
 ```
 
 See [COMPATIBILITY.md](./COMPATIBILITY.md).

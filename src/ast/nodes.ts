@@ -127,6 +127,7 @@ export interface FunctionExpr {
   name: string;
   distinct: boolean;
   args: Expr[] | "*";
+  orderBy: OrderByItem[];
   filter: Expr | null;
 }
 
@@ -135,6 +136,7 @@ export interface AggregateExpr {
   name: string;
   distinct: boolean;
   args: Expr[] | "*";
+  orderBy: OrderByItem[];
   filter: Expr | null;
 }
 
@@ -292,6 +294,7 @@ export interface WithClause {
 export interface Cte {
   name: string;
   columns: string[] | null;
+  materialized: "materialized" | "not_materialized" | null;
   select: SelectStmt;
 }
 

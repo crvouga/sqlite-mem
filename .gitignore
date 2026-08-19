@@ -15,4 +15,5 @@ benchmarks/results/*.json
 benchmarks/results/*.html
 !benchmarks/results/schema.example.json
 !benchmarks/results/ci-baseline.json
+!benchmarks/results/throttle-baseline.json
 benchmarks/browser/dist/

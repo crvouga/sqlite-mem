@@ -1,3 +1,5 @@
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { Database } from "../../src/index.ts";
 import { parse } from "../../src/unstable.ts";
 import type { BenchSpec } from "../harness/types.ts";
@@ -11,6 +13,8 @@ const SQLS = [
   "INSERT INTO users(email, name, created_at) VALUES (?, ?, ?)",
   "WITH x AS (SELECT id FROM users WHERE id > 10) SELECT COUNT(*) FROM x",
 ];
+
+const SOURCE_ENTRY_URL = pathToFileURL(path.join(import.meta.dir, "../../src/index.ts")).href;
 
 export function parserSpecs(): BenchSpec[] {
   return [
@@ -53,6 +57,19 @@ export function parserSpecs(): BenchSpec[] {
       fn: (_engine, ctx) => {
         const stmt = ctx as { get: (id: number) => unknown };
         for (let i = 0; i < 20; i++) stmt.get(50);
+      },
+    }),
+    spec({
+      name: "parser/execute-reparse",
+      operation: "parse + execute each query",
+      datasetSize: 100,
+      tiers: ["ci", "default", "full"],
+      warmup: 3,
+      iterations: 30,
+      opsPerSample: 20,
+      setup: (engine) => fillUsers(engine, 100),
+      fn: (engine) => {
+        for (let i = 0; i < 20; i++) engine.query("SELECT id, name FROM users WHERE id = ?", [50]);
       },
     }),
   ];
@@ -332,6 +349,30 @@ export function joinSpecs(): BenchSpec[] {
       },
     }),
     spec({
+      name: "join/small-large/100000",
+      operation: "join small to large",
+      datasetSize: 100_000,
+      tiers: ["full"],
+      layer: "engine",
+      warmup: 1,
+      iterations: 6,
+      setup: (engine) => {
+        engine.exec("CREATE TABLE small (id INTEGER PRIMARY KEY, k INTEGER NOT NULL)");
+        engine.exec("CREATE TABLE large (id INTEGER PRIMARY KEY, k INTEGER NOT NULL, label TEXT)");
+        engine.exec("CREATE UNIQUE INDEX idx_large_k ON large(k)");
+        const insS = engine.prepare("INSERT INTO small(id, k) VALUES (?, ?)");
+        const insL = engine.prepare("INSERT INTO large(id, k, label) VALUES (?, ?, ?)");
+        engine.transaction(() => {
+          for (let i = 1; i <= 100; i++) insS.run(i, i * 997);
+          for (let i = 1; i <= 100_000; i++) insL.run(i, i, `L${i}`);
+        });
+        return engine.prepare("SELECT small.id, large.label FROM small JOIN large ON large.k = small.k");
+      },
+      fn: (_engine, ctx) => {
+        (ctx as { all: () => unknown }).all();
+      },
+    }),
+    spec({
       name: "join/string-keys/500",
       operation: "join on strings",
       datasetSize: 500,
@@ -448,6 +489,20 @@ export function startupSpecs(): BenchSpec[] {
       fn: () => {
         const db = new Database();
         db.close();
+      },
+    }),
+    spec({
+      name: "startup/cold-import-first-query",
+      operation: "Bun process + import + new Database() + first query",
+      tiers: ["ci", "default", "full"],
+      engines: "mem",
+      warmup: 1,
+      iterations: 8,
+      fn: async () => {
+        const script = `import { Database } from ${JSON.stringify(SOURCE_ENTRY_URL)}; const db = new Database(); db.query("SELECT 1"); db.close();`;
+        const child = Bun.spawn([process.execPath, "--eval", script], { stdout: "ignore", stderr: "pipe" });
+        const code = await child.exited;
+        if (code !== 0) throw new Error(`cold-start child exited ${code}: ${await new Response(child.stderr).text()}`);
       },
     }),
     spec({

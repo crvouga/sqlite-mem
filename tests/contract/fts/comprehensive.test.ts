@@ -161,3 +161,50 @@ parity(
   ["CREATE VIRTUAL TABLE t USING fts3(c)", "INSERT INTO t(c) VALUES ('hello world hello')"],
   "SELECT offsets(t) FROM t WHERE t MATCH 'hello'",
 );
+
+for (const format of ["p", "c", "s", "x", "y", "pcsxy"] as const) {
+  parity(
+    `FTS3 matchinfo ${format} format`,
+    [
+      "CREATE VIRTUAL TABLE t USING fts3(title, body)",
+      "INSERT INTO t VALUES ('hello world hello', 'hello moon')",
+      "INSERT INTO t VALUES ('world', 'hello hello')",
+    ],
+    `SELECT rowid, hex(matchinfo(t, '${format}')) AS info FROM t WHERE t MATCH 'hello' ORDER BY rowid`,
+  );
+}
+
+sequenceParity(
+  "FTS5 external content stays stale until trigger maintenance",
+  [
+    "CREATE TABLE posts(id INTEGER PRIMARY KEY, body TEXT)",
+    "CREATE VIRTUAL TABLE posts_fts USING fts5(body, content='posts', content_rowid='id')",
+    "CREATE TRIGGER posts_ai AFTER INSERT ON posts BEGIN INSERT INTO posts_fts(rowid, body) VALUES (new.id, new.body); END",
+  ],
+  [
+    { sql: "INSERT INTO posts VALUES (1, 'old phrase')", neutralizeCounters: true },
+    { sql: "SELECT rowid FROM posts_fts WHERE posts_fts MATCH 'old'", query: true },
+    { sql: "UPDATE posts SET body='new phrase' WHERE id=1" },
+    { sql: "SELECT rowid FROM posts_fts WHERE posts_fts MATCH 'old'", query: true },
+    { sql: "SELECT rowid FROM posts_fts WHERE posts_fts MATCH 'new'", query: true },
+  ],
+);
+
+sequenceParity(
+  "FTS5 external content triggers maintain insert update and delete",
+  [
+    "CREATE TABLE posts(id INTEGER PRIMARY KEY, body TEXT)",
+    "CREATE VIRTUAL TABLE posts_fts USING fts5(body, content='posts', content_rowid='id')",
+    "CREATE TRIGGER posts_ai AFTER INSERT ON posts BEGIN INSERT INTO posts_fts(rowid, body) VALUES (new.id, new.body); END",
+    "CREATE TRIGGER posts_au AFTER UPDATE ON posts BEGIN INSERT INTO posts_fts(posts_fts, rowid, body) VALUES ('delete', old.id, old.body); INSERT INTO posts_fts(rowid, body) VALUES (new.id, new.body); END",
+    "CREATE TRIGGER posts_ad AFTER DELETE ON posts BEGIN INSERT INTO posts_fts(posts_fts, rowid, body) VALUES ('delete', old.id, old.body); END",
+  ],
+  [
+    { sql: "INSERT INTO posts VALUES (1, 'alpha text'), (2, 'beta text')", neutralizeCounters: true },
+    { sql: "SELECT rowid FROM posts_fts WHERE posts_fts MATCH 'alpha OR beta' ORDER BY rowid", query: true },
+    { sql: "UPDATE posts SET body='gamma text' WHERE id=1", neutralizeCounters: true },
+    { sql: "SELECT rowid FROM posts_fts WHERE posts_fts MATCH 'alpha OR gamma' ORDER BY rowid", query: true },
+    { sql: "DELETE FROM posts WHERE id=2", neutralizeCounters: true },
+    { sql: "SELECT rowid FROM posts_fts WHERE posts_fts MATCH 'beta OR gamma' ORDER BY rowid", query: true },
+  ],
+);

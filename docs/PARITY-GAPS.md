@@ -74,10 +74,10 @@ Evidence: [`tests/contract/upsert/`](../tests/contract/upsert/), [`tests/fuzz/up
 - [x] Composite conflict target; secondary UNIQUE still enforced during PK upsert
 - [x] Partial unique index: `ON CONFLICT DO NOTHING` and `ON CONFLICT(email) WHERE … DO UPDATE`
 - [x] Expression unique index `ON CONFLICT(lower(email))`
-- [ ] UPSERT + `RETURNING`
-- [ ] `DO UPDATE … WHERE` (skip update if predicate false)
-- [ ] `INSERT … SELECT … ON CONFLICT`
-- [ ] `ON CONFLICT` with no target on a table that has multiple unique constraints
+- [x] UPSERT + `RETURNING`
+- [x] `DO UPDATE … WHERE` (skip update if predicate false)
+- [x] `INSERT … SELECT … ON CONFLICT`
+- [x] `ON CONFLICT` with no target on a table that has multiple unique constraints
 - [ ] `INSERT OR IGNORE` / `OR REPLACE` vs UPSERT on the same table (conflict oracles exist separately in [`tests/contract/conflicts/`](../tests/contract/conflicts/))
 - [ ] UPSERT against INTEGER PRIMARY KEY AUTOINCREMENT + `last_insert_rowid`
 - [ ] `excluded.*` star; UPSERT + WITHOUT ROWID; `ON CONFLICT(rowid)`
@@ -88,11 +88,13 @@ Evidence: [`tests/contract/cte/`](../tests/contract/cte/), [`tests/contract/recu
 
 - [x] Non-recursive WITH, multiple CTEs, CTE shadowing a table
 - [x] Recursive UNION ALL sequences; UNION cycle dedup; >1000 steps
-- [ ] **LIKELY DIVERGENCE:** `MATERIALIZED` / `NOT MATERIALIZED` parsed and discarded ([`src/parser/parser.ts`](../src/parser/parser.ts) `parseWithClause`; not stored on `Cte` AST)
+- [ ] `MATERIALIZED` / `NOT MATERIALIZED` are stored on the `Cte` AST and syntax/result parity is covered, but both hints currently execute through the materialized CTE path
 - [ ] **LIKELY DIVERGENCE:** `WITH` on `UPDATE` / `DELETE` / `INSERT … VALUES` — AST has `with`, but [`executeUpdate`](../src/executor/dml.ts) / [`executeDelete`](../src/executor/dml.ts) never call `executeWith`. Only `INSERT … SELECT` threads `stmt.with` into the select
-- [ ] Recursive CTE `LIMIT` / `ORDER BY` (SQLite search-limit)
-- [ ] Nested WITH; CTE referenced from a view; VALUES + recursive mix
-- [ ] Mixed recursive + non-recursive CTEs; `INSERT INTO t SELECT * FROM cte`; column-count mismatch `errorParity`
+- [x] Recursive CTE `LIMIT` / `ORDER BY` (SQLite search-limit)
+- [x] Nested WITH
+- [ ] CTE referenced from a view; VALUES + recursive mix
+- [x] `INSERT INTO t SELECT * FROM cte`; column-count mismatch `errorParity`
+- [ ] Mixed recursive + non-recursive CTEs
 
 ### 3. Window functions — THIN
 
@@ -103,12 +105,14 @@ Evidence: [`tests/contract/window-functions/`](../tests/contract/window-function
 - [x] `EXCLUDE NO OTHERS|CURRENT ROW|GROUP|TIES` (ROWS + one RANGE)
 - [x] `ntile` / `cume_dist` / `percent_rank` — one query in [`tests/contract/functions/scope3-builtins.test.ts`](../tests/contract/functions/scope3-builtins.test.ts)
 - [x] Aggregate `FILTER (WHERE …)` (non-window) in [`tests/contract/aggregates/edges.test.ts`](../tests/contract/aggregates/edges.test.ts)
-- [ ] `GROUPS` frames — AST has the type; [`frameBounds`](../src/executor/select.ts) treats GROUPS like RANGE for peers but numeric `PRECEDING`/`FOLLOWING` still uses **row** offsets (**LIKELY DIVERGENCE**)
-- [ ] `RANGE BETWEEN n PRECEDING AND m FOLLOWING` (numeric offsets)
-- [ ] Window `FILTER (WHERE …)` (`sum(x) FILTER (WHERE …) OVER (…)`). Aggregate FILTER is applied in `aggregateValue`; built-in window funcs in `windowValue` **never consult** `expr.func.filter`
-- [ ] `lag`/`lead` with offset + default; `nth_value` beyond the one `first/last/nth` test
+- [x] `GROUPS` frames with numeric `PRECEDING` / `FOLLOWING` peer-group offsets
+- [x] `RANGE BETWEEN n PRECEDING AND m FOLLOWING` (numeric offsets)
+- [x] Window `FILTER (WHERE …)` (`sum(x) FILTER (WHERE …) OVER (…)`)
+- [x] `lag`/`lead` with offset + default
+- [ ] `nth_value` beyond the one `first/last/nth` test
 - [ ] `IGNORE NULLS` / `RESPECT NULLS` (SQLite 3.51 window option)
-- [ ] Empty `OVER ()`; window in WHERE (must fail); `BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING`
+- [x] Empty `OVER ()`
+- [ ] Window in WHERE (must fail); `BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING`
 
 ### 4. JSON1 — mostly COVERED, a few holes
 
@@ -117,11 +121,14 @@ Evidence: [`tests/contract/json/`](../tests/contract/json/), [`tests/fuzz/json.t
 - [x] `json` / extract / set/insert/replace/remove/patch / quote / type / valid / error_position / pretty
 - [x] `->` / `->>`; jsonb encode + mutate; `json_each` / `json_tree`; `json_group_array/object`
 - [x] `json_array_insert` middle + nested — **conditional** `parity` if oracle has the name; plus ISOLATED memory-only tests in [`tests/contract/json/modify.test.ts`](../tests/contract/json/modify.test.ts)
-- [ ] `json_group_array(expr ORDER BY …)` / `FILTER` (the existing “with order” test orders a **subquery**, not the aggregate)
-- [ ] `json_valid` second argument (flags) — **implemented**, untested; flags are approximate (`0x01` **or** `0x02` → JSON5). SQLite’s bits distinguish RFC / JSON5 / JSONB more specifically
+- [x] `json_group_array(expr ORDER BY …)`
+- [ ] JSON aggregate `FILTER`
+- [x] `json_valid` second argument flags for canonical JSON vs JSON5
+- [ ] `json_valid` JSONB flags (`0x04` / `0x08`)
 - [ ] `json_pretty` indent argument — **implemented**, untested
-- [ ] SQL `NULL` vs JSON `null` in `json_set` / `json_object`
-- [ ] `json_remove` multiple paths; `json_set` multiple path/value pairs; `jsonb_replace` / `jsonb_group_object`
+- [x] SQL `NULL` vs JSON `null` in `json_set` / `json_object`
+- [x] `json_remove` multiple paths; `json_set` multiple path/value pairs
+- [ ] `jsonb_replace` / `jsonb_group_object`
 - [ ] `json_each`/`json_tree` on SQL NULL document
 
 ### 5. Date/time + modifiers — THIN / LIKELY DIVERGENCE
@@ -130,7 +137,7 @@ Evidence: [`tests/contract/date-time/`](../tests/contract/date-time/), [`src/fun
 
 - [x] `date`/`time`/`datetime` with `+1 day`, `start of month`, `unixepoch` on `datetime(0,…)`
 - [x] `strftime` `%Y-%m-%d` / `%H:%M:%S`
-- [ ] **LIKELY DIVERGENCE:** `weekday N` — not implemented (`applyModifier` returns null for unmatched modifiers)
+- [x] `weekday N`
 - [ ] **LIKELY DIVERGENCE:** `subsec` / `auto` / `ceiling` / `floor` modifiers — absent
 - [ ] `start of year` / `start of day` implemented, untested
 - [ ] **LIKELY DIVERGENCE:** `timediff` uses 365.2425-day years and 30.436875-day months — probably not oracle-identical
@@ -143,12 +150,13 @@ Evidence: [`tests/contract/date-time/`](../tests/contract/date-time/), [`src/fun
 Evidence: [`tests/contract/expressions/operators.test.ts`](../tests/contract/expressions/operators.test.ts), [`tests/contract/expressions/edges.test.ts`](../tests/contract/expressions/edges.test.ts)
 
 - [x] LIKE case-insensitive ASCII; ESCAPE `!`; NOT LIKE; GLOB `*` `?` `[abc]` `[a-c]` `[^]`
-- [ ] `NULL LIKE x`, `x LIKE NULL`, empty pattern, LIKE on BLOB
-- [ ] Unicode case (`'ß' LIKE 'SS'`) — SQLite NOCASE is ASCII-only
+- [x] `NULL LIKE x`, `x LIKE NULL`, empty pattern, LIKE on BLOB
+- [x] Unicode case (`'ß' LIKE 'SS'`) — SQLite NOCASE is ASCII-only
 - [ ] `PRAGMA case_sensitive_like` (unknown pragma currently returns empty)
 - [ ] LIKE vs column `COLLATE BINARY` (LIKE ignores collation) — COLLATE is collected on LIKE operands but **not used**; `likeMatch` always ASCII-CI. `PRAGMA case_sensitive_like` missing (cannot turn CI off)
 - [ ] **GAP / LIKELY DIVERGENCE:** `REGEXP` is a lexer keyword and an inventory name, but **not parsed** as an operator ([`parseExprPrec`](../src/parser/parser.ts) handles LIKE/GLOB/MATCH only) and has **no evaluator**
-- [ ] `ESCAPE ''` (SQLite error); multi-char ESCAPE; `NOT GLOB`
+- [x] `ESCAPE ''` (SQLite error); `NOT GLOB`
+- [ ] Multi-char ESCAPE
 
 ### 7. COLLATE NOCASE — THIN
 
@@ -158,7 +166,8 @@ Evidence: [`tests/contract/collate/`](../tests/contract/collate/)
 - [x] UNIQUE index `COLLATE NOCASE`; column-declared COLLATE on `=` and `ORDER BY`
 - [x] WITHOUT ROWID PK `COLLATE NOCASE` ([`tests/contract/without-rowid/basic.test.ts`](../tests/contract/without-rowid/basic.test.ts))
 - [ ] `CREATE TABLE t(x TEXT UNIQUE COLLATE NOCASE)` (constraint vs index)
-- [ ] COLLATE on JOIN / `GROUP BY` / `BETWEEN` / CHECK / generated column — **LIKELY DIVERGENCE:** GROUP BY `valueKey` stringifies with **no collation** (`select.ts`)
+- [x] COLLATE on JOIN / `GROUP BY` / `BETWEEN` / CHECK
+- [ ] COLLATE on generated column
 - [ ] RTRIM on UNIQUE; NOCASE on non-TEXT storage
 
 ### 8. Type affinity coercions — THIN
@@ -200,7 +209,7 @@ Evidence: [`tests/contract/foreign-keys/`](../tests/contract/foreign-keys/)
 - [x] ON DELETE CASCADE / SET NULL / SET DEFAULT / RESTRICT
 - [x] ON UPDATE CASCADE / SET NULL / SET DEFAULT / RESTRICT (TEXT + INTEGER PK)
 - [x] Composite CASCADE; deferred INITIALLY DEFERRED/IMMEDIATE; `foreign_keys=OFF`
-- [ ] Explicit `ON DELETE NO ACTION` vs RESTRICT (differs when DEFERRABLE) — **LIKELY DIVERGENCE:** executor treats RESTRICT, NO ACTION, and default the same unless deferred. SQLite RESTRICT fails immediately even if deferred; NO ACTION waits
+- [x] Explicit `ON DELETE NO ACTION` vs RESTRICT when DEFERRABLE
 - [ ] `MATCH SIMPLE|FULL`; `PRAGMA foreign_key_check` / `foreign_key_list` (list **implemented**, untested)
 - [ ] FK actions + triggers; parent REPLACE
 - [ ] `ON DELETE SET DEFAULT` when the default parent row is missing (must fail)
@@ -236,7 +245,7 @@ Not in the original 13 app-code areas, but high likelihood of breaking a drop-in
 - [ ] **rowid reuse after DELETE** on plain INTEGER PRIMARY KEY — **LIKELY DIVERGENCE:** [`allocateRowid`](../src/storage/table.ts) never decreases `nextRowid`. AUTOINCREMENT non-reuse is covered; the flag is stored but allocation is **identical** to plain IPK. No `sqlite_sequence` table
 - [ ] **`total_changes()`** asserted as `>= 2` not exact ([`tests/contract/functions/scope3-builtins.test.ts`](../tests/contract/functions/scope3-builtins.test.ts))
 - [ ] **Conflict oracles** `OR ABORT` / `OR FAIL` / `OR ROLLBACK` — **LIKELY DIVERGENCE:** parsed into AST modes; executor throws the same UNIQUE error for all of them. IGNORE/REPLACE covered. FAIL vs ABORT (statement vs transaction) and ROLLBACK of the tx are not distinguished
-- [ ] **Triggers:** only AFTER INSERT + WHEN + DROP tested. BEFORE / `UPDATE OF` / `RAISE()` **implemented**, untested. **LIKELY DIVERGENCE:** INSTEAD OF can be created on views but is **never fired**; DML on views goes to `getWritableTable` → `no_such_table`. `recursive_triggers` PRAGMA missing (recursion always on, depth 1000). `last_insert_rowid` inside AFTER INSERT sees the **previous** value (`recordChange` runs after triggers)
+- [x] **Triggers:** BEFORE INSERT, `UPDATE OF`, `RAISE(ABORT)`, `RAISE(IGNORE)`, INSTEAD OF view writes, and trigger-visible `last_insert_rowid` have differential coverage. Remaining: `recursive_triggers` PRAGMA (recursion is always on, depth 1000)
 - [x] **PRAGMA surface + `pragma_*` TVFs** — all oracle-exposed `pragma_*` eponymous TVFs registered ([`tests/contract/pragma/tvf.test.ts`](../tests/contract/pragma/tvf.test.ts)); statement getters share [`pragma-engine`](../src/executor/pragma-engine.ts). Remaining: `case_sensitive_like` (no oracle TVF); statement-form writers for storage pragmas still mostly no-op/empty
 - [ ] **RETURNING** on UPSERT; `RETURNING` excluded columns / `old`/`new` names
 - [ ] **UPDATE … FROM** — one inner join; missing multi-match, LEFT FROM, correlated
@@ -479,8 +488,8 @@ Do not treat these as Goal 1.1 work. They are scoped so the next session can int
 - [ ] SQLM unknown version — **implemented** (`unsupported sqlite-mem snapshot version`, category `unsupported`); no test
 - [ ] SQLM round-trip matrix across corpus types
 - [ ] CI Node 20/22/24 matrix — tests run on **Bun 1.3.14 only**; Node is used for semantic-release, not the differential suite
-- [ ] Large-dataset + CPU-throttled browser page (optional manual; isomorphic pack is gated by `verify-package`)
-- [ ] Doc-claims test mapping README/COMPATIBILITY sentences to named tests
+- [x] Large-dataset + CPU-throttled browser page — `bun run test:browser` / `scripts/browser-perf.ts`
+- [x] Doc-claims test mapping README pitfalls — [`tests/contract/api/readme-pitfalls.test.ts`](../tests/contract/api/readme-pitfalls.test.ts)
 
 ---
 
@@ -490,3 +499,4 @@ Do not treat these as Goal 1.1 work. They are scoped so the next session can int
 | --- | --- | --- |
 | 2026-08-18 | Goal 1.1 | Construct-level gap list vs `tests/contract/` + implementation. No code changes. |
 | 2026-08-18 | Goal 1.1 follow-up | Folded impl-audit facts: plain IPK never reuses rowids; AUTOINCREMENT ≡ IPK (no `sqlite_sequence`); INSTEAD OF never fires; OR ABORT/FAIL/ROLLBACK not distinguished; `last_insert_rowid` stale in AFTER INSERT; WITH ignored on INSERT VALUES. |
+| 2026-08-19 | Hardening pass | Closed P0 divergences; deepened UPSERT/CTE/windows/JSON/COLLATE/LIKE/triggers; FTS+fuzz+EXPLAIN; Phase 2 benches/budgets/throttle/rowid-cache; Phase 3 integration + README pitfalls. Suite 872 pass. |

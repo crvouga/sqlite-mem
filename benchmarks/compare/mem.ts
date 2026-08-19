@@ -14,7 +14,10 @@ export function createMemEngine(): BenchEngine {
   const db = new Database();
   return {
     name: "sqlite-mem",
-    exec: (sql, params = []) => db.exec(sql, params),
+    exec: (sql, params = []) => {
+      if (params.length > 0) db.prepare(sql).run(...params);
+      else db.exec(sql);
+    },
     query: <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => db.query<T>(sql, params),
     prepare: (sql) => wrapStatement(db.prepare(sql)),
     transaction: (fn) => db.transaction(fn),

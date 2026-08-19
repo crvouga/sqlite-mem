@@ -26,7 +26,11 @@ function applyModifier(date: Date, modifier: string): Date | null {
   const normalized = modifier.trim().toLowerCase();
   if (normalized === "unixepoch") return new Date((date.getTime() / 86400000 + JULIAN_UNIX_EPOCH) * 1000);
   if (normalized === "utc" || normalized === "localtime") return result;
-  if (normalized === "start of day") result.setUTCHours(0, 0, 0, 0);
+  const weekday = /^weekday\s+([0-6])$/.exec(normalized);
+  if (weekday) {
+    const target = Number(weekday[1]);
+    result.setUTCDate(result.getUTCDate() + ((target - result.getUTCDay() + 7) % 7));
+  } else if (normalized === "start of day") result.setUTCHours(0, 0, 0, 0);
   else if (normalized === "start of month") {
     result.setUTCDate(1);
     result.setUTCHours(0, 0, 0, 0);

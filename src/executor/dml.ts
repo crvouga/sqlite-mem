@@ -1,4 +1,13 @@
-import type { DeleteStmt, Expr, IndexedColumn, InsertStmt, ResultColumn, SetItem, UpdateStmt } from "../ast/nodes.ts";
+import type {
+  DeleteStmt,
+  Expr,
+  IndexedColumn,
+  InsertStmt,
+  ResultColumn,
+  SetItem,
+  UpdateStmt,
+  WithClause,
+} from "../ast/nodes.ts";
 import { checkTableConstraints } from "../constraints/check.ts";
 import { SqliteError } from "../errors/index.ts";
 import { exprEquals } from "../expressions/equals.ts";
@@ -6,14 +15,15 @@ import { evalExpr } from "../expressions/eval.ts";
 import type { Row, Rowid } from "../storage/row.ts";
 import { normalizeColumnName } from "../storage/row.ts";
 import { tryIndexedTableRows } from "../planner/access.ts";
-import type { Table } from "../storage/table.ts";
+import { splitQualifiedName, type ViewInfo } from "../storage/database-state.ts";
+import { makeColumnInfo, Table } from "../storage/table.ts";
 import { normalizeForCollation } from "../types/collation.ts";
 import { applyStrictValue } from "../types/strict.ts";
 import { applyAffinity, compareSql, isTruthySql, type SqlValue } from "../types/value.ts";
 import type { Fts5Row, Fts5VirtualTable } from "../vtable/fts5.ts";
 import type { ExecutionEnv, ScopeRow } from "./env.ts";
 import { emptyResult, type ResultSet, resultValues, valuesToResult } from "./result.ts";
-import { executeSelect, scanFrom } from "./select.ts";
+import { executeSelect, executeWith, scanFrom } from "./select.ts";
 import { fireDeleteTriggers, fireInsertTriggers, fireUpdateTriggers } from "./triggers.ts";
 import { executeFtsDelete, executeFtsInsert, executeFtsUpdate } from "./vtable.ts";
 
@@ -27,9 +37,21 @@ function storeColumnValue(
 }
 
 export function executeInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
+  try {
+    return withDmlCtes(stmt.with, env, () => executeInsertCore(stmt, env));
+  } catch (error) {
+    handleConflictRollback(stmt.mode === "insert_or_rollback", error, env);
+    throw error;
+  }
+}
+
+function executeInsertCore(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
   if (env.state.isVirtualTable(stmt.table)) {
     return executeVirtualInsert(stmt, env);
   }
+  const totalBefore = env.state.totalChanges;
+  const view = writableView(stmt.table, "INSERT", env);
+  if (view) return executeViewInsert(stmt, view, env, totalBefore);
   const fast = tryFastInsert(stmt, env);
   if (fast) return fast;
   const table = env.state.getWritableTable(stmt.table);
@@ -49,6 +71,7 @@ export function executeInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
   );
   const unconstrained =
     table.isUnconstrained() &&
+    env.state.databaseForTable(table).triggers.size === 0 &&
     !stmt.upsert &&
     stmt.mode === "insert" &&
     stmt.returning.length === 0 &&
@@ -57,7 +80,12 @@ export function executeInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
   if (unconstrained) {
     for (const source of sourceRows) {
       if (source.length !== columnNames.length)
-        throw new SqliteError(`${source.length} values for ${columnNames.length} columns`, "other");
+        throw new SqliteError(
+          stmt.columns
+            ? `${source.length} values for ${columnNames.length} columns`
+            : `table ${table.name} has ${columnNames.length} columns but ${source.length} values were supplied`,
+          "other",
+        );
       const values = new Map<string, SqlValue>();
       for (let index = 0; index < table.columns.length; index++) {
         const column = table.columns[index]!;
@@ -74,7 +102,12 @@ export function executeInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
 
   for (const source of sourceRows) {
     if (source.length !== columnNames.length)
-      throw new SqliteError(`${source.length} values for ${columnNames.length} columns`, "other");
+      throw new SqliteError(
+        stmt.columns
+          ? `${source.length} values for ${columnNames.length} columns`
+          : `table ${table.name} has ${columnNames.length} columns but ${source.length} values were supplied`,
+        "other",
+      );
     const values = new Map<string, SqlValue>();
     for (const column of table.columns) {
       if (column.generated) continue;
@@ -173,9 +206,12 @@ export function executeInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
       validateRow(table, row, env);
       if (table.indexes.length > 0) addIndexes(table, row, env);
       if (env.state.foreignKeysEnabled) checkForeignKeys(table, row, env);
+      if (!table.withoutRowid) {
+        last = rowid;
+        env.state.lastInsertRowid = rowid;
+      }
       fireInsertTriggers("AFTER", table, row.values, null, env);
       changes++;
-      last = table.withoutRowid ? 0 : rowid;
       if (stmt.returning.length)
         returningRows.push(projectReturning(stmt.returning, scopeFor(table, row, stmt.table, env), env));
     } catch (error) {
@@ -188,13 +224,13 @@ export function executeInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
       throw error;
     }
   }
-  env.state.recordChange(changes, last);
-  if (stmt.returning.length === 0) return emptyResult(changes, last);
-  return valuesToResult(returningNames(stmt.returning, table), returningRows, changes, last);
+  const reportedChanges = finalizeDmlChanges(totalBefore, changes, env, last);
+  if (stmt.returning.length === 0) return emptyResult(reportedChanges, last);
+  return valuesToResult(returningNames(stmt.returning, table), returningRows, reportedChanges, last);
 }
 
 function evaluateInsertSource(stmt: InsertStmt, env: ExecutionEnv): SqlValue[][] {
-  if (stmt.select) return resultValues(executeSelect({ ...stmt.select, with: stmt.with ?? stmt.select.with }, env));
+  if (stmt.select) return resultValues(executeSelect(stmt.select, env));
   if (!stmt.values) return [[]];
   const ctx = env.createEvalContext();
   return stmt.values.map((items) =>
@@ -236,6 +272,7 @@ function tryFastInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet | null {
   } catch {
     return null;
   }
+  if (env.state.databaseForTable(table).triggers.size > 0) return null;
   if (!table.isUnconstrained()) return null;
   const values = new Map<string, SqlValue>();
   for (const slot of plan.slots) values.set(slot.key, applyAffinity(slot.read(env), slot.affinity));
@@ -282,9 +319,21 @@ function buildFastInsertPlan(stmt: InsertStmt, env: ExecutionEnv): FastInsertPla
 }
 
 export function executeUpdate(stmt: UpdateStmt, env: ExecutionEnv): ResultSet {
+  try {
+    return withDmlCtes(stmt.with, env, () => executeUpdateCore(stmt, env));
+  } catch (error) {
+    handleConflictRollback(stmt.or === "rollback", error, env);
+    throw error;
+  }
+}
+
+function executeUpdateCore(stmt: UpdateStmt, env: ExecutionEnv): ResultSet {
   if (env.state.isVirtualTable(stmt.table)) {
     return executeVirtualUpdate(stmt, env);
   }
+  const totalBefore = env.state.totalChanges;
+  const view = writableView(stmt.table, "UPDATE", env);
+  if (view) return executeViewUpdate(stmt, view, env, totalBefore);
   const table = env.state.getWritableTable(stmt.table);
   const alias = stmt.alias ?? stmt.table;
   const candidates: { row: Row; scope: ScopeRow }[] = [];
@@ -342,14 +391,26 @@ export function executeUpdate(stmt: UpdateStmt, env: ExecutionEnv): ResultSet {
       throw error;
     }
   }
-  env.state.recordChange(changes);
-  return valuesToResult(returningNames(stmt.returning, table), returningRows, changes, env.state.lastInsertRowid);
+  const reportedChanges = finalizeDmlChanges(totalBefore, changes, env);
+  return valuesToResult(
+    returningNames(stmt.returning, table),
+    returningRows,
+    reportedChanges,
+    env.state.lastInsertRowid,
+  );
 }
 
 export function executeDelete(stmt: DeleteStmt, env: ExecutionEnv): ResultSet {
+  return withDmlCtes(stmt.with, env, () => executeDeleteCore(stmt, env));
+}
+
+function executeDeleteCore(stmt: DeleteStmt, env: ExecutionEnv): ResultSet {
   if (env.state.isVirtualTable(stmt.table)) {
     return executeVirtualDelete(stmt, env);
   }
+  const totalBefore = env.state.totalChanges;
+  const view = writableView(stmt.table, "DELETE", env);
+  if (view) return executeViewDelete(stmt, view, env, totalBefore);
   const table = env.state.getWritableTable(stmt.table);
   const selectedSource =
     stmt.where === null
@@ -373,8 +434,142 @@ export function executeDelete(stmt: DeleteStmt, env: ExecutionEnv): ResultSet {
     fireDeleteTriggers("AFTER", table, row, env);
     changes++;
   }
-  env.state.recordChange(changes);
-  return valuesToResult(returningNames(stmt.returning, table), returningRows, changes, env.state.lastInsertRowid);
+  const reportedChanges = finalizeDmlChanges(totalBefore, changes, env);
+  return valuesToResult(
+    returningNames(stmt.returning, table),
+    returningRows,
+    reportedChanges,
+    env.state.lastInsertRowid,
+  );
+}
+
+function withDmlCtes(withClause: WithClause | null, env: ExecutionEnv, execute: () => ResultSet): ResultSet {
+  if (!withClause) return execute();
+  const savedCtes = new Map(env.ctes);
+  try {
+    executeWith(withClause, env);
+    return execute();
+  } finally {
+    env.ctes.clear();
+    for (const [name, result] of savedCtes) env.ctes.set(name, result);
+  }
+}
+
+function handleConflictRollback(rollback: boolean, error: unknown, env: ExecutionEnv): void {
+  if (
+    rollback &&
+    env.transactions.inTransaction &&
+    error instanceof SqliteError &&
+    error.category.startsWith("constraint")
+  ) {
+    env.transactions.rollback();
+  }
+}
+
+interface WritableView {
+  schema: string | null;
+  name: string;
+  view: ViewInfo;
+  table: Table;
+}
+
+function writableView(name: string, event: "INSERT" | "UPDATE" | "DELETE", env: ExecutionEnv): WritableView | null {
+  const { schema, bare } = splitQualifiedName(name);
+  const db = env.state.databaseForSchema(schema, name);
+  const view = db.views.get(bare.toLowerCase());
+  if (!view) return null;
+  const hasInsteadOf = [...db.triggers.values()].some(
+    (trigger) =>
+      trigger.tableName.toLowerCase() === bare.toLowerCase() && trigger.event === event && trigger.timing === "INSTEAD",
+  );
+  if (!hasInsteadOf) {
+    env.state.getWritableTable(name);
+    throw new SqliteError(`cannot modify ${bare} because it is a view`, "other");
+  }
+  const names = view.columns ?? executeSelect(view.select, env).columns;
+  return {
+    schema,
+    name: bare,
+    view,
+    table: new Table(
+      bare,
+      names.map((column) => makeColumnInfo(column, null)),
+    ),
+  };
+}
+
+function executeViewInsert(stmt: InsertStmt, target: WritableView, env: ExecutionEnv, totalBefore: number): ResultSet {
+  const columnNames = stmt.columns ?? target.table.columns.map((column) => column.name);
+  for (const name of columnNames) columnOf(target.table, name);
+  const suppliedIndexes = target.table.columns.map((column) =>
+    columnNames.findIndex((name) => name.toLowerCase() === normalizeColumnName(column.name)),
+  );
+  for (const source of evaluateInsertSource(stmt, env)) {
+    if (source.length !== columnNames.length) {
+      throw new SqliteError(`${source.length} values for ${columnNames.length} columns`, "other");
+    }
+    const values = new Map<string, SqlValue>();
+    target.table.columns.forEach((column, index) => {
+      const supplied = suppliedIndexes[index] ?? -1;
+      values.set(normalizeColumnName(column.name), supplied < 0 ? null : (source[supplied] ?? null));
+    });
+    fireInsertTriggers("INSTEAD", target.table, values, null, env);
+  }
+  const changes = finalizeDmlChanges(totalBefore, 0, env);
+  return emptyResult(changes, env.state.lastInsertRowid);
+}
+
+function executeViewUpdate(stmt: UpdateStmt, target: WritableView, env: ExecutionEnv, totalBefore: number): ResultSet {
+  const alias = stmt.alias ?? target.name;
+  const scopes = scanView(target, alias, env);
+  const updatedColumns = new Set(
+    stmt.set.flatMap((item) => item.columns.map((name) => columnOf(target.table, name).name)),
+  );
+  for (const scope of scopes) {
+    const ctx = env.createEvalContext(scope);
+    if (stmt.where && isTruthySql(evalExpr(stmt.where, ctx)) !== true) continue;
+    const oldRow = viewRow(target.table, scope);
+    const updates = evaluateSet(stmt.set, target.table, ctx);
+    const newValues = mergedValues(target.table, oldRow, updates);
+    fireUpdateTriggers("INSTEAD", target.table, oldRow, newValues, updatedColumns, env);
+  }
+  const changes = finalizeDmlChanges(totalBefore, 0, env);
+  return emptyResult(changes, env.state.lastInsertRowid);
+}
+
+function executeViewDelete(stmt: DeleteStmt, target: WritableView, env: ExecutionEnv, totalBefore: number): ResultSet {
+  const alias = stmt.alias ?? target.name;
+  for (const scope of scanView(target, alias, env)) {
+    if (stmt.where && isTruthySql(evalExpr(stmt.where, env.createEvalContext(scope))) !== true) continue;
+    fireDeleteTriggers("INSTEAD", target.table, viewRow(target.table, scope), env);
+  }
+  const changes = finalizeDmlChanges(totalBefore, 0, env);
+  return emptyResult(changes, env.state.lastInsertRowid);
+}
+
+function scanView(target: WritableView, alias: string, env: ExecutionEnv): ScopeRow[] {
+  return scanFrom(
+    { type: "table", schema: target.schema, name: target.name, alias: alias === target.name ? null : alias },
+    env,
+  );
+}
+
+function viewRow(table: Table, scope: ScopeRow): Row {
+  const values = new Map<string, SqlValue>();
+  for (const column of table.columns) {
+    const key = normalizeColumnName(column.name);
+    const cell = scope.cells.find((candidate) => normalizeColumnName(candidate.name) === key);
+    values.set(key, cell?.value ?? null);
+  }
+  return { rowid: scope.rowid ?? 0, values };
+}
+
+function finalizeDmlChanges(totalBefore: number, directChanges: number, env: ExecutionEnv, last?: Rowid): number {
+  const triggerChanges = env.state.totalChanges - totalBefore;
+  env.state.recordChange(directChanges, last);
+  const reportedChanges = triggerChanges + directChanges;
+  env.state.changes = reportedChanges;
+  return reportedChanges;
 }
 
 function mergedValues(table: Table, row: Row, updates: Map<string, SqlValue>): Map<string, SqlValue> {
@@ -776,7 +971,7 @@ function applyReferentialDelete(parent: Table, row: Row, env: ExecutionEnv): num
         } else if (constraint.onDelete === "SET DEFAULT") {
           const updated = updateOne(child, candidate, defaultUpdates(child, constraint.columns, env), env);
           changes += 1 + updated.cascaded;
-        } else if (!fkIsDeferred(constraint, env)) {
+        } else if (constraint.onDelete === "RESTRICT" || !fkIsDeferred(constraint, env)) {
           throw new SqliteError("FOREIGN KEY constraint failed", "constraint_foreign", "SQLITE_CONSTRAINT_FOREIGNKEY");
         }
       }
@@ -821,7 +1016,7 @@ function applyReferentialUpdate(parent: Table, before: Row, after: Row, env: Exe
         } else if (constraint.onUpdate === "SET DEFAULT") {
           const updated = updateOne(child, candidate, defaultUpdates(child, constraint.columns, env), env);
           changes += 1 + updated.cascaded;
-        } else if (!fkIsDeferred(constraint, env)) {
+        } else if (constraint.onUpdate === "RESTRICT" || !fkIsDeferred(constraint, env)) {
           throw new SqliteError("FOREIGN KEY constraint failed", "constraint_foreign", "SQLITE_CONSTRAINT_FOREIGNKEY");
         }
       }

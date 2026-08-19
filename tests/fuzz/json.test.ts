@@ -74,4 +74,22 @@ describe("json differential fuzz", () => {
       fuzzAssertConfig(40),
     );
   });
+
+  test("random JSON subtype-preserving chains match SQLite", () => {
+    fc.assert(
+      fc.property(jsonValue, fc.constantFrom("array", "object", "set"), (value, chain) => {
+        const literal = sqlLiteral(toJsonText(value));
+        const sql =
+          chain === "array"
+            ? `SELECT json_array(json_extract(json(${literal}), '$')) AS v`
+            : chain === "object"
+              ? `SELECT json_object('v', json(${literal})) AS v`
+              : `SELECT json(json_set('{}', '$.v', json(${literal}))) AS v`;
+        withDatabases((memory, sqlite) => {
+          compareOrReport("json-subtype-chain", sql, { value, chain }, memory.query(sql), sqlite.query(sql));
+        });
+      }),
+      fuzzAssertConfig(40),
+    );
+  });
 });

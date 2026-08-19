@@ -1,12 +1,14 @@
 import type { SelectStmt } from "../ast/nodes.ts";
 import type { FunctionContext, FunctionRegistry } from "../functions/registry.ts";
-import type { SqlValue, StorageClass } from "../types/value.ts";
+import type { Affinity, SqlValue, StorageClass } from "../types/value.ts";
 import type { FtsMatchCursor } from "../vtable/fts5.ts";
 
 /** Column / parameter / function resolution used by {@link evalExpr}. */
 export interface EvalContext {
   resolveColumn(table: string | null, name: string): SqlValue;
   resolveStorageClass?(table: string | null, name: string): StorageClass;
+  /** Declared column affinity when available (for comparisons). */
+  resolveAffinity?(table: string | null, name: string): Affinity | null;
   /** Declared column collation when available (for inheritance). */
   resolveCollation?(table: string | null, name: string): string | null;
   getParameter(name: string | number): SqlValue;

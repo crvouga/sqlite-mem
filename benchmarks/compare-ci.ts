@@ -1,5 +1,4 @@
 import path from "node:path";
-import { compareReports } from "./harness/report.ts";
 import type { BenchReport } from "./harness/types.ts";
 
 const root = path.resolve(import.meta.dir);
@@ -27,30 +26,43 @@ if (basePlatform && currentPlatform && basePlatform !== currentPlatform) {
   );
   process.exit(1);
 }
-const slowerThan = Number(process.env.BENCH_REGRESSION_FACTOR ?? 2.5);
-const regressions = compareReports(baseline, current, slowerThan);
+const p95Factor = Number(process.env.BENCH_REGRESSION_FACTOR ?? 2.5);
+const medianFactor = Number(process.env.BENCH_REGRESSION_MEDIAN ?? 1.1);
+const currentByKey = new Map(current.results.map((result) => [`${result.engine}::${result.name}`, result]));
+const p95Regressions: string[] = [];
+const medianRegressions: string[] = [];
+for (const base of baseline.results) {
+  const match = currentByKey.get(`${base.engine}::${base.name}`);
+  if (!match) continue;
+  if (base.p95 > 0 && !(base.p95 < 0.05 && match.p95 < 0.2) && match.p95 > base.p95 * p95Factor) {
+    p95Regressions.push(
+      `${base.engine} ${base.name}: p95 ${base.p95.toFixed(3)}ms → ${match.p95.toFixed(3)}ms (${(match.p95 / base.p95).toFixed(2)}×)`,
+    );
+  }
+  if (base.p50 > 0 && !(base.p50 < 0.05 && match.p50 < 0.2) && match.p50 > base.p50 * medianFactor) {
+    medianRegressions.push(
+      `${base.engine} ${base.name}: median ${base.p50.toFixed(3)}ms → ${match.p50.toFixed(3)}ms (${(match.p50 / base.p50).toFixed(2)}×)`,
+    );
+  }
+}
 
 const sizeRegressions: string[] = [];
-const currentByKey = new Map(current.results.map((result) => [`${result.engine}::${result.name}`, result]));
 for (const base of baseline.results) {
   const match = currentByKey.get(`${base.engine}::${base.name}`);
   const before = base.extra?.snapshotBytes;
   const after = match?.extra?.snapshotBytes;
-  if (typeof before === "number" && typeof after === "number" && before > 0 && after > before * slowerThan) {
+  if (typeof before === "number" && typeof after === "number" && before > 0 && after > before * p95Factor) {
     sizeRegressions.push(`${base.name}: snapshot ${before}B → ${after}B`);
   }
 }
 
-if (regressions.length === 0 && sizeRegressions.length === 0) {
-  console.log(`No regressions vs ${baselinePath} (threshold ${slowerThan}× p95)`);
+if (p95Regressions.length === 0 && medianRegressions.length === 0 && sizeRegressions.length === 0) {
+  console.log(`No regressions vs ${baselinePath} (thresholds ${p95Factor}× p95, ${medianFactor}× median)`);
   process.exit(0);
 }
 
-console.error(`Performance regressions (>${slowerThan}× p95 or snapshot size):`);
-for (const item of regressions) {
-  console.error(
-    `  ${item.engine} ${item.name}: p95 ${item.baselineP95.toFixed(3)}ms → ${item.currentP95.toFixed(3)}ms (${item.ratio.toFixed(2)}×)`,
-  );
-}
+console.error(`Performance regressions (>${p95Factor}× p95, >${medianFactor}× median, or snapshot size):`);
+for (const line of p95Regressions) console.error(`  ${line}`);
+for (const line of medianRegressions) console.error(`  ${line}`);
 for (const line of sizeRegressions) console.error(`  ${line}`);
 process.exit(1);

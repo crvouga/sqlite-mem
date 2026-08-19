@@ -110,6 +110,35 @@ After the overhaul, PK lookups are about **4–5×** slower than native SQLite i
 - gzip **79 KB**
 - brotli **65 KB**
 
+## Phase 2 baseline (2026-08-19)
+
+Recorded on **darwin arm64, Bun 1.3.14**. `bun run benchmark:ci` produced the numbers below, then correctly stopped at the platform guard because the committed `ci-baseline.json` is Linux. The Linux CI baseline still needs to be refreshed from the `ci-latest-linux` artifact; it was not overwritten with Darwin data.
+
+| Benchmark | Phase 2 p50 | Phase 2 p95 | Throughput |
+| --- | --- | --- | --- |
+| Cold process + import + Database + first query | 23.31 ms | 24.51 ms | 43 starts/sec |
+| Prepared PK executes ×20 | 0.139 ms | 0.395 ms | 102k executes/sec |
+| Reparse + PK execute ×20 | 0.493 ms | 0.532 ms | 40.6k executes/sec |
+| PK lookup / 1000 rows ×20 | 0.063 ms | 0.088 ms | 314k lookups/sec |
+| Join small⋈large / 1000 | 0.034 ms | 0.071 ms | 26.3k queries/sec |
+| Join small⋈large / 100,000 (full tier) | 0.121 ms | 0.241 ms | 6.8k queries/sec |
+| Snapshot export / ~1 MB | ~1.97 ms mean | n/a (3 samples) | 507/sec |
+| Snapshot hydrate / ~1 MB | ~1.15 ms mean | n/a (3 samples) | 868/sec |
+
+The full tier now also includes an indexed 100,000-row JOIN. GROUP BY + aggregate coverage was already present at 1,000 rows (default) and 100,000 rows (full), so it was retained rather than duplicated.
+
+Retained heap for 100,000 small rows was **94,323,119 bytes (943.2 bytes/row)**. Budgets are 130,000,000 bytes and 1,300 bytes/row.
+
+Chromium with CDP 4× CPU throttle measured **0.60 ms p95** for 20 prepared PK lookups and **5.40 ms p95** for 1,000 prepared executes. Both pass the 3× smoke tolerance against `results/throttle-baseline.json`.
+
+### Phase 2 measured optimization
+
+`Table.allocateRowid()` previously scanned every existing rowid before each generated-rowid insert. A cached maximum now makes the monotonic case O(1); deleting the maximum invalidates the cache so SQLite's non-`AUTOINCREMENT` maximum-rowid reuse remains unchanged.
+
+On `tx/batched-inserts/10000` (Darwin, default tier), the mean sample fell from **3.87 s to 1.95 s** (**49.6% lower**), while throughput rose from **2,582 to 5,133 inserts/sec** (**1.99×**). The remaining cost is constrained insert validation/index work.
+
+The CI regression gate now independently enforces the existing **2.5× p95** ceiling and a **1.10× median** ceiling (`BENCH_REGRESSION_FACTOR`, `BENCH_REGRESSION_MEDIAN`).
+
 ## Target status
 
 See [TARGETS.md](TARGETS.md). All listed mobile interactive / snapshot / bundle targets **PASS**.

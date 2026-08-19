@@ -52,6 +52,17 @@ Chrome `performance.memory` on this profile is quantized (~10 MB) and is not a r
 
 Hydration adopts decoded state (no extra `DatabaseState.clone()`). Target: **peak amplification from an extra full clone on restore = removed**. PASS.
 
+The Phase 2 retained-heap workload inserts 100,000 small `(INTEGER, TEXT)` rows. On darwin arm64 with Bun 1.3.14 it measured **94,323,119 bytes**, or **943.2 bytes/row**. `budgets.json` allows 130,000,000 bytes / 1,300 bytes per row (about 38% headroom) to absorb GC and allocator variance while still catching a new per-row copy or container.
+
+Run `bun run benchmark:memory`; CI runs the same fail-closed budget check.
+
+## Regression gates
+
+- p95 must remain within `BENCH_REGRESSION_FACTOR` (default **2.5×**) of the same-platform baseline.
+- Median must remain within `BENCH_REGRESSION_MEDIAN` (default **1.10×**).
+- Sub-50µs measurements retain the existing absolute-noise exemption.
+- `bun run test:browser` applies Chromium **4× CPU throttle** and checks PK lookup / prepared execution p95 against `results/throttle-baseline.json` with a **3×** smoke tolerance.
+
 ## Hotspot targets (Bun, after production pass)
 
 Measured on darwin arm64 Bun 1.3.14; CI gate uses linux numbers from `ci-baseline.json`.
@@ -68,7 +79,8 @@ Measured on darwin arm64 Bun 1.3.14; CI gate uses linux numbers from `ci-baselin
 
 ```bash
 bun run benchmark          # Bun, default tier
-bun run benchmark:ci       # small suite + 2.5× p95 gate vs committed baseline
+bun run benchmark:ci       # CI suite + p95/median regression gates + memory budget
 bun run benchmark:bun      # full tier + bun:sqlite comparison
 bun run benchmark:bundle   # dist sizes
+bun run test:browser       # built ESM in Chromium with 4× CPU throttle
 ```

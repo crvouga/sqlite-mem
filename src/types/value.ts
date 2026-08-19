@@ -164,6 +164,34 @@ export function applyAffinity(value: SqlValue, affinity: Affinity): SqlValue {
   }
 }
 
+/**
+ * Apply SQLite comparison affinity rules before comparing two values.
+ * A null affinity represents an expression with no affinity.
+ */
+export function applyComparisonAffinity(
+  left: SqlValue,
+  right: SqlValue,
+  leftAffinity: Affinity | null,
+  rightAffinity: Affinity | null,
+): [SqlValue, SqlValue] {
+  const leftNumeric = leftAffinity === "INTEGER" || leftAffinity === "REAL" || leftAffinity === "NUMERIC";
+  const rightNumeric = rightAffinity === "INTEGER" || rightAffinity === "REAL" || rightAffinity === "NUMERIC";
+  const leftNone = leftAffinity === null || leftAffinity === "BLOB";
+  const rightNone = rightAffinity === null || rightAffinity === "BLOB";
+
+  if (leftNumeric && (rightAffinity === "TEXT" || rightNone)) {
+    const affinity = leftAffinity === "REAL" ? "REAL" : "NUMERIC";
+    return [left, applyAffinity(right, affinity)];
+  }
+  if (rightNumeric && (leftAffinity === "TEXT" || leftNone)) {
+    const affinity = rightAffinity === "REAL" ? "REAL" : "NUMERIC";
+    return [applyAffinity(left, affinity), right];
+  }
+  if (leftAffinity === "TEXT" && rightNone) return [left, applyAffinity(right, "TEXT")];
+  if (rightAffinity === "TEXT" && leftNone) return [applyAffinity(left, "TEXT"), right];
+  return [left, right];
+}
+
 /** Parse `value` as a number, or `null` when it is not numeric. */
 export function coerceToNumber(value: SqlValue): number | null {
   if (value === null) return null;

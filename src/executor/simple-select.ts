@@ -2,7 +2,7 @@ import type { Expr, ResultColumn, SelectStmt } from "../ast/nodes.ts";
 import { conjunctions, equalityAgainstConst, lookupTableRows, tryJoinEqualityKeys } from "../planner/access.ts";
 import type { Row } from "../storage/row.ts";
 import type { Table } from "../storage/table.ts";
-import { compareSql, toInteger, type SqlValue } from "../types/value.ts";
+import { applyAffinity, compareSql, toInteger, type SqlValue } from "../types/value.ts";
 import type { ExecutionEnv } from "./env.ts";
 import { type ResultSet, valuesToResult } from "./result.ts";
 
@@ -61,7 +61,11 @@ export function tryExecuteSimpleSelect(stmt: SelectStmt, env: ExecutionEnv): Res
       } catch {
         return null;
       }
-      filters.push({ column: eq.column.toLowerCase(), value });
+      const column = eq.column.toLowerCase();
+      const affinity = isRowidName(column)
+        ? "INTEGER"
+        : table.columns.find((item) => (item.nameLower ?? item.name.toLowerCase()) === column)?.affinity;
+      filters.push({ column, value: affinity ? applyAffinity(value, affinity) : value });
     }
   }
 

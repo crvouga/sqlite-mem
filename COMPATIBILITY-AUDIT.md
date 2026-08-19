@@ -69,34 +69,45 @@ Prepared statements / errors / snapshot:
   VERIFIED — schema invalidation re-prepares; SQLM logical round-trip VERIFIED
 
   Differential tests:
-  Total: 727 under `bun test` (contract + fuzz + harness)
-  Passed: 727
+  Total: 872 under `bun test` (contract + fuzz + harness) after hardening pass
+  Passed: 872
   Failed: 0
 
 Stateful / fuzz:
   Seeds: 0x5a17e0e1 (+ SQLITE_MEM_FUZZ_SEED override)
   Combination fuzz: tests/fuzz/combinations-scope3.test.ts
   FTS fuzz: tests/fuzz/fts.test.ts
+  Collate / window / CTE+DML / JSON subtype fuzz extended
   Mismatches: 0
 
-New incompatibilities found & fixed (this pass):
-  1. Missing ~85 oracle builtins (math/string/date/window/uuid/ieee754/…)
-  2. Missing modules FTS3/4, RTREE, dbstat, bytecode, tables_used, fts5vocab
-  3. ANALYZE/REINDEX/VACUUM not executed
-  4. Row-value comparisons threw misuse instead of SQLite semantics
-  5. Inventory asserted builtins absent (Scope-3 inverted)
-  6. No requirements-matrix ingest / no test:sqlite-compat gate
+Hardening pass (2026-08-19) — incompatibilities found & fixed:
+  1. Comparison affinity (INTEGER/TEXT/NUMERIC column vs literal) missing
+  2. WITH on UPDATE/DELETE/INSERT VALUES dispatched as SELECT only
+  3. Plain INTEGER PRIMARY KEY never reused deleted max rowid
+  4. date() `weekday N` modifier unimplemented
+  5. REGEXP operator not parsed (now calls missing regexp() like oracle)
+  6. last_insert_rowid() stale inside AFTER INSERT triggers
+  7. INSTEAD OF triggers never fired; view DML rejected
+  8. INSERT/UPDATE OR ROLLBACK / OR FAIL not distinguished
+  9. Window GROUPS/RANGE frames, window FILTER, recursive CTE queue edges
+  10. Collation-aware GROUP BY; FTS3 matchinfo format variants; external-content delete
 
-Remaining known differences:
+Remaining known differences / intentional:
   Custom SQLM snapshots; deterministic random()/'now';
-  EXPLAIN/INDEXED BY stubs/no-ops; some PRAGMA storage no-ops;
+  EXPLAIN stubs (shape contracts only); INDEXED BY no-op (documented);
+  some PRAGMA storage no-ops; FTS shadow-table changes() diverge;
+  MATERIALIZED/NOT MATERIALIZED stored but both materialize today;
+  PRAGMA case_sensitive_like not implemented;
+  generate_series is sqlite-mem extension (not in bun:sqlite default);
   BigInt beyond Number.MAX_SAFE_INTEGER without bun safeIntegers;
-  NOT APPLICABLE C API / on-disk / VFS surfaces.
+  NOT APPLICABLE C API / on-disk / VFS surfaces; uri.html remapped N/A.
 
 Final assessment:
   Verified against SQLite 3.51.0 (bun:sqlite). Oracle function/module
   inventory is closed (0 missing). Requirements matrix ingested with
   zero unknown statuses. Gate: `bun run test:sqlite-compat`.
+  Hardening pass closed construct-level P0 gaps from docs/PARITY-GAPS.md;
+  FTS/EXPLAIN remain PARTIALLY VERIFIED honestly.
 ```
 
 ---
@@ -144,10 +155,11 @@ Special commands verified:
   delete-all / merge / automerge: error parity with oracle where probed
 
 Differential tests:
-  Passed: 656 (contract + fuzz + harness)
+  Passed: 872 (contract + fuzz + harness)
   Failed: 0
   FTS contract: tests/contract/fts/basic.test.ts,
                 tests/contract/fts/comprehensive.test.ts
+                (+ matchinfo formats, external-content, trigger maintenance)
 
 Fuzz cases:
   Generated: fast-check seed 0x5a17e0e1 (override SQLITE_MEM_FUZZ_SEED)

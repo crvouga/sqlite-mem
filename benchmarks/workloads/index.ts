@@ -4,6 +4,7 @@ import { indexSpecs, joinSpecs, parserSpecs, startupSpecs, transactionSpecs } fr
 import { hotspotSpecs } from "./hotspots.ts";
 import { ftsSpecs, jsonSpecs } from "./json-fts.ts";
 import { largeSpecs } from "./large.ts";
+import { memoryFootprintSpecs } from "./memory-footprint.ts";
 import { microSpecs } from "./micro.ts";
 import { snapshotSpecs } from "./snapshots.ts";
 import type { BenchSpec } from "../harness/types.ts";
@@ -16,6 +17,7 @@ export function allSpecs(): BenchSpec[] {
     ...compareAllSpecs(),
     ...appSpecs(),
     ...largeSpecs(),
+    ...memoryFootprintSpecs(),
     ...jsonSpecs(),
     ...ftsSpecs(),
     ...transactionSpecs(),
