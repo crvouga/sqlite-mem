@@ -23,7 +23,11 @@ export function compareOrReport(
   memory: QueryResult,
   sqlite: QueryResult,
 ): void {
-  const comparison = deepCompareResults(memory, sqlite);
+  const comparison = deepCompareResults(memory, sqlite, {
+    messageTier: "B",
+    ignoreErrorPhase: true,
+    ignoreWriteCounters: (memory.columns?.length ?? 0) > 0 || (sqlite.columns?.length ?? 0) > 0,
+  });
   if (comparison.equal) return;
 
   throw new Error(

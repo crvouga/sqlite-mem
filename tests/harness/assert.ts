@@ -1,9 +1,19 @@
 import { expect } from "bun:test";
 import { type CompareOptions, deepCompareResults, normalizeError } from "./normalize.ts";
-import type { QueryResult, SqlValue } from "./types.ts";
+import type { QueryResult, RowidJsKind, SqlValue } from "./types.ts";
 
 export function expectParity(a: QueryResult, b: QueryResult, options?: CompareOptions): void {
-  const comparison = deepCompareResults(a, b, options);
+  const queryShaped = (a.columns?.length ?? 0) > 0 || (b.columns?.length ?? 0) > 0;
+  const bothFailed = a.ok === false && b.ok === false;
+  const comparison = deepCompareResults(a, b, {
+    // SELECT leftovers: sqlite-mem `query()` reports db.changes from the last DML; bun:sqlite often reports 0.
+    ignoreWriteCounters: queryShaped,
+    // Oracle often fails at prepare; sqlite-mem at step. Category + message remain the contract.
+    ignoreErrorPhase: bothFailed,
+    // bun:sqlite SQLITE_MISUSE / SQLITE_CONSTRAINT_* vs engine SQLITE_ERROR for the same category.
+    ignoreSqliteCode: bothFailed,
+    ...options,
+  });
   if (!comparison.equal) {
     expect(comparison.reason ?? "results differ").toBe(undefined);
   }
@@ -11,7 +21,7 @@ export function expectParity(a: QueryResult, b: QueryResult, options?: CompareOp
 
 /** FTS bm25/rank: order-sensitive compare with ULP-scale real tolerance (1e-15). */
 export function expectFtsRankParity(a: QueryResult, b: QueryResult): void {
-  expectParity(a, b, { realEpsilon: 1e-15 });
+  expectParity(a, b, { realEpsilon: 1e-15, ignoreWriteCounters: true });
 }
 
 function errorFromUnknown(error: unknown): QueryResult {
@@ -26,6 +36,9 @@ function errorFromUnknown(error: unknown): QueryResult {
       rows: [],
       changes: 0,
       lastInsertRowid: 0,
+      lastInsertRowidKind: "number",
+      totalChanges: 0,
+      inTransaction: false,
       error: normalizeError(
         err.message,
         err.category as QueryResult["error"] extends { category: infer C } ? C : never,
@@ -40,6 +53,9 @@ function errorFromUnknown(error: unknown): QueryResult {
     rows: [],
     changes: 0,
     lastInsertRowid: 0,
+    lastInsertRowidKind: "number",
+    totalChanges: 0,
+    inTransaction: false,
     error: normalizeError(message),
   };
 }
@@ -56,10 +72,17 @@ export function runCatching(fn: () => QueryResult | undefined): QueryResult {
       rows: [],
       changes: 0,
       lastInsertRowid: 0,
+      lastInsertRowidKind: "number",
+      totalChanges: 0,
+      inTransaction: false,
     };
   } catch (error) {
     return errorFromUnknown(error);
   }
+}
+
+export function rowidKind(value: number | bigint): RowidJsKind {
+  return typeof value === "bigint" ? "bigint" : "number";
 }
 
 export function okResult(
@@ -68,6 +91,7 @@ export function okResult(
   changes = 0,
   lastInsertRowid: number | bigint = 0,
   values?: SqlValue[][],
+  extras?: Pick<QueryResult, "totalChanges" | "inTransaction">,
 ): QueryResult {
   return {
     ok: true,
@@ -75,6 +99,9 @@ export function okResult(
     rows,
     changes,
     lastInsertRowid,
+    lastInsertRowidKind: rowidKind(lastInsertRowid),
+    totalChanges: extras?.totalChanges ?? 0,
+    inTransaction: extras?.inTransaction ?? false,
     ...(values ? { values } : {}),
   };
 }

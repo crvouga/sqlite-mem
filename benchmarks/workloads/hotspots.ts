@@ -55,7 +55,7 @@ export function hotspotSpecs(): BenchSpec[] {
         datasetSize: n,
         tiers: n <= 100 ? CI : DEFAULT,
         warmup: 1,
-        iterations: Math.min(iterations, 6),
+        iterations,
         setup: (engine) => {
           fillEvents(engine, n, false);
           return engine.prepare("SELECT id FROM events WHERE created_at > ?");

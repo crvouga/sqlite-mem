@@ -1,55 +1,50 @@
 import { Database as BunDatabase, SQLiteError } from "bun:sqlite";
 import { okResult } from "../harness/assert.ts";
-import { categorizeErrorMessage, normalizeError } from "../harness/normalize.ts";
-import type { ContractDb, ContractStatement, ErrorCategory, QueryResult, SqlValue } from "../harness/types.ts";
+import {
+  categorizeErrorMessage,
+  normalizeError,
+  numericSqliteCodeToName,
+  sqliteCodeFromMessage,
+} from "../harness/normalize.ts";
+import { applyTxnSql, failResult, okWithSession } from "../harness/session.ts";
+import type {
+  ContractDb,
+  ContractStatement,
+  ErrorCategory,
+  ErrorPhase,
+  QueryResult,
+  SqlValue,
+} from "../harness/types.ts";
 
-function mapSqliteError(error: unknown): QueryResult {
+function bunSqliteCode(error: SQLiteError): string {
+  const extended = error as SQLiteError & { code?: string | number; errno?: number };
+  if (typeof extended.code === "string" && extended.code.startsWith("SQLITE_")) return extended.code;
+  if (typeof extended.code === "number") return numericSqliteCodeToName(extended.code);
+  if (typeof extended.errno === "number") return numericSqliteCodeToName(extended.errno);
+  return sqliteCodeFromMessage(error.message);
+}
+
+function mapSqliteError(
+  error: unknown,
+  extras: { totalChanges: number; inTransaction: boolean; phase?: ErrorPhase },
+): QueryResult {
   if (error instanceof SQLiteError) {
-    return {
-      ok: false,
-      columns: [],
-      rows: [],
-      changes: 0,
-      lastInsertRowid: 0,
-      error: normalizeError(error.message, categorizeErrorMessage(error.message)),
-    };
+    const category = categorizeErrorMessage(error.message);
+    return failResult(
+      normalizeError(error.message, category, { sqliteCode: bunSqliteCode(error), phase: extras.phase }),
+      extras.totalChanges,
+      extras.inTransaction,
+      extras.phase,
+    );
   }
 
   const message = error instanceof Error ? error.message : String(error);
-  return {
-    ok: false,
-    columns: [],
-    rows: [],
-    changes: 0,
-    lastInsertRowid: 0,
-    error: normalizeError(message),
-  };
-}
-
-function shapeStatementResult(stmt: ReturnType<BunDatabase["prepare"]>, params?: SqlValue[]): QueryResult {
-  const columns = columnNamesFromStatement(stmt);
-  let typeWidth = 0;
-  try {
-    typeWidth = Array.isArray(stmt.columnTypes) ? stmt.columnTypes.length : 0;
-  } catch {
-    // bun:sqlite throws for non-read-only statements (e.g. INSERT RETURNING).
-    typeWidth = 0;
-  }
-
-  const rawValues = params && params.length > 0 ? stmt.values(...(params as never[])) : stmt.values();
-  const valueRows = (rawValues ? [...rawValues] : []) as SqlValue[][];
-
-  const width = Math.max(typeWidth, valueRows[0]?.length ?? 0, columns.length);
-  const resolvedColumns = columns.length > 0 ? columns : Array.from({ length: width }, (_, i) => `column${i}`);
-  const rows = valueRows.map((values) => {
-    const object: Record<string, SqlValue> = {};
-    for (let i = 0; i < width; i++) {
-      const name = resolvedColumns[i] ?? `column${i}`;
-      if (!(name in object)) object[name] = values[i] ?? null;
-    }
-    return object;
-  });
-  return okResult(resolvedColumns, rows, 0, 0, valueRows);
+  return failResult(
+    normalizeError(message, undefined, { phase: extras.phase }),
+    extras.totalChanges,
+    extras.inTransaction,
+    extras.phase,
+  );
 }
 
 function columnNamesFromStatement(stmt: { columnNames?: string[] }): string[] {
@@ -65,44 +60,48 @@ function isMultiStatement(sql: string): boolean {
 }
 
 class RealSqliteStatement implements ContractStatement {
-  private readonly stmt: ReturnType<BunDatabase["prepare"]>;
-  private readonly onRun: (changes: number, lastInsertRowid: number | bigint) => void;
-
   constructor(
-    stmt: ReturnType<BunDatabase["prepare"]>,
-    onRun: (changes: number, lastInsertRowid: number | bigint) => void,
-  ) {
-    this.stmt = stmt;
-    this.onRun = onRun;
-  }
+    private readonly stmt: ReturnType<BunDatabase["prepare"]>,
+    private readonly adapter: RealSqliteAdapter,
+  ) {}
 
   run(...params: SqlValue[]): QueryResult {
     try {
       const result = params.length > 0 ? this.stmt.run(...(params as never[])) : this.stmt.run();
-      this.onRun(result.changes, result.lastInsertRowid);
-      return okResult([], [], result.changes, result.lastInsertRowid);
+      this.adapter.recordRun(result.changes, result.lastInsertRowid);
+      return this.adapter.okWrite(result.changes, result.lastInsertRowid);
     } catch (error) {
-      return mapSqliteError(error);
+      return this.adapter.mapStep(error);
     }
   }
 
   all(...params: SqlValue[]): QueryResult {
     try {
-      return shapeStatementResult(this.stmt, params);
+      return this.adapter.shapeStatementResult(this.stmt, params);
     } catch (error) {
-      return mapSqliteError(error);
+      return this.adapter.mapStep(error);
     }
   }
 
   get(...params: SqlValue[]): QueryResult {
     try {
-      const shaped = shapeStatementResult(this.stmt, params);
+      const shaped = this.adapter.shapeStatementResult(this.stmt, params);
       if (shaped.rows.length === 0) {
-        return okResult(shaped.columns, [], 0, 0, []);
+        return okResult(shaped.columns, [], shaped.changes, shaped.lastInsertRowid, [], {
+          totalChanges: shaped.totalChanges,
+          inTransaction: shaped.inTransaction,
+        });
       }
-      return okResult(shaped.columns, [shaped.rows[0]!], 0, 0, shaped.values ? [shaped.values[0]!] : undefined);
+      return okResult(
+        shaped.columns,
+        [shaped.rows[0]!],
+        shaped.changes,
+        shaped.lastInsertRowid,
+        shaped.values ? [shaped.values[0]!] : undefined,
+        { totalChanges: shaped.totalChanges, inTransaction: shaped.inTransaction },
+      );
     } catch (error) {
-      return mapSqliteError(error);
+      return this.adapter.mapStep(error);
     }
   }
 }
@@ -112,48 +111,126 @@ export class RealSqliteAdapter implements ContractDb {
   private lastChanges = 0;
   private lastInsertRowid: number | bigint = 0;
   private closed = false;
+  private txnOpen = false;
 
   constructor() {
     this.db = new BunDatabase(":memory:");
     this.db.exec("PRAGMA foreign_keys = ON");
   }
 
-  private recordRun(changes: number, lastInsertRowid: number | bigint): void {
+  recordRun(changes: number, lastInsertRowid: number | bigint): void {
     this.lastChanges = changes;
     this.lastInsertRowid = lastInsertRowid;
+  }
+
+  okWrite(changes: number, lastInsertRowid: number | bigint): QueryResult {
+    return okWithSession([], [], changes, lastInsertRowid, this.readTotalChanges(), this.txnOpen);
+  }
+
+  mapStep(error: unknown): QueryResult {
+    return mapSqliteError(error, {
+      totalChanges: this.readTotalChanges(),
+      inTransaction: this.txnOpen,
+      phase: "step",
+    });
+  }
+
+  shapeStatementResult(stmt: ReturnType<BunDatabase["prepare"]>, params?: SqlValue[]): QueryResult {
+    const columns = columnNamesFromStatement(stmt);
+    let typeWidth = 0;
+    try {
+      typeWidth = Array.isArray(stmt.columnTypes) ? stmt.columnTypes.length : 0;
+    } catch {
+      typeWidth = 0;
+    }
+
+    const rawValues = params && params.length > 0 ? stmt.values(...(params as never[])) : stmt.values();
+    const valueRows = (rawValues ? [...rawValues] : []) as SqlValue[][];
+
+    const width = Math.max(typeWidth, valueRows[0]?.length ?? 0, columns.length);
+    const resolvedColumns = columns.length > 0 ? columns : Array.from({ length: width }, (_, i) => `column${i}`);
+    const rows = valueRows.map((values) => {
+      const object: Record<string, SqlValue> = {};
+      for (let i = 0; i < width; i++) {
+        const name = resolvedColumns[i] ?? `column${i}`;
+        if (!(name in object)) object[name] = values[i] ?? null;
+      }
+      return object;
+    });
+    return okWithSession(
+      resolvedColumns,
+      rows,
+      this.lastChanges,
+      this.lastInsertRowid,
+      this.readTotalChanges(),
+      this.txnOpen,
+      valueRows,
+    );
   }
 
   exec(sql: string, params?: SqlValue[]): QueryResult {
     if (this.closed) return this.closedError();
     try {
       if (params && params.length > 0) {
-        const stmt = this.db.prepare(sql);
+        let stmt: ReturnType<BunDatabase["prepare"]>;
+        try {
+          stmt = this.db.prepare(sql);
+        } catch (error) {
+          return mapSqliteError(error, {
+            totalChanges: this.readTotalChanges(),
+            inTransaction: this.txnOpen,
+            phase: "prepare",
+          });
+        }
         const result = stmt.run(...(params as never[]));
         this.recordRun(result.changes, result.lastInsertRowid);
-        return okResult([], [], this.lastChanges, this.lastInsertRowid);
+        this.txnOpen = applyTxnSql(sql, this.txnOpen);
+        return this.okWrite(this.lastChanges, this.lastInsertRowid);
       }
 
-      // Multi-statement scripts must use exec — prepare only binds the first statement.
       if (isMultiStatement(sql)) {
         this.db.exec(sql);
         this.refreshCountersFromSqlite();
-        return okResult([], [], this.lastChanges, this.lastInsertRowid);
+        this.txnOpen = applyTxnSql(sql, this.txnOpen);
+        for (const part of sql.split(";")) this.txnOpen = applyTxnSql(part, this.txnOpen);
+        return this.okWrite(this.lastChanges, this.lastInsertRowid);
       }
 
-      // Prefer prepare().run() so changes/lastInsertRowid are live for single statements.
       let stmt: ReturnType<BunDatabase["prepare"]>;
       try {
         stmt = this.db.prepare(sql);
       } catch {
-        this.db.exec(sql);
-        this.refreshCountersFromSqlite();
-        return okResult([], [], this.lastChanges, this.lastInsertRowid);
+        try {
+          this.db.exec(sql);
+          this.refreshCountersFromSqlite();
+          this.txnOpen = applyTxnSql(sql, this.txnOpen);
+          return this.okWrite(this.lastChanges, this.lastInsertRowid);
+        } catch (error) {
+          return mapSqliteError(error, {
+            totalChanges: this.readTotalChanges(),
+            inTransaction: this.txnOpen,
+            phase: "prepare",
+          });
+        }
       }
-      const result = stmt.run();
-      this.recordRun(result.changes, result.lastInsertRowid);
-      return okResult([], [], this.lastChanges, this.lastInsertRowid);
+      try {
+        const result = stmt.run();
+        this.recordRun(result.changes, result.lastInsertRowid);
+        this.txnOpen = applyTxnSql(sql, this.txnOpen);
+        return this.okWrite(this.lastChanges, this.lastInsertRowid);
+      } catch (error) {
+        return mapSqliteError(error, {
+          totalChanges: this.readTotalChanges(),
+          inTransaction: this.txnOpen,
+          phase: "step",
+        });
+      }
     } catch (error) {
-      return mapSqliteError(error);
+      return mapSqliteError(error, {
+        totalChanges: this.readTotalChanges(),
+        inTransaction: this.txnOpen,
+        phase: "step",
+      });
     }
   }
 
@@ -166,13 +243,35 @@ export class RealSqliteAdapter implements ContractDb {
     this.lastInsertRowid = rowidRow?.r ?? 0;
   }
 
+  private readTotalChanges(): number {
+    try {
+      const row = this.db.query("SELECT total_changes() AS c").get() as { c: number } | null;
+      return row?.c ?? 0;
+    } catch {
+      return 0;
+    }
+  }
+
   query(sql: string, params?: SqlValue[]): QueryResult {
     if (this.closed) return this.closedError();
     try {
       const q = this.db.prepare(sql);
-      return shapeStatementResult(q, params);
+      return this.shapeStatementResult(q, params);
     } catch (error) {
-      return mapSqliteError(error);
+      try {
+        this.db.prepare(sql);
+      } catch (prepareError) {
+        return mapSqliteError(prepareError, {
+          totalChanges: this.readTotalChanges(),
+          inTransaction: this.txnOpen,
+          phase: "prepare",
+        });
+      }
+      return mapSqliteError(error, {
+        totalChanges: this.readTotalChanges(),
+        inTransaction: this.txnOpen,
+        phase: "step",
+      });
     }
   }
 
@@ -182,11 +281,13 @@ export class RealSqliteAdapter implements ContractDb {
     }
     try {
       const stmt = this.db.prepare(sql);
-      return new RealSqliteStatement(stmt, (changes, lastInsertRowid) => {
-        this.recordRun(changes, lastInsertRowid);
-      });
+      return new RealSqliteStatement(stmt, this);
     } catch (error) {
-      const mapped = mapSqliteError(error);
+      const mapped = mapSqliteError(error, {
+        totalChanges: this.readTotalChanges(),
+        inTransaction: this.txnOpen,
+        phase: "prepare",
+      });
       throw new Error(mapped.error?.message ?? "prepare failed", {
         cause: { category: mapped.error?.category satisfies ErrorCategory | undefined },
       });
@@ -216,6 +317,7 @@ export class RealSqliteAdapter implements ContractDb {
     this.db.exec("PRAGMA foreign_keys = ON");
     this.lastChanges = 0;
     this.lastInsertRowid = 0;
+    this.txnOpen = false;
   }
 
   close(): void {
@@ -225,14 +327,15 @@ export class RealSqliteAdapter implements ContractDb {
     }
   }
 
+  inTransaction(): boolean {
+    return !this.closed && this.txnOpen;
+  }
+
+  totalChanges(): number {
+    return this.closed ? 0 : this.readTotalChanges();
+  }
+
   private closedError(): QueryResult {
-    return {
-      ok: false,
-      columns: [],
-      rows: [],
-      changes: 0,
-      lastInsertRowid: 0,
-      error: normalizeError("Database is closed", "misuse"),
-    };
+    return failResult(normalizeError("Database is closed", "misuse", { sqliteCode: "SQLITE_MISUSE", phase: "step" }));
   }
 }

@@ -195,8 +195,8 @@ job("test  (CI job)");
 await runStep("Run tests", ["bun", "run", "test:sqlite-compat"]);
 
 job("benchmark  (CI job)");
-// Mirrors .github/workflows/ci.yml Regression gate: real 2.5× compare when
-// platforms match; otherwise gate current vs itself (committed baseline is linux).
+// Mirrors .github/workflows/ci.yml Regression gate: real 2.5× p95 / 1.5× median
+// compare when platforms match; otherwise gate current vs itself (committed baseline is linux).
 await runStep("CI benchmarks", [
   "bun",
   "run",

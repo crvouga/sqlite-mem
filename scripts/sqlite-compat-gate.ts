@@ -5,6 +5,7 @@
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { EXPECTED_ORACLE_VERSIONS } from "../tests/harness/oracle-versions.ts";
 import { buildInventoryReport } from "./sqlite-inventory.ts";
 import { printScenarioSummary, validateScenarioCatalog } from "./sqlite-scenarios.ts";
 
@@ -16,7 +17,6 @@ const COMPAT = join(ROOT, "compat");
  * - macOS: dlopens Apple's `/usr/lib/libsqlite3.dylib` (3.51.0 on macOS 26)
  * - Linux/Windows bun 1.3.14: statically linked amalgamation 3.53.0
  */
-const EXPECTED_ORACLE_VERSIONS = new Set(["3.51.0", "3.53.0"]);
 
 interface CoverageFile {
   counts: {
@@ -101,7 +101,7 @@ function main(): void {
   console.log(`  oracle ${inventory.referenceSqliteVersion}`);
   console.log(`  functions covered ${inventory.implementedOracleFunctions.length}`);
   console.log(`  modules covered ${inventory.memoryModules.length}`);
-  console.log(`  scenarios mapped ${scenarios.stats.mapped}/${scenarios.stats.total}`);
+  console.log(`  scenarios mapped ${scenarios.stats.mapped}/${scenarios.stats.total} smoke ${scenarios.stats.smoke}`);
 }
 
 main();
