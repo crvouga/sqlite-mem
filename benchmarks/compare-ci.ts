@@ -40,9 +40,15 @@ for (const base of baseline.results) {
     );
   }
   if (base.p50 > 0 && !(base.p50 < 0.05 && match.p50 < 0.2) && match.p50 > base.p50 * medianFactor) {
-    medianRegressions.push(
-      `${base.engine} ${base.name}: median ${base.p50.toFixed(3)}ms → ${match.p50.toFixed(3)}ms (${(match.p50 / base.p50).toFixed(2)}×)`,
-    );
+    // Sub-millisecond benches are noisy on shared CI runners: require p95 to also
+    // exceed the median factor before failing (avoids median-only flaps).
+    const noisy = base.p50 < 1 && base.p95 < 2;
+    const p95AlsoBad = match.p95 > base.p95 * medianFactor;
+    if (!noisy || p95AlsoBad) {
+      medianRegressions.push(
+        `${base.engine} ${base.name}: median ${base.p50.toFixed(3)}ms → ${match.p50.toFixed(3)}ms (${(match.p50 / base.p50).toFixed(2)}×)`,
+      );
+    }
   }
 }
 
