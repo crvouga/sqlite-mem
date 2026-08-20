@@ -4,7 +4,7 @@ import { ExecutionEnv } from "../executor/env.ts";
 import { executeStatement } from "../executor/execute.ts";
 import { emptyResult, type ResultSet } from "../executor/result.ts";
 import { tokenize } from "../lexer/tokenize.ts";
-import { parse } from "../parser/index.ts";
+import { parseUnits } from "../parser/index.ts";
 import type { BindValue, QueryRow } from "../types/value.ts";
 import type { Database } from "./database.ts";
 
@@ -38,14 +38,17 @@ export class Statement {
   private namedPlan: ReturnType<typeof planNamedParameters> | null = null;
   private env: ExecutionEnv | null = null;
   private statements: AstStatement[];
+  private statementSqls: string[];
   private schemaVersion: number;
 
   private constructor(
     private readonly database: Database,
     private readonly sql: string,
     statements: AstStatement[],
+    statementSqls: string[],
   ) {
     this.statements = statements;
+    this.statementSqls = statementSqls;
     this.schemaVersion = database.state.schemaVersion;
   }
 
@@ -53,8 +56,19 @@ export class Statement {
    * Construct a {@link Statement} for {@link Database.prepare} / {@link Database.exec}.
    * @internal
    */
-  static create(database: Database, sql: string, statements: AstStatement[]): Statement {
-    return new Statement(database, sql, statements);
+  static create(database: Database, sql: string, statements: AstStatement[], statementSqls?: string[]): Statement {
+    return new Statement(database, sql, statements, statementSqls ?? statements.map(() => sql));
+  }
+
+  /** @internal Build from {@link parseUnits}. */
+  static createFromSql(database: Database, sql: string): Statement {
+    const units = parseUnits(sql);
+    return new Statement(
+      database,
+      sql,
+      units.map((u) => u.statement),
+      units.map((u) => u.sql),
+    );
   }
 
   /**
@@ -122,9 +136,11 @@ export class Statement {
     env.includeValues = true;
     this.bindNamed(env, params);
     let result: ResultSet | undefined;
-    for (const statement of this.statements) {
-      result = executeStatement(statement, env);
+    for (let i = 0; i < this.statements.length; i++) {
+      env.statementSql = this.statementSqls[i] ?? this.sql;
+      result = executeStatement(this.statements[i]!, env);
     }
+    env.statementSql = null;
     return result!;
   }
 
@@ -146,7 +162,9 @@ export class Statement {
 
   private reprepareIfSchemaChanged(): void {
     if (this.schemaVersion === this.database.state.schemaVersion) return;
-    this.statements = parse(this.sql);
+    const units = parseUnits(this.sql);
+    this.statements = units.map((u) => u.statement);
+    this.statementSqls = units.map((u) => u.sql);
     this.env = null;
     this.namedPlan = null;
     this.schemaVersion = this.database.state.schemaVersion;

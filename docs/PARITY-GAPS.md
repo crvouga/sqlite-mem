@@ -1,6 +1,8 @@
 # Differential parity gaps
 
-Construct-level coverage now lives in [`compat/scenarios.ts`](../compat/scenarios.ts). Run `bun run scenarios` for mapped vs promoted sections. IDs are `TOK-01`, `WIN-frame-04`, …; tests live under [`tests/contract/catalog/`](../tests/contract/catalog/). This file remains a historical P0 probe list.
+**Superseded for current inventory:** use [`docs/GAP-CATALOG.md`](GAP-CATALOG.md) (Phase 0, 2026-08-20). This file remains a historical P0 probe list; many “LIKELY DIVERGENCE” items below were closed in the 2026-08-19 hardening pass — see GAP-CATALOG “Closed since PARITY-GAPS”.
+
+Construct-level coverage now lives in [`compat/scenarios.ts`](../compat/scenarios.ts). Run `bun run scenarios` for mapped vs promoted sections. IDs are `TOK-01`, `WIN-frame-04`, …; tests live under [`tests/contract/catalog/`](../tests/contract/catalog/).
 
 Parity is proven **only** by `parity` / `execParity` / `errorParity` / `sequenceParity` / `matrixBoth` against `bun:sqlite` (and `divergence()` for README-specified differences). Isolated `new Database()` tests do not count for SQL dialect IDs.
 

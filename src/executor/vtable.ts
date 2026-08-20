@@ -1,5 +1,6 @@
 import type { CreateVirtualTableStmt } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
+import { normalizeMasterSql } from "../schema/master-sql.ts";
 import { normalizeColumnName } from "../storage/row.ts";
 import type { SqlValue } from "../types/value.ts";
 import type { Fts5VirtualTable } from "../vtable/fts5.ts";
@@ -7,7 +8,7 @@ import type { ExecutionEnv } from "./env.ts";
 import { emptyResult, type ResultSet } from "./result.ts";
 
 export function executeCreateVirtualTable(stmt: CreateVirtualTableStmt, env: ExecutionEnv): ResultSet {
-  env.state.createVirtualTable(stmt);
+  env.state.createVirtualTable(stmt, env.statementSql ? normalizeMasterSql(env.statementSql) : null);
   env.state.recordChange(0);
   return emptyResult(0, env.state.lastInsertRowid);
 }

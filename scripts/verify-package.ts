@@ -109,6 +109,12 @@ const forbiddenInBundle: Array<{ label: string; test: (text: string) => boolean 
   { label: "process.cwd", test: (t) => /\bprocess\.cwd\b/.test(t) },
   { label: "process.exit", test: (t) => /\bprocess\.exit\b/.test(t) },
   { label: "process.env", test: (t) => /\bprocess\.env\b/.test(t) },
+  { label: "WebAssembly", test: (t) => /\bWebAssembly\b/.test(t) },
+  { label: ".wasm asset", test: (t) => /\.wasm["'`]/.test(t) },
+  { label: "eval(", test: (t) => /\beval\s*\(/.test(t) },
+  { label: "new Function", test: (t) => /\bnew\s+Function\b/.test(t) },
+  { label: "new SharedArrayBuffer", test: (t) => /\bnew\s+SharedArrayBuffer\b/.test(t) },
+  { label: "Atomics.", test: (t) => /\bAtomics\s*\./.test(t) },
 ];
 for (const item of forbiddenInBundle) {
   if (item.test(bundle)) {

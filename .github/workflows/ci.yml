@@ -122,6 +122,12 @@ jobs:
       - name: Run tests
         run: bun run test:sqlite-compat
 
+      - name: Canaries
+        run: bun run test:canaries
+
+      - name: Browser SQL smoke
+        run: bun run test:browser-sql
+
   benchmark:
     name: Benchmark
     needs: [quality]

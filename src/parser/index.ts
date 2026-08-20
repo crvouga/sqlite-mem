@@ -1,10 +1,11 @@
 import type { Statement as ParsedStatement } from "../ast/nodes.ts";
 import { tokenize } from "../lexer/tokenize.ts";
-import { parseTokens } from "./parser.ts";
+import { type ParsedUnit, parseTokenUnits } from "./parser.ts";
 
 /** Parsed SQL statement AST (`SELECT`, `INSERT`, `CREATE TABLE`, …). */
 export type { Statement as ParsedStatement } from "../ast/nodes.ts";
-export { parseTokens } from "./parser.ts";
+export type { ParsedUnit } from "./parser.ts";
+export { parseTokens, parseTokenUnits } from "./parser.ts";
 
 /**
  * Tokenize `sql` and parse every semicolon-separated statement.
@@ -13,6 +14,12 @@ export { parseTokens } from "./parser.ts";
  * @returns AST statements in source order.
  */
 export function parse(sql: string): ParsedStatement[] {
-  const tokens = tokenize(sql);
-  return parseTokens(tokens);
+  return parseUnits(sql).map((unit) => unit.statement);
+}
+
+/**
+ * Parse SQL into AST + per-statement source slices (for `sqlite_master.sql`).
+ */
+export function parseUnits(sql: string): ParsedUnit[] {
+  return parseTokenUnits(tokenize(sql), sql);
 }

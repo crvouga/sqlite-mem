@@ -76,7 +76,7 @@ export function dumpLogicalState(db: ContractDb): QueryResult {
     outRows.push({
       section: "schema",
       key: `${row.type}:${row.name}`,
-      payload: String(row.tbl_name ?? ""),
+      payload: `${row.tbl_name ?? ""}|sql:${row.sql ?? ""}`,
     });
   }
 

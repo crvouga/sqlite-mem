@@ -9,6 +9,7 @@ import type {
 } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
 import { evalExpr } from "../expressions/eval.ts";
+import { appendAddColumnToMasterSql, normalizeMasterSql, synthesizeCtasMasterSql } from "../schema/master-sql.ts";
 import { normalizeColumnName } from "../storage/row.ts";
 import { makeColumnInfo } from "../storage/table.ts";
 import { normalizeForCollation } from "../types/collation.ts";
@@ -18,14 +19,17 @@ import { emptyResult, type ResultSet, resultValues } from "./result.ts";
 import { executeSelect } from "./select.ts";
 
 export function executeCreateTable(stmt: CreateTableStmt, env: ExecutionEnv): ResultSet {
+  const sourceSql = env.statementSql ? normalizeMasterSql(env.statementSql) : null;
   if (!stmt.asSelect) {
-    env.state.createTable(stmt);
+    env.state.createTable(stmt, sourceSql);
     env.state.recordChange(0);
     return emptyResult(0, env.state.lastInsertRowid);
   }
   const result = executeSelect(stmt.asSelect, env);
   const columns = result.columns.map((name) => ({ name, typeName: null, constraints: [] }));
-  const table = env.state.createTable({ ...stmt, columns, constraints: [], asSelect: null });
+  const bareName = stmt.name.includes(".") ? (stmt.name.split(".").pop() ?? stmt.name) : stmt.name;
+  const ctasSql = synthesizeCtasMasterSql(bareName, result.columns);
+  const table = env.state.createTable({ ...stmt, columns, constraints: [], asSelect: null }, ctasSql);
   for (const values of resultValues(result)) {
     table.insert(
       new Map(table.columns.map((column, index) => [normalizeColumnName(column.name), values[index] ?? null])),
@@ -52,7 +56,7 @@ export function executeCreateTable(stmt: CreateTableStmt, env: ExecutionEnv): Re
 }
 
 export function executeCreateIndex(stmt: CreateIndexStmt, env: ExecutionEnv): ResultSet {
-  const index = env.state.createIndex(stmt);
+  const index = env.state.createIndex(stmt, env.statementSql ? normalizeMasterSql(env.statementSql) : null);
   const table = env.state.getTable(stmt.table);
   try {
     for (const row of table.scan()) {
@@ -134,6 +138,7 @@ export function executeAlterTable(stmt: AlterTableStmt, env: ExecutionEnv): Resu
       throw new SqliteError("Cannot add a NOT NULL column with default value NULL", "other");
     table.columns.push(column);
     for (const row of table.rows.values()) row.values.set(normalizeColumnName(column.name), defaultValue);
+    table.originalSql = appendAddColumnToMasterSql(table.originalSql, env.statementSql);
     table.clearEqualityHashes();
     env.state.schemaVersion++;
   } else {
@@ -188,7 +193,7 @@ export function executeDropIndex(stmt: DropIndexStmt, env: ExecutionEnv): Result
 }
 
 export function executeCreateView(stmt: CreateViewStmt, env: ExecutionEnv): ResultSet {
-  env.state.createView(stmt);
+  env.state.createView(stmt, env.statementSql ? normalizeMasterSql(env.statementSql) : null);
   return emptyResult(0, env.state.lastInsertRowid);
 }
 

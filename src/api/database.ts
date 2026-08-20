@@ -1,5 +1,5 @@
 import { SqliteError } from "../errors/index.ts";
-import { parse } from "../parser/index.ts";
+import { parseUnits } from "../parser/index.ts";
 import {
   type Clock,
   type DatabaseOptions,
@@ -94,7 +94,7 @@ export class Database {
     if (arguments.length > 1) {
       throw new SqliteError("exec() does not accept parameters; use prepare() or query()", "misuse");
     }
-    Statement.create(this, sql, parse(sql)).run();
+    Statement.createFromSql(this, sql).run();
   }
 
   /**
@@ -257,14 +257,19 @@ export class Database {
   }
 
   private prepareSingle(sql: string): Statement {
-    const statements = parse(sql);
-    if (statements.length === 0) {
+    const units = parseUnits(sql);
+    if (units.length === 0) {
       throw new SqliteError("empty statement", "misuse");
     }
-    if (statements.length > 1) {
+    if (units.length > 1) {
       throw new SqliteError("query()/prepare() accept a single statement only; use exec() for scripts", "misuse");
     }
-    return Statement.create(this, sql, statements);
+    return Statement.create(
+      this,
+      sql,
+      units.map((u) => u.statement),
+      units.map((u) => u.sql),
+    );
   }
 }
 

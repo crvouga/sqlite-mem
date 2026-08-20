@@ -81,6 +81,8 @@ export class ExecutionEnv {
   maxRows = Number.POSITIVE_INFINITY;
   includeNamedRows = true;
   includeValues = true;
+  /** Source text of the statement currently executing (for sqlite_master.sql). */
+  statementSql: string | null = null;
 
   constructor(
     state: DatabaseState,
@@ -107,6 +109,7 @@ export class ExecutionEnv {
     this.maxRows = Number.POSITIVE_INFINITY;
     this.includeNamedRows = true;
     this.includeValues = true;
+    this.statementSql = null;
   }
 
   getBoundParameter(name: string | number): SqlValue {

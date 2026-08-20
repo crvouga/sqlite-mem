@@ -6,10 +6,11 @@ Pure TypeScript, completely in-memory SQLite implementation aiming for **full SQ
 - **Zero** WASM, native bindings, workers, or filesystem dependencies
 - Entire database stored in memory
 - **Synchronous** ESM-only API (no Promises, no `require`)
-- **Verified against SQLite 3.51.0** (`bun:sqlite`) via differential contracts + fail-closed gate
+- **SQL dialect verified** against SQLite 3.51.0 / 3.53.0 (`bun:sqlite`) via differential contracts + fail-closed gate
+- **Not** a drop-in for `sql.js` / `sqlite-wasm` APIs, on-disk `.sqlite` files, or user-defined functions
 - Intentional differences: deterministic `random()` / `'now'` by default, and a custom snapshot format (not `.sqlite` files)
 
-See [COMPATIBILITY.md](COMPATIBILITY.md) for the matrix and [COMPATIBILITY-AUDIT.md](COMPATIBILITY-AUDIT.md) for the audit report. Agents contributing to this repo: start with [AGENTS.md](AGENTS.md).
+See [COMPATIBILITY.md](COMPATIBILITY.md) for the matrix, [docs/DROP-IN-CONTRACT.md](docs/DROP-IN-CONTRACT.md) for the falsifiable claim, and [docs/GAP-ANALYSIS.md](docs/GAP-ANALYSIS.md) for what is still unproven. Agents: [AGENTS.md](AGENTS.md).
 
 ## Documentation
 
@@ -19,6 +20,11 @@ See [COMPATIBILITY.md](COMPATIBILITY.md) for the matrix and [COMPATIBILITY-AUDIT
 | [AGENTS.md](AGENTS.md) | Architecture, how to change code, test/compat gates |
 | [COMPATIBILITY.md](COMPATIBILITY.md) | Feature matrix + verify commands |
 | [COMPATIBILITY-AUDIT.md](COMPATIBILITY-AUDIT.md) | Audit evidence |
+| [docs/DROP-IN-CONTRACT.md](docs/DROP-IN-CONTRACT.md) | Falsifiable drop-in claim (what “same” means) |
+| [docs/PROOF.md](docs/PROOF.md) | Evidence argument + what is not proven |
+| [docs/GAP-ANALYSIS.md](docs/GAP-ANALYSIS.md) | Phase 0 gap analysis vs full drop-in catalog |
+| [docs/GAP-CATALOG.md](docs/GAP-CATALOG.md) | Current unproven / thin / intentional inventory |
+| [DIVERGENCES.md](DIVERGENCES.md) | Auto-generated intentional divergences |
 | [docs/SECRETS.md](docs/SECRETS.md) | npm / CI publish setup |
 | [benchmarks/PERFORMANCE.md](benchmarks/PERFORMANCE.md) | Performance notes |
 
@@ -208,9 +214,11 @@ The exports of the main entry (`@crvouga/sqlite-mem`) are **frozen**:
 
 ## Compatibility notes for integrators
 
-Goal: drop-in SQL behavior vs SQLite **3.51.0**. Full matrix: [COMPATIBILITY.md](COMPATIBILITY.md).
+Goal: **SQL dialect** behavioral parity vs SQLite **3.51.0** / **3.53.0** for the `@crvouga/sqlite-mem` sync API. Full matrix: [COMPATIBILITY.md](COMPATIBILITY.md). Contract: [docs/DROP-IN-CONTRACT.md](docs/DROP-IN-CONTRACT.md).
 
-**Intentional differences:** custom `SQLM` snapshots; seeded `random()` / fixed `'now'` by default (`{ random: "os" }` / `{ now: "system" }` match SQLite entropy and wall clock); no C API / on-disk DB / VFS.
+This is **not** a drop-in replacement for `sql.js`, `@sqlite.org/sqlite-wasm`, or better-sqlite3’s full Node API. There is no `.sqlite` file codec, no `create_function` / custom collations, no `stmt.step()` / `iterate()`, and `ATTACH 'file'` opens an empty in-memory schema.
+
+**Intentional differences:** custom `SQLM` snapshots; seeded `random()` / fixed `'now'` by default (`{ random: "os" }` / `{ now: "system" }` match SQLite entropy and wall clock); no C API / on-disk DB / VFS. Machine-readable list: [DIVERGENCES.md](DIVERGENCES.md).
 
 **Know these thin or partial areas** (do not assume full oracle fidelity):
 

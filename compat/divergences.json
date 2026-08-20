@@ -48,7 +48,7 @@
       "scope": "select",
       "predicate": "INDEXED BY / NOT INDEXED is accepted and ignored",
       "specifiedBehavior": "Query results match the unhinted plan; missing-index errors are not raised.",
-      "pinnedBy": ["COMPATIBILITY.md"]
+      "pinnedBy": ["indexes/indexed-by.test.ts", "COMPATIBILITY.md"]
     },
     {
       "id": "materialized-hint-ignored",

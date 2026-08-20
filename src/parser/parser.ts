@@ -233,10 +233,19 @@ const PREC = {
   JSON_ARROW: 80,
 } as const;
 
+export interface ParsedUnit {
+  statement: Statement;
+  /** Source slice for this statement (no trailing semicolon); used for sqlite_master.sql. */
+  sql: string;
+}
+
 export class Parser {
   private pos = 0;
 
-  constructor(private readonly tokens: Token[]) {}
+  constructor(
+    private readonly tokens: Token[],
+    private readonly source = "",
+  ) {}
 
   private current(): Token {
     return this.tokens[this.pos] ?? this.tokens[this.tokens.length - 1]!;
@@ -336,13 +345,22 @@ export class Parser {
   // ── Statements ──────────────────────────────────────────────────────────
 
   parseStatements(): Statement[] {
-    const stmts: Statement[] = [];
+    return this.parseUnits().map((unit) => unit.statement);
+  }
+
+  /** Parse statements with per-statement source slices for catalog `sql` text. */
+  parseUnits(): ParsedUnit[] {
+    const units: ParsedUnit[] = [];
     while (!this.at("EOF")) {
       if (this.match("SEMI")) continue;
-      stmts.push(this.parseStatement());
+      const start = this.current().start;
+      const statement = this.parseStatement();
+      const end = this.pos > 0 ? this.tokens[this.pos - 1]!.end : this.current().end;
       this.match("SEMI");
+      const sql = this.source ? this.source.slice(start, end).trimEnd() : "";
+      units.push({ statement, sql });
     }
-    return stmts;
+    return units;
   }
 
   parseStatement(): Statement {
@@ -2181,6 +2199,11 @@ export class Parser {
   }
 }
 
-export function parseTokens(tokens: Token[]): Statement[] {
-  return new Parser(tokens).parseStatements();
+export function parseTokens(tokens: Token[], source = ""): Statement[] {
+  return new Parser(tokens, source).parseStatements();
+}
+
+/** Parse SQL into AST statements paired with source slices. */
+export function parseTokenUnits(tokens: Token[], source: string): ParsedUnit[] {
+  return new Parser(tokens, source).parseUnits();
 }

@@ -1,6 +1,7 @@
 import type { CreateTriggerStmt, DropTriggerStmt, Statement } from "../ast/nodes.ts";
 import { SqliteError, TriggerRaiseError } from "../errors/index.ts";
 import { evalExpr } from "../expressions/eval.ts";
+import { normalizeMasterSql } from "../schema/master-sql.ts";
 import type { TriggerInfo } from "../storage/database-state.ts";
 import { splitQualifiedName } from "../storage/database-state.ts";
 import type { Row } from "../storage/row.ts";
@@ -43,7 +44,7 @@ export function executeCreateTrigger(stmt: CreateTriggerStmt, env: ExecutionEnv)
     forEachRow: stmt.forEachRow,
     body: stmt.body,
     updateColumns: stmt.updateColumns,
-    originalSql: null,
+    originalSql: env.statementSql ? normalizeMasterSql(env.statementSql) : null,
   });
   return emptyResult(0, env.state.lastInsertRowid);
 }
