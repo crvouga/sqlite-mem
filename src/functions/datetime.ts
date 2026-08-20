@@ -71,6 +71,24 @@ function applyModifier(date: Date, modifier: string, flags: { subsec: boolean })
   return result;
 }
 
+function applyModifiers(date: Date, modifiers: SqlValue[]): { date: Date; subsec: boolean } | null {
+  const flags = { subsec: false };
+  let current = date;
+  for (const modifier of modifiers) {
+    if (typeof modifier !== "string") return null;
+    const next = applyModifier(current, modifier, flags);
+    if (!next) return null;
+    current = next;
+  }
+  return { date: current, subsec: flags.subsec };
+}
+
+/** Prefer direct unix→ms to avoid julian float round-trip (off-by-one on some integers). */
+function fromUnixSeconds(seconds: number): Date | null {
+  const date = new Date(seconds * 1000);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function resolveDate(args: SqlValue[], context: FunctionContext): { date: Date; subsec: boolean } | null {
   let source = args[0];
   let modifiers = args.slice(1);
@@ -78,24 +96,28 @@ function resolveDate(args: SqlValue[], context: FunctionContext): { date: Date; 
   if (modifiers[0] === "unixepoch") {
     const seconds = coerceToNumber(source);
     if (seconds === null) return null;
-    source = seconds / 86400 + JULIAN_UNIX_EPOCH;
-    modifiers = modifiers.slice(1);
-  } else if (typeof modifiers[0] === "string" && modifiers[0].trim().toLowerCase() === "auto") {
-    const number = coerceToNumber(source);
-    if (number === null) return null;
-    // SQLite: 0..5373484.499999 → julian day; otherwise unix timestamp.
-    source = number >= 0 && number < 5373484.5 ? number : number / 86400 + JULIAN_UNIX_EPOCH;
-    modifiers = modifiers.slice(1);
-  }
-  let date = parseDate(source, context);
-  if (!date) return null;
-  const flags = { subsec: false };
-  for (const modifier of modifiers) {
-    if (typeof modifier !== "string") return null;
-    date = applyModifier(date, modifier, flags);
+    const date = fromUnixSeconds(seconds);
     if (!date) return null;
+    return applyModifiers(date, modifiers.slice(1));
   }
-  return { date, subsec: flags.subsec };
+  if (typeof modifiers[0] === "string" && modifiers[0].trim().toLowerCase() === "auto") {
+    const number = coerceToNumber(source);
+    if (number === null) {
+      // Non-numeric timestring: SQLite ignores auto and parses the timestring.
+      modifiers = modifiers.slice(1);
+    } else if (number >= 0 && number < 5373484.5) {
+      // Julian day number.
+      source = number;
+      modifiers = modifiers.slice(1);
+    } else {
+      const date = fromUnixSeconds(number);
+      if (!date) return null;
+      return applyModifiers(date, modifiers.slice(1));
+    }
+  }
+  const date = parseDate(source, context);
+  if (!date) return null;
+  return applyModifiers(date, modifiers);
 }
 
 function pad(value: number, length = 2): string {

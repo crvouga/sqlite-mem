@@ -29,4 +29,22 @@ describe("expression differential fuzz", () => {
       fuzzAssertConfig(40),
     );
   });
+
+  test("CASE BETWEEN and CAST edges match SQLite", () => {
+    fc.assert(
+      fc.property(valueArb, valueArb, valueArb, intArb, (a, b, c, n) => {
+        withDatabases((memory, sqlite) => {
+          const caseSql = `SELECT CASE WHEN ${sqlLiteral(a)} IS NULL THEN ${sqlLiteral(b)} ELSE ${sqlLiteral(c)} END AS v`;
+          compareOrReport("case", caseSql, { a, b, c }, memory.query(caseSql), sqlite.query(caseSql));
+
+          const betweenSql = `SELECT ${sqlLiteral(n)} BETWEEN ${sqlLiteral(n - 5)} AND ${sqlLiteral(n + 5)} AS v`;
+          compareOrReport("between", betweenSql, { n }, memory.query(betweenSql), sqlite.query(betweenSql));
+
+          const castSql = `SELECT typeof(CAST(${sqlLiteral(a)} AS INTEGER)) AS t, CAST(${sqlLiteral(a)} AS TEXT) AS v`;
+          compareOrReport("cast-edge", castSql, { a }, memory.query(castSql), sqlite.query(castSql));
+        });
+      }),
+      fuzzAssertConfig(30),
+    );
+  });
 });

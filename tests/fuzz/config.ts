@@ -26,11 +26,23 @@ export function fuzzPath(): string | undefined {
   return path && path.length > 0 ? path : undefined;
 }
 
+export function fuzzRuns(defaultRuns: number): number {
+  const raw = process.env.SQLITE_MEM_FUZZ_RUNS;
+  if (raw !== undefined && raw !== "") {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      throw new Error(`Invalid SQLITE_MEM_FUZZ_RUNS: ${raw}`);
+    }
+    return Math.floor(parsed);
+  }
+  return defaultRuns;
+}
+
 export function fuzzAssertConfig(numRuns: number): Parameters<typeof fc.assert>[1] {
   const path = fuzzPath();
   return {
     seed: fuzzSeed(),
-    numRuns: path ? 1 : numRuns,
+    numRuns: path ? 1 : fuzzRuns(numRuns),
     verbose: 1,
     endOnFailure: true,
     ...(path ? { path } : {}),

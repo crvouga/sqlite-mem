@@ -1,7 +1,13 @@
 import { describe, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { compareOrReport, compareStateOrReport, withDatabases } from "./helpers.ts";
+import {
+  compareOrReport,
+  compareOutcomeOrReport,
+  compareStateOrReport,
+  compareWriteOrReport,
+  withDatabases,
+} from "./helpers.ts";
 
 const dir = join(import.meta.dir, "../corpus/regressions");
 
@@ -17,13 +23,14 @@ describe("O3 corpus regressions", () => {
       withDatabases((memory, sqlite) => {
         for (const stmt of statements) {
           const isQuery = /^\s*SELECT\b/i.test(stmt);
-          compareOrReport(
-            `corpus:${file}`,
-            stmt,
-            file,
-            isQuery ? memory.query(stmt) : memory.exec(stmt),
-            isQuery ? sqlite.query(stmt) : sqlite.exec(stmt),
-          );
+          const isTxnOrPragma = /^\s*(BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE|PRAGMA)\b/i.test(stmt);
+          if (isQuery) {
+            compareOrReport(`corpus:${file}`, stmt, file, memory.query(stmt), sqlite.query(stmt));
+          } else if (isTxnOrPragma) {
+            compareOutcomeOrReport(`corpus:${file}`, stmt, file, memory.exec(stmt), sqlite.exec(stmt));
+          } else {
+            compareWriteOrReport(`corpus:${file}`, stmt, file, memory.exec(stmt), sqlite.exec(stmt));
+          }
         }
         compareStateOrReport(`corpus-dump:${file}`, file, memory, sqlite);
       });

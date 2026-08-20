@@ -135,16 +135,16 @@ These are not SQL features — they determine whether later green is trustworthy
 
 | # | Catalog item | Status | Severity | Effort | Evidence / hole |
 | --- | --- | --- | --- | --- | --- |
-| 38 | Deterministic driver + shrink + repro files | **absent** | major | L | Fuzz seed/path replay exists; no `tests/dst/` shrinker emitting committed repros. |
-| 39 | Model-based differential after every op | **partial** | major | L | `fuzz/stateful.test.ts` DML-oriented; `transactions/stateful` fixed script — not full Dump-after-every-op simulator. |
-| 40 | Random schema + grammar-weighted SQL generators | **partial** | major | XL | Fuzz arbs exist; not grammar-production-weighted (§7). |
-| 41 | SQLancer-style TLP / NoREC / metamorphic | **absent** | major | XL | No TLP/NoREC/differential-cardinality harness. |
-| 42 | Robustness fuzz (never non-SqliteError / hang / corrupt) | **partial** | major | L | Some adversarial/error paths; no dedicated timeout+integrity_check invariant suite. |
+| 38 | Deterministic driver + shrink + repro files | **partial** | major | L | Seed/path replay + `tests/fuzz/dst/{minimize,repro}.ts` + `scripts/promote-fuzz-repro.ts` → corpus; shrink not fully automatic in CI. |
+| 39 | Model-based differential after every op | **partial** | major | L | `fuzz/stateful` + `mixed-stateful` via `tests/fuzz/dst/engine.ts` (DDL/DML/txn/UPSERT/FK/checkpoint). |
+| 40 | Random schema + grammar-weighted SQL generators | **partial** | major | XL | Expanded area arbs (joins/subqueries/datetime/LIKE/…); not production-weighted grammar. |
+| 41 | SQLancer-style TLP / NoREC / metamorphic | **partial** | major | XL | `tests/fuzz/metamorphic/{tlp,norec}.test.ts` — single-table start. |
+| 42 | Robustness fuzz (never non-SqliteError / hang / corrupt) | **partial** | major | L | `tests/fuzz/robustness.test.ts` (token salad, 5s budget, Dump, SQLM bit-flip → SqliteError). |
 | 43 | Fault injection atomicity | **absent** | major | L | None. |
-| 44 | Snapshot fuzz invariants (corrupt decoder) | **partial** | major | M | Snapshot round-trip + header errors; bit-flip decoder fuzz thinner. |
+| 44 | Snapshot fuzz invariants (corrupt decoder) | **partial** | major | M | Bit-flip decoder wrapped as SqliteError; deeper adversarial codecs thinner. |
 | 45 | Cross-environment determinism (Node/Bun/Deno/browsers/arch) | **absent** | **blocker** for “deterministic everywhere” | L | Proven under Bun; browser/Node/Deno matrix absent. |
-| 46 | Soak / corpus persistence nightly | **absent** | minor | M | No nightly soak job. |
-| 47 | `sqllogictest` corpus | **absent** | major | XL | Not present. Strongest off-the-shelf parity evidence missing. |
+| 46 | Soak / corpus persistence nightly | **partial** | minor | M | `.github/workflows/fuzz-soak.yml` + `test:fuzz:soak`; corpus promote script. |
+| 47 | `sqllogictest` corpus | **partial** | major | XL | Trimmed vendor under `vendor/sqllogictest/` + differential runner; full upstream tree not ingested. |
 
 ---
 

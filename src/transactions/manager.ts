@@ -47,12 +47,22 @@ export class TransactionManager {
 
   rollback(savepoint?: string): void {
     this.requireTransaction("cannot rollback - no transaction is active");
+    // SQLite keeps total_changes / last_insert_rowid / changes across ROLLBACK
+    // (and ROLLBACK TO); only row/schema state is restored.
+    const preserved = {
+      totalChanges: this.state.totalChanges,
+      changes: this.state.changes,
+      lastInsertRowid: this.state.lastInsertRowid,
+    };
     if (savepoint !== undefined) {
       const index = this.findSavepoint(savepoint);
       const snapshot = this.savepoints[index];
       if (!snapshot) throw new SqliteError(`no such savepoint: ${savepoint}`, "transaction", "SQLITE_ERROR");
       this.state.replaceWith(snapshot.state, { adopt: true });
       this.prng.setState(snapshot.prngState);
+      this.state.totalChanges = preserved.totalChanges;
+      this.state.changes = preserved.changes;
+      this.state.lastInsertRowid = preserved.lastInsertRowid;
       this.savepoints.splice(index + 1);
       return;
     }
@@ -64,6 +74,9 @@ export class TransactionManager {
     }
     this.state.replaceWith(snapshot, { adopt: true });
     this.prng.setState(prngState);
+    this.state.totalChanges = preserved.totalChanges;
+    this.state.changes = preserved.changes;
+    this.state.lastInsertRowid = preserved.lastInsertRowid;
     this.transactionSnapshot = null;
     this.transactionPrngState = null;
     this.savepoints = [];

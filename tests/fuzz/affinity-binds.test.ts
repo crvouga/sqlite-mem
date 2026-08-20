@@ -55,6 +55,52 @@ describe("bind style differential fuzz", () => {
       fuzzAssertConfig(20),
     );
   });
+
+  test("named :x and @x binds match oracle", () => {
+    fc.assert(
+      fc.property(valueArb, valueArb, (a, b) => {
+        withDatabases((memory, sqlite) => {
+          const setup = "CREATE TABLE t(x, y)";
+          compareOutcomeOrReport("named-setup", setup, { a, b }, memory.exec(setup), sqlite.exec(setup));
+          const sql = "INSERT INTO t VALUES (:x, @y)";
+          // Adapters accept positional arrays; named binds via prepare+object when supported.
+          // Use literal-equivalent numbered style through prepare run with ordered values matching appearance.
+          const memStmt = memory.prepare(sql);
+          const sqlStmt = sqlite.prepare(sql);
+          compareWriteOrReport("named-insert", sql, { a, b }, memStmt.run(a, b), sqlStmt.run(a, b));
+          const select = "SELECT x, y FROM t";
+          compareOrReport("named-select", select, { a, b }, memory.query(select), sqlite.query(select));
+        });
+      }),
+      fuzzAssertConfig(20),
+    );
+  });
+
+  test("blob binds round-trip", () => {
+    fc.assert(
+      fc.property(fc.uint8Array({ minLength: 0, maxLength: 16 }), (bytes) => {
+        withDatabases((memory, sqlite) => {
+          const setup = "CREATE TABLE t(b BLOB)";
+          compareOutcomeOrReport("blob-setup", setup, bytes, memory.exec(setup), sqlite.exec(setup));
+          compareWriteOrReport(
+            "blob-insert",
+            "INSERT INTO t VALUES (?)",
+            bytes,
+            memory.exec("INSERT INTO t VALUES (?)", [bytes]),
+            sqlite.exec("INSERT INTO t VALUES (?)", [bytes]),
+          );
+          compareOrReport(
+            "blob-select",
+            "SELECT typeof(b) AS t, length(b) AS n FROM t",
+            bytes,
+            memory.query("SELECT typeof(b) AS t, length(b) AS n FROM t"),
+            sqlite.query("SELECT typeof(b) AS t, length(b) AS n FROM t"),
+          );
+        });
+      }),
+      fuzzAssertConfig(15),
+    );
+  });
 });
 
 describe("malformed SQL robustness", () => {

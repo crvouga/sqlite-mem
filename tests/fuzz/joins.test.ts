@@ -46,4 +46,41 @@ describe("join differential fuzz", () => {
       fuzzAssertConfig(30),
     );
   });
+
+  test("RIGHT FULL CROSS NATURAL and USING joins match SQLite", () => {
+    fc.assert(
+      fc.property(
+        rowsArb,
+        rowsArb,
+        fc.constantFrom(
+          "RIGHT JOIN r ON l.id = r.id",
+          "FULL JOIN r ON l.id = r.id",
+          "CROSS JOIN r",
+          "NATURAL JOIN r",
+          "JOIN r USING (id)",
+        ),
+        (leftRows, rightRows, joinClause) => {
+          withDatabases((memory, sqlite) => {
+            for (const db of [memory, sqlite]) {
+              db.exec("CREATE TABLE l(id INTEGER PRIMARY KEY, value TEXT)");
+              db.exec("CREATE TABLE r(id INTEGER PRIMARY KEY, value TEXT)");
+              for (const row of leftRows) db.exec("INSERT INTO l VALUES (?, ?)", [row.id, row.value]);
+              for (const row of rightRows) db.exec("INSERT INTO r VALUES (?, ?)", [row.id, row.value]);
+            }
+
+            // NATURAL/USING yield fewer columns than ON joins — order by names, not ordinals.
+            const sql = `SELECT * FROM l ${joinClause} ORDER BY id, value`;
+            compareOrReport(
+              "join-extended",
+              sql,
+              { leftRows, rightRows, joinClause },
+              memory.query(sql),
+              sqlite.query(sql),
+            );
+          });
+        },
+      ),
+      fuzzAssertConfig(25),
+    );
+  });
 });

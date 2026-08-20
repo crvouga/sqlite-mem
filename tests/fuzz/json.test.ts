@@ -92,4 +92,28 @@ describe("json differential fuzz", () => {
       fuzzAssertConfig(40),
     );
   });
+
+  test("json_tree and NULL TVF / FILTER edges match SQLite", () => {
+    fc.assert(
+      fc.property(jsonValue, (json) => {
+        withDatabases((memory, sqlite) => {
+          const lit = sqlLiteral(toJsonText(json));
+          const tree = `SELECT id, type, key FROM json_tree(${lit}) ORDER BY id`;
+          compareOrReport("json-tree", tree, { json }, memory.query(tree), sqlite.query(tree));
+
+          const eachNull = "SELECT count(*) AS n FROM json_each(NULL)";
+          compareOrReport("json-each-null", eachNull, {}, memory.query(eachNull), sqlite.query(eachNull));
+
+          const setup = "CREATE TABLE t(j TEXT)";
+          memory.exec(setup);
+          sqlite.exec(setup);
+          memory.exec(`INSERT INTO t VALUES (${lit}), (NULL)`);
+          sqlite.exec(`INSERT INTO t VALUES (${lit}), (NULL)`);
+          const agg = "SELECT json_group_array(j) FILTER (WHERE j IS NOT NULL) AS v FROM t";
+          compareOrReport("json-agg-filter", agg, { json }, memory.query(agg), sqlite.query(agg));
+        });
+      }),
+      fuzzAssertConfig(25),
+    );
+  });
 });

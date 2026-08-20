@@ -25,3 +25,16 @@ sequenceParity(
   ["CREATE TABLE t(id INTEGER,v TEXT)", "INSERT INTO t VALUES (1,'old')"],
   [{ sql: "BEGIN" }, { sql: "UPDATE t SET v='new'" }, { sql: "ROLLBACK" }, { sql: "SELECT * FROM t", query: true }],
 );
+
+sequenceParity(
+  "ROLLBACK preserves total_changes and last_insert_rowid",
+  ["CREATE TABLE t(id INTEGER PRIMARY KEY, a INT)", "INSERT INTO t VALUES (1, 1)"],
+  [
+    { sql: "BEGIN" },
+    { sql: "INSERT INTO t VALUES (2, 2)" },
+    { sql: "ROLLBACK" },
+    { sql: "SELECT total_changes() AS t, last_insert_rowid() AS r", query: true },
+    { sql: "INSERT INTO t VALUES (3, 3)" },
+    { sql: "SELECT total_changes() AS t, id FROM t ORDER BY id", query: true },
+  ],
+);

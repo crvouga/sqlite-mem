@@ -155,7 +155,11 @@ class Reader {
     return utf8Decode(this.raw(this.u32()));
   }
   json<T>(): T {
-    return JSON.parse(this.text(), jsonReviver) as T;
+    try {
+      return JSON.parse(this.text(), jsonReviver) as T;
+    } catch {
+      throw new SqliteError("invalid or truncated sqlite-mem snapshot", "other");
+    }
   }
   value(): SqlValue {
     const tag = this.u8();
@@ -267,6 +271,15 @@ export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRunti
  * @throws {SqliteError} If the magic, version, or payload is invalid.
  */
 export function decodeDatabaseState(snapshot: Uint8Array): DecodedSnapshot {
+  try {
+    return decodeDatabaseStateInner(snapshot);
+  } catch (error) {
+    if (error instanceof SqliteError) throw error;
+    throw new SqliteError("invalid or truncated sqlite-mem snapshot", "other");
+  }
+}
+
+function decodeDatabaseStateInner(snapshot: Uint8Array): DecodedSnapshot {
   const reader = new Reader(snapshot);
   const magic = reader.raw(4);
   if (!magic.every((byte, index) => byte === MAGIC[index]))

@@ -254,10 +254,13 @@ Columns: Area | SQLite 3.51 behavior | Current coverage | Severity | What proof 
 
 | Area | SQLite 3.51 behavior | Current coverage | Severity | What proof is missing | Suggested test type |
 | --- | --- | --- | --- | --- | --- |
-| Deterministic simulation harness | Long mixed sequences + snapshot + nested savepoints + PRAGMA | Thin — stateful fuzz is DML-only; `transactions/stateful` is one fixed script | high | New harness: fixed seed, path replay, interleave snapshot/restore, assert B-tuple + Dump | simulation |
-| Expression / schema / query / bind / error fuzz expansion | Broad adversarial coverage | Thin — existing fuzz files cover subsets | high | Dedicated arbs for affinity/overflow/-0; schema; query shapes; bind styles; malformed SQL | fuzz |
-| Property invariants without oracle | Snapshot≡restore; rollback PRNG; counters | Partial — ISOLATED determinism + snapshot tests | high | Property suite citing README invariants | property |
+| Deterministic simulation harness | Long mixed sequences + snapshot + nested savepoints + PRAGMA | Proven (partial) — `tests/fuzz/dst/` + `mixed-stateful` (UPSERT/FK/checkpoint/compound SELECT) | medium | Broader schema mutation; ATTACH/triggers in mixed arb | simulation |
+| Expression / schema / query / bind / error fuzz expansion | Broad adversarial coverage | Proven (partial) — joins/subqueries/datetime/LIKE/windows/json/affinity-binds | medium | Grammar-weighted generators; overflow/bigint edges | fuzz |
+| Metamorphic oracles | TLP / NoREC | Proven (partial) — `tests/fuzz/metamorphic/` | medium | Multi-table / join TLP | metamorphic |
+| SQLLogicTest | External corpus | Proven (partial) — trimmed `vendor/sqllogictest/` | medium | Larger upstream ingest | corpus |
+| Property invariants without oracle | Snapshot≡restore; rollback PRNG; counters | Partial — ISOLATED determinism + snapshot + robustness bit-flip | medium | More README invariants | property |
 | Fail-closed for claimed-but-unproven | Inventory + requirements gate | Proven for oracle names / requirements unknown=0 | medium | Optionally fail on smoke-baseline growth; browser gate | gate |
+| Nightly soak | Multi-seed long runs | Proven — `fuzz-soak.yml` + `test:fuzz:soak` | — | — | soak |
 
 ### N/A (mission non-goals)
 

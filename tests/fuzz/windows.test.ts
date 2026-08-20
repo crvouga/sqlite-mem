@@ -82,4 +82,29 @@ describe("window differential fuzz", () => {
       fuzzAssertConfig(30),
     );
   });
+
+  test("RANGE frames and ntile match SQLite", () => {
+    fc.assert(
+      fc.property(fc.array(rowArb, { minLength: 1, maxLength: 8 }), (rows) => {
+        withDatabases((memory, sqlite) => {
+          for (const db of [memory, sqlite]) {
+            db.exec("CREATE TABLE scores(team TEXT, name TEXT, score INTEGER)");
+            for (const row of rows) {
+              db.exec("INSERT INTO scores(team, name, score) VALUES (?, ?, ?)", [row.team, row.name, row.score]);
+            }
+          }
+
+          const sql = [
+            "SELECT team, name, score,",
+            "ntile(2) OVER (PARTITION BY team ORDER BY score, name) AS bucket,",
+            "sum(score) OVER (PARTITION BY team ORDER BY score RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS range_sum",
+            "FROM scores ORDER BY team, score, name",
+          ].join(" ");
+
+          compareOrReport("window-range-ntile", sql, { rows }, memory.query(sql), sqlite.query(sql));
+        });
+      }),
+      fuzzAssertConfig(25),
+    );
+  });
 });
