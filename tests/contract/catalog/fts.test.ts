@@ -94,5 +94,13 @@ runCatalog("FTS", [
       expect(db.query("SELECT name FROM sqlite_master WHERE name='docs'").length).toBe(0);
     },
   },
-  { id: "FTS-series-01", kind: "parity", sql: "SELECT 1 AS v" },
+  {
+    id: "FTS-series-01",
+    kind: "divergence",
+    fn: (db) => {
+      // generate_series is a sqlite-mem extension; bun:sqlite does not expose it by default.
+      const rows = db.query<{ value: number }>("SELECT value FROM generate_series(1, 3) ORDER BY value");
+      expect(rows.map((row) => row.value)).toEqual([1, 2, 3]);
+    },
+  },
 ]);

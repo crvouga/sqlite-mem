@@ -79,6 +79,42 @@
         "columns": ["a"],
         "values": [[1]]
       }
+    },
+    {
+      "id": "not-in-null",
+      "setup": ["CREATE TABLE s(v INTEGER)", "INSERT INTO s VALUES (1),(NULL)"],
+      "sql": "SELECT 2 NOT IN (SELECT v FROM s) AS a",
+      "expect": {
+        "columns": ["a"],
+        "values": [[null]]
+      }
+    },
+    {
+      "id": "datetime-subsec",
+      "setup": [],
+      "sql": "SELECT datetime('2024-01-01 12:00:00.123','subsec') AS v",
+      "expect": {
+        "columns": ["v"],
+        "values": [["2024-01-01 12:00:00.123"]]
+      }
+    },
+    {
+      "id": "upsert-returning",
+      "setup": ["CREATE TABLE t(id INTEGER PRIMARY KEY, v TEXT)", "INSERT INTO t VALUES (1,'a')"],
+      "sql": "INSERT INTO t VALUES (1,'b') ON CONFLICT(id) DO UPDATE SET v=excluded.v RETURNING id, v",
+      "expect": {
+        "columns": ["id", "v"],
+        "values": [[1, "b"]]
+      }
+    },
+    {
+      "id": "json-each-null",
+      "setup": [],
+      "sql": "SELECT count(*) AS n FROM json_each(NULL)",
+      "expect": {
+        "columns": ["n"],
+        "values": [[0]]
+      }
     }
   ]
 }

@@ -12,10 +12,10 @@ import { checkTableConstraints } from "../constraints/check.ts";
 import { SqliteError } from "../errors/index.ts";
 import { exprEquals } from "../expressions/equals.ts";
 import { evalExpr } from "../expressions/eval.ts";
-import type { Row, Rowid } from "../storage/row.ts";
-import { normalizeColumnName } from "../storage/row.ts";
 import { tryIndexedTableRows } from "../planner/access.ts";
 import { splitQualifiedName, type ViewInfo } from "../storage/database-state.ts";
+import type { Row, Rowid } from "../storage/row.ts";
+import { normalizeColumnName } from "../storage/row.ts";
 import { makeColumnInfo, Table } from "../storage/table.ts";
 import { normalizeForCollation } from "../types/collation.ts";
 import { applyStrictValue } from "../types/strict.ts";
@@ -349,8 +349,8 @@ function executeUpdateCore(stmt: UpdateStmt, env: ExecutionEnv): ResultSet {
           cells: [...targetScope.cells, ...fromRow.cells],
         };
         if (stmt.where && isTruthySql(evalExpr(stmt.where, env.createEvalContext(joined))) !== true) continue;
+        // SQLite keeps the last matching FROM row when multiple sources match.
         matchedScope = joined;
-        break;
       }
       if (matchedScope) candidates.push({ row, scope: matchedScope });
     }
@@ -958,7 +958,9 @@ function applyReferentialDelete(parent: Table, row: Row, env: ExecutionEnv): num
       for (const candidate of matches) {
         if (constraint.onDelete === "CASCADE") {
           changes += applyReferentialDelete(child, candidate, env);
+          if (fireDeleteTriggers("BEFORE", child, candidate, env) === "ignore") continue;
           removeOne(child, candidate, env);
+          fireDeleteTriggers("AFTER", child, candidate, env);
           changes++;
         } else if (constraint.onDelete === "SET NULL") {
           const updated = updateOne(

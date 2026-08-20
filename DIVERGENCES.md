@@ -2,7 +2,7 @@
 
 > Auto-generated from [`compat/divergences.json`](compat/divergences.json). Do not edit by hand — run `bun run divergences`.
 
-Generated: 2026-08-20 · 17 entries
+Generated: 2026-08-20 · 20 entries
 
 | ID | Scope | Predicate | Pinned by |
 | --- | --- | --- | --- |
@@ -12,7 +12,7 @@ Generated: 2026-08-20 · 17 entries
 | `negzero-canonicalization` | types | IEEE -0 becomes +0 on bind, affinity, and arithmetic | `TYP-negzero-01`, `TYP-negzero-02`, `TYP-negzero-03`, `DET-negzero-01` |
 | `attach-empty-schema` | attach | ATTACH filename is ignored; attached schema is empty in-memory | `ATT-att-01` |
 | `explain-stub` | explain | EXPLAIN / EXPLAIN QUERY PLAN shapes are stubs | `PAR-explain-01` |
-| `indexed-by-discarded` | select | INDEXED BY / NOT INDEXED is accepted and ignored | `indexes/indexed-by.test.ts`, `COMPATIBILITY.md` |
+| `indexed-by-discarded` | select | INDEXED BY / NOT INDEXED is accepted and ignored | `tests/contract/indexes/indexed-by.test.ts` |
 | `materialized-hint-ignored` | cte | MATERIALIZED / NOT MATERIALIZED do not change the execution strategy | `CTE-mat-01` |
 | `fts-shadow-counters` | fts | FTS shadow-table change counters may differ from bun:sqlite | `FTS-chg-01` |
 | `compile-options-function-list` | pragma | pragma_compile_options and function_list contents are sqlite-mem's | `PRG-comp-01`, `PRG-fn-01` |
@@ -23,6 +23,9 @@ Generated: 2026-08-20 · 17 entries
 | `double-quote-string-fallback` | lexer | SQLite may treat unknown double-quoted identifiers as strings; sqlite-mem rejects them | `TOK-07` |
 | `lone-surrogate-bind` | unicode | JS lone surrogates in string binds are engine-defined | `UNI-surr-01` |
 | `user-version-snapshot` | pragma | user_version is not restored from SQLM | `PRG-beh-05`, `SNP-omit-04` |
+| `pragma-setter-noop` | pragma | Some pragma setters are accepted but do not change engine state yet | `PRG-beh-02`, `PRG-beh-03`, `PRG-beh-07` |
+| `generate-series-extension` | tvf | generate_series is a sqlite-mem extension | `FTS-series-01` |
+| `datetime-localtime-utc` | datetime | localtime/utc modifiers do not apply host timezone conversion | `tests/contract/date-time/modifiers.test.ts` |
 
 ## Specified behavior
 
@@ -93,4 +96,16 @@ sqlite-mem stores the JS string as UTF-16-unpaired text; oracle may replace or e
 ### `user-version-snapshot`
 
 PRAGMA user_version after restore is the default unless re-set.
+
+### `pragma-setter-noop`
+
+defer_foreign_keys, recursive_triggers, and application_id getters remain 0 after SET.
+
+### `generate-series-extension`
+
+Present in sqlite-mem; not claimed vs bun:sqlite default inventory.
+
+### `datetime-localtime-utc`
+
+Modifiers are accepted as no-ops; storage remains UTC-like fixed strings.
 

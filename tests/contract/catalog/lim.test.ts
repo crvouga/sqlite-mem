@@ -15,7 +15,7 @@ runCatalog("LIM", [
   {
     id: "LIM-vals-01",
     kind: "parity",
-    sql: "SELECT 1 AS v",
+    sql: "SELECT count(*) AS n FROM (VALUES (1,'a'),(2,'b'),(3,'c'),(4,'d'),(5,'e')) AS v",
   },
   {
     id: "LIM-in-01",

@@ -70,6 +70,9 @@ export function normalizeErrorMessageForCompare(message: string): string {
   if (lower.startsWith("cannot drop primary key") || lower.startsWith("cannot drop column")) {
     return "cannot drop column";
   }
+  if (lower.startsWith("misuse of window function") || lower.includes("window expression requires window")) {
+    return "misuse of window function";
+  }
   if (lower.startsWith("no such column")) {
     return "no such column";
   }
@@ -108,6 +111,9 @@ export function categorizeErrorMessage(message: string): ErrorCategory {
   if (/cannot store .+ value in .+ column/.test(msg)) return "datatype_mismatch";
   if (/unknown datatype/.test(msg)) return "other";
   if (/datatype mismatch|type mismatch/.test(msg)) return "datatype_mismatch";
+  if (/unable to use function match/.test(msg)) return "unsupported";
+  if (/cannot insert into generated column|cannot update generated column/.test(msg)) return "misuse";
+  if (/misuse of window function|window expression requires window/.test(msg)) return "misuse";
   if (/unsupported|not supported|not yet implemented/.test(msg)) return "unsupported";
   if (/misuse|bad parameter|api misuse|expected \d+ values, received/.test(msg)) return "misuse";
 

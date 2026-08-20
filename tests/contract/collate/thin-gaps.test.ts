@@ -29,3 +29,23 @@ errorParity(
   "INSERT INTO t VALUES ('no')",
   "constraint_check",
 );
+
+errorParity(
+  "UNIQUE COLLATE NOCASE rejects case-insensitive duplicates",
+  ["CREATE TABLE t(v TEXT UNIQUE COLLATE NOCASE)", "INSERT INTO t VALUES ('A')"],
+  "INSERT INTO t VALUES ('a')",
+  "constraint_unique",
+);
+
+errorParity(
+  "UNIQUE RTRIM rejects trailing-space duplicates",
+  ["CREATE TABLE t(v TEXT UNIQUE COLLATE RTRIM)", "INSERT INTO t VALUES ('x')"],
+  "INSERT INTO t VALUES ('x  ')",
+  "constraint_unique",
+);
+
+parity(
+  "LIKE remains ASCII case-insensitive even on BINARY columns",
+  ["CREATE TABLE t(v TEXT COLLATE BINARY)", "INSERT INTO t VALUES ('Abc'),('abc')"],
+  "SELECT v FROM t WHERE v LIKE 'a%' ORDER BY v",
+);

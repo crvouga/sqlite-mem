@@ -31,3 +31,23 @@ parity(
   data,
   "SELECT name FROM users WHERE id IN (SELECT user_id FROM orders WHERE total<10) ORDER BY id",
 );
+parity(
+  "empty IN (SELECT) matches no rows",
+  ["CREATE TABLE t(v INTEGER)", "INSERT INTO t VALUES (1),(2)", "CREATE TABLE empty(v INTEGER)"],
+  "SELECT v FROM t WHERE v IN (SELECT v FROM empty) ORDER BY v",
+);
+parity(
+  "empty NOT IN (SELECT) keeps all candidates",
+  ["CREATE TABLE t(v INTEGER)", "INSERT INTO t VALUES (1),(2)", "CREATE TABLE empty(v INTEGER)"],
+  "SELECT v FROM t WHERE v NOT IN (SELECT v FROM empty) ORDER BY v",
+);
+parity(
+  "multi-row scalar subquery returns first row (SQLite 3.51)",
+  ["CREATE TABLE t(x INTEGER)", "INSERT INTO t VALUES (1),(2),(3)"],
+  "SELECT (SELECT x FROM t ORDER BY x) AS v",
+);
+parity(
+  "scalar subquery with no rows is NULL",
+  ["CREATE TABLE t(x INTEGER)"],
+  "SELECT (SELECT x FROM t) AS v, (SELECT x FROM t) IS NULL AS isn",
+);

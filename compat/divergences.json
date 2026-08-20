@@ -48,7 +48,7 @@
       "scope": "select",
       "predicate": "INDEXED BY / NOT INDEXED is accepted and ignored",
       "specifiedBehavior": "Query results match the unhinted plan; missing-index errors are not raised.",
-      "pinnedBy": ["indexes/indexed-by.test.ts", "COMPATIBILITY.md"]
+      "pinnedBy": ["tests/contract/indexes/indexed-by.test.ts"]
     },
     {
       "id": "materialized-hint-ignored",
@@ -119,6 +119,27 @@
       "predicate": "user_version is not restored from SQLM",
       "specifiedBehavior": "PRAGMA user_version after restore is the default unless re-set.",
       "pinnedBy": ["PRG-beh-05", "SNP-omit-04"]
+    },
+    {
+      "id": "pragma-setter-noop",
+      "scope": "pragma",
+      "predicate": "Some pragma setters are accepted but do not change engine state yet",
+      "specifiedBehavior": "defer_foreign_keys, recursive_triggers, and application_id getters remain 0 after SET.",
+      "pinnedBy": ["PRG-beh-02", "PRG-beh-03", "PRG-beh-07"]
+    },
+    {
+      "id": "generate-series-extension",
+      "scope": "tvf",
+      "predicate": "generate_series is a sqlite-mem extension",
+      "specifiedBehavior": "Present in sqlite-mem; not claimed vs bun:sqlite default inventory.",
+      "pinnedBy": ["FTS-series-01"]
+    },
+    {
+      "id": "datetime-localtime-utc",
+      "scope": "datetime",
+      "predicate": "localtime/utc modifiers do not apply host timezone conversion",
+      "specifiedBehavior": "Modifiers are accepted as no-ops; storage remains UTC-like fixed strings.",
+      "pinnedBy": ["tests/contract/date-time/modifiers.test.ts"]
     }
   ]
 }

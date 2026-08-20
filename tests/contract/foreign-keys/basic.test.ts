@@ -151,3 +151,21 @@ sequenceParity(
   ],
   [{ sql: "INSERT INTO c VALUES (99)" }, { sql: "SELECT * FROM c", query: true }],
 );
+
+sequenceParity(
+  "AFTER DELETE trigger runs under foreign key CASCADE",
+  [
+    "PRAGMA foreign_keys=ON",
+    "CREATE TABLE p(id INTEGER PRIMARY KEY)",
+    "CREATE TABLE c(id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES p(id) ON DELETE CASCADE)",
+    "CREATE TABLE audit(msg TEXT)",
+    "CREATE TRIGGER c_del AFTER DELETE ON c BEGIN INSERT INTO audit VALUES ('child '||OLD.id); END",
+    "INSERT INTO p VALUES (1)",
+    "INSERT INTO c VALUES (10,1)",
+  ],
+  [
+    { sql: "DELETE FROM p WHERE id=1" },
+    { sql: "SELECT msg FROM audit ORDER BY msg", query: true },
+    { sql: "SELECT count(*) AS n FROM c", query: true },
+  ],
+);

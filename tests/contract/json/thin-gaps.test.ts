@@ -29,3 +29,15 @@ parity(
   [],
   "SELECT json_set('{}','$.sql_null',NULL,'$.json_null',json('null')) AS set_value,json_object('sql_null',NULL,'json_null',json('null')) AS object_value",
 );
+
+parity(
+  "json_group_array FILTER excludes SQL NULL members",
+  ["CREATE TABLE t(id INTEGER, v TEXT)", "INSERT INTO t VALUES (1,'a'),(2,NULL),(3,'b')"],
+  "SELECT json_group_array(v) FILTER (WHERE v IS NOT NULL) AS value FROM t",
+);
+
+parity("json_each on SQL NULL yields zero rows", [], "SELECT count(*) AS n FROM json_each(NULL)");
+
+parity("json_each on JSON null yields one atom row", [], "SELECT count(*) AS n, min(type) AS t FROM json_each('null')");
+
+parity("json_pretty accepts indent width", [], "SELECT json_pretty('{\"a\":1,\"b\":[2]}', '  ') AS value");

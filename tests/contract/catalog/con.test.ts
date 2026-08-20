@@ -125,9 +125,19 @@ runCatalog("CON", [
   },
   {
     id: "CON-fk-09",
-    kind: "parity",
-    setup: ["CREATE TABLE p(id INT PRIMARY KEY)", "CREATE TABLE c(id INT REFERENCES p(id))"],
-    sql: "SELECT 1 AS v",
+    kind: "sequence",
+    setup: [
+      "PRAGMA foreign_keys=OFF",
+      "CREATE TABLE p(id INT PRIMARY KEY)",
+      "CREATE TABLE c(id INT REFERENCES p(id))",
+      "INSERT INTO p VALUES (1)",
+      "INSERT INTO c VALUES (1)",
+      "INSERT INTO c VALUES (99)",
+    ],
+    steps: [
+      { sql: "PRAGMA foreign_key_check", query: true },
+      { sql: 'SELECT id, seq, "table", "from", "to" FROM pragma_foreign_key_list(\'c\')', query: true },
+    ],
   },
   {
     id: "CON-err-01",

@@ -37,7 +37,10 @@ function divergenceIdFor(id: string): string | undefined {
   }
   if (id === "PRG-fn-01" || id === "PRG-comp-01") return "compile-options-function-list";
   if (id === "PRG-beh-05") return "user-version-snapshot";
+  if (id === "PRG-beh-02" || id === "PRG-beh-03" || id === "PRG-beh-07") return "pragma-setter-noop";
+  if (id === "FTS-series-01") return "generate-series-extension";
   if (id === "FTS-chg-01") return "fts-shadow-counters";
+  if (id === "DAT-mod-localtime" || id === "datetime-localtime-utc") return "datetime-localtime-utc";
   if (id === "ATT-att-01") return "attach-empty-schema";
   if (id === "TOK-07") return "double-quote-string-fallback";
   if (id === "UNI-surr-01") return "lone-surrogate-bind";
@@ -660,12 +663,12 @@ const TAIL: CatalogSection[] = [
       ["tl-01", "table_list"],
       ["tvf-01", "pragma_* TVFs correlated"],
       ["beh-01", "foreign_keys pragma"],
-      ["beh-02", "defer_foreign_keys"],
-      ["beh-03", "recursive_triggers"],
+      ["beh-02", "defer_foreign_keys", D, "setter currently no-op; getter returns 0"],
+      ["beh-03", "recursive_triggers", D, "setter currently no-op; getter returns 0"],
       ["beh-04", "case_sensitive_like"],
       ["beh-05", "user_version get/set", D, "snapshot exclusion"],
       ["beh-06", "schema_version bumps on DDL"],
-      ["beh-07", "application_id"],
+      ["beh-07", "application_id", D, "setter currently no-op; getter returns 0"],
       ["health-01", "integrity_check quick_check ok"],
       ["health-02", "foreign_key_check rows"],
       ["stor-01", "journal_mode memory default"],
@@ -701,7 +704,7 @@ const TAIL: CatalogSection[] = [
       ["f34-02", "matchinfo offsets"],
       ["chg-01", "shadow-table change counters", D, "README"],
       ["snap-01", "virtual tables not in snapshots", D, "README"],
-      ["series-01", "generate_series"],
+      ["series-01", "generate_series", D, "sqlite-mem extension; not in bun:sqlite default"],
     ]),
     section("ATT", "ATTACH / DETACH / schemas", true, [
       ["att-01", "ATTACH anything is empty in-memory schema", D, "filename ignored for data"],

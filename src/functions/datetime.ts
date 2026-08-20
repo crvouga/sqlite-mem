@@ -21,11 +21,17 @@ function parseDate(value: SqlValue | undefined, context: FunctionContext): Date 
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function applyModifier(date: Date, modifier: string): Date | null {
+function applyModifier(date: Date, modifier: string, flags: { subsec: boolean }): Date | null {
   const result = new Date(date);
   const normalized = modifier.trim().toLowerCase();
   if (normalized === "unixepoch") return new Date((date.getTime() / 86400000 + JULIAN_UNIX_EPOCH) * 1000);
   if (normalized === "utc" || normalized === "localtime") return result;
+  if (normalized === "subsec" || normalized === "subsecond") {
+    flags.subsec = true;
+    return result;
+  }
+  // Accepted by SQLite; when not attached to a prior fractional add they are effectively no-ops.
+  if (normalized === "floor" || normalized === "ceiling") return result;
   const weekday = /^weekday\s+([0-6])$/.exec(normalized);
   if (weekday) {
     const target = Number(weekday[1]);
@@ -65,7 +71,7 @@ function applyModifier(date: Date, modifier: string): Date | null {
   return result;
 }
 
-function resolveDate(args: SqlValue[], context: FunctionContext): Date | null {
+function resolveDate(args: SqlValue[], context: FunctionContext): { date: Date; subsec: boolean } | null {
   let source = args[0];
   let modifiers = args.slice(1);
   if (source === undefined) source = "now";
@@ -74,15 +80,22 @@ function resolveDate(args: SqlValue[], context: FunctionContext): Date | null {
     if (seconds === null) return null;
     source = seconds / 86400 + JULIAN_UNIX_EPOCH;
     modifiers = modifiers.slice(1);
+  } else if (typeof modifiers[0] === "string" && modifiers[0].trim().toLowerCase() === "auto") {
+    const number = coerceToNumber(source);
+    if (number === null) return null;
+    // SQLite: 0..5373484.499999 → julian day; otherwise unix timestamp.
+    source = number >= 0 && number < 5373484.5 ? number : number / 86400 + JULIAN_UNIX_EPOCH;
+    modifiers = modifiers.slice(1);
   }
   let date = parseDate(source, context);
   if (!date) return null;
+  const flags = { subsec: false };
   for (const modifier of modifiers) {
     if (typeof modifier !== "string") return null;
-    date = applyModifier(date, modifier);
+    date = applyModifier(date, modifier, flags);
     if (!date) return null;
   }
-  return date;
+  return { date, subsec: flags.subsec };
 }
 
 function pad(value: number, length = 2): string {
@@ -93,8 +106,9 @@ function isoDate(date: Date): string {
   return `${pad(date.getUTCFullYear(), 4)}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
 }
 
-function isoTime(date: Date): string {
-  return `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
+function isoTime(date: Date, subsec = false): string {
+  const base = `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
+  return subsec ? `${base}.${pad(date.getUTCMilliseconds(), 3)}` : base;
 }
 
 function dayOfYear(date: Date): number {
@@ -144,24 +158,24 @@ function formatDate(date: Date, format: string): string {
 export const dateTimeFunctions: Readonly<Record<string, ScalarFunction>> = {
   date(args, context) {
     const value = resolveDate(args, context);
-    return value ? isoDate(value) : null;
+    return value ? isoDate(value.date) : null;
   },
   time(args, context) {
     const value = resolveDate(args, context);
-    return value ? isoTime(value) : null;
+    return value ? isoTime(value.date, value.subsec) : null;
   },
   datetime(args, context) {
     const value = resolveDate(args, context);
-    return value ? `${isoDate(value)} ${isoTime(value)}` : null;
+    return value ? `${isoDate(value.date)} ${isoTime(value.date, value.subsec)}` : null;
   },
   julianday(args, context) {
     const value = resolveDate(args, context);
-    return value ? value.getTime() / 86400000 + JULIAN_UNIX_EPOCH : null;
+    return value ? value.date.getTime() / 86400000 + JULIAN_UNIX_EPOCH : null;
   },
   strftime(args, context) {
     if (typeof args[0] !== "string") return null;
     const value = resolveDate(args.slice(1), context);
-    return value ? formatDate(value, args[0]) : null;
+    return value ? formatDate(value.date, args[0]) : null;
   },
   current_date(args, context) {
     return dateTimeFunctions.date!(args.length === 0 ? ["now"] : args, context);
@@ -174,7 +188,7 @@ export const dateTimeFunctions: Readonly<Record<string, ScalarFunction>> = {
   },
   unixepoch(args, context) {
     const value = resolveDate(args.length === 0 ? ["now"] : args, context);
-    return value ? Math.floor(value.getTime() / 1000) : null;
+    return value ? Math.floor(value.date.getTime() / 1000) : null;
   },
   timediff(args) {
     if (args.length !== 2) return null;

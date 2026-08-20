@@ -42,3 +42,55 @@ sequenceParity("targetless ON CONFLICT updates whichever unique constraint confl
   },
   { sql: "SELECT * FROM accounts", query: true },
 ]);
+
+sequenceParity(
+  "OR IGNORE vs UPSERT DO NOTHING on PRIMARY KEY",
+  ["CREATE TABLE t(id INTEGER PRIMARY KEY, v TEXT)", "INSERT INTO t VALUES (1,'a')"],
+  [
+    { sql: "INSERT OR IGNORE INTO t VALUES (1,'b')" },
+    { sql: "INSERT INTO t VALUES (1,'c') ON CONFLICT DO NOTHING" },
+    { sql: "SELECT id, v FROM t ORDER BY id", query: true },
+  ],
+);
+
+sequenceParity(
+  "OR REPLACE vs UPSERT DO UPDATE replaces row",
+  ["CREATE TABLE t(id INTEGER PRIMARY KEY, v TEXT)", "INSERT INTO t VALUES (1,'a')"],
+  [
+    { sql: "INSERT OR REPLACE INTO t VALUES (1,'replaced')" },
+    { sql: "SELECT id, v, last_insert_rowid() AS rid FROM t", query: true },
+  ],
+);
+
+sequenceParity(
+  "UPSERT on WITHOUT ROWID table",
+  ["CREATE TABLE wr(id INTEGER PRIMARY KEY, v TEXT) WITHOUT ROWID", "INSERT INTO wr VALUES (1,'a')"],
+  [
+    { sql: "INSERT INTO wr VALUES (1,'b') ON CONFLICT(id) DO UPDATE SET v=excluded.v" },
+    { sql: "SELECT id, v FROM wr", query: true },
+  ],
+);
+
+sequenceParity(
+  "ON CONFLICT(rowid) DO UPDATE for INTEGER PRIMARY KEY",
+  ["CREATE TABLE t(id INTEGER PRIMARY KEY, v TEXT)", "INSERT INTO t VALUES (1,'a')"],
+  [
+    { sql: "INSERT INTO t(id, v) VALUES (1,'b') ON CONFLICT(rowid) DO UPDATE SET v=excluded.v" },
+    { sql: "SELECT id, v FROM t", query: true },
+  ],
+);
+
+sequenceParity(
+  "AUTOINCREMENT last_insert_rowid after UPSERT DO NOTHING",
+  ["CREATE TABLE t(id INTEGER PRIMARY KEY AUTOINCREMENT, v TEXT)", "INSERT INTO t(v) VALUES ('a')"],
+  [
+    { sql: "INSERT INTO t(id, v) VALUES (1,'b') ON CONFLICT DO NOTHING" },
+    { sql: "SELECT id, v, last_insert_rowid() AS rid FROM t ORDER BY id", query: true },
+  ],
+);
+
+parity(
+  "UPSERT DO UPDATE RETURNING excluded values",
+  ["CREATE TABLE t(id INTEGER PRIMARY KEY, v TEXT)", "INSERT INTO t VALUES (1,'old')"],
+  "INSERT INTO t VALUES (1,'new') ON CONFLICT(id) DO UPDATE SET v=excluded.v RETURNING id, v",
+);

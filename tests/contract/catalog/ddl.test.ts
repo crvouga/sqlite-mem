@@ -60,9 +60,11 @@ runCatalog("DDL", [
   },
   {
     id: "DDL-auto-03",
-    kind: "parity",
-    setup: ["CREATE TABLE t(id INTEGER PRIMARY KEY AUTOINCREMENT)"],
-    sql: "SELECT 1 AS v",
+    kind: "error",
+    setup: ["CREATE TABLE t(id INTEGER PRIMARY KEY AUTOINCREMENT)", "INSERT INTO t(id) VALUES (9223372036854775807)"],
+    sql: "INSERT INTO t DEFAULT VALUES",
+    messageTier: "B",
+    notes: "SQLITE_FULL after max signed rowid; message text matches oracle",
   },
   { id: "DDL-wor-01", kind: "error", sql: "CREATE TABLE t(a INT) WITHOUT ROWID" },
   {

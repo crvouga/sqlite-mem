@@ -497,8 +497,17 @@ export class Table {
       }
       return this.maximumRowid === null ? 1 : incrementRowid(this.maximumRowid);
     }
+    const maxSigned = 9223372036854775807n;
     let candidate = canonicalRowid(this.nextRowid);
-    while (this.rows.has(candidate)) candidate = incrementRowid(candidate);
+    while (this.rows.has(candidate)) {
+      if (BigInt(candidate) >= maxSigned) {
+        throw new SqliteError("database or disk is full", "other", "SQLITE_FULL");
+      }
+      candidate = incrementRowid(candidate);
+    }
+    if (BigInt(candidate) > maxSigned) {
+      throw new SqliteError("database or disk is full", "other", "SQLITE_FULL");
+    }
     return candidate;
   }
 

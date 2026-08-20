@@ -24,3 +24,29 @@ sequenceParity(
   ],
   { compareFinalState: true },
 );
+
+sequenceParity(
+  "mixed DDL DML txn PRAGMA script matches oracle",
+  [],
+  [
+    { sql: "PRAGMA foreign_keys = ON" },
+    { sql: "CREATE TABLE parent(id INTEGER PRIMARY KEY, name TEXT)" },
+    { sql: "CREATE TABLE child(id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES parent(id), note TEXT)" },
+    { sql: "INSERT INTO parent(name) VALUES ('p1'),('p2')" },
+    { sql: "INSERT INTO child(parent_id, note) VALUES (1,'c1'),(2,'c2')" },
+    { sql: "BEGIN" },
+    { sql: "SAVEPOINT sp_a" },
+    { sql: "UPDATE child SET note = 'edited' WHERE id = 1" },
+    { sql: "CREATE INDEX child_note ON child(note)" },
+    { sql: "ROLLBACK TO sp_a" },
+    { sql: "INSERT INTO child(parent_id, note) VALUES (1,'c3')" },
+    { sql: "RELEASE sp_a" },
+    { sql: "COMMIT" },
+    { sql: "ALTER TABLE child ADD COLUMN tag TEXT DEFAULT 't'" },
+    { sql: "CREATE VIEW child_v AS SELECT id, note, tag FROM child" },
+    { sql: "SELECT id, parent_id, note, tag FROM child ORDER BY id", query: true },
+    { sql: "SELECT id, note FROM child_v ORDER BY id", query: true },
+    { sql: "PRAGMA foreign_keys", query: true },
+  ],
+  { compareFinalState: true },
+);

@@ -546,9 +546,9 @@ export function evalExpr(expr: Expr, ctx: EvalContext): SqlValue {
       return result.rows[0]?.[0] ?? null;
     }
     case "aggregate":
-      throw new SqliteError("aggregate expression requires aggregate evaluation", "misuse");
-    case "window":
       throw new SqliteError("window expression requires window evaluation", "misuse");
+    case "window":
+      throw new SqliteError("misuse of window function", "misuse");
     case "row":
       throw new SqliteError("row value cannot be used as a scalar value", "misuse");
   }

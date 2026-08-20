@@ -65,7 +65,7 @@ Implemented today in [`tests/harness/`](../tests/harness/) (`expectParity`, adap
 
 ### 2.3 Multi-statement scripts
 
-`exec()` runs all statements; counters reflect the **most recent** completed statement (documented README semantics). Differential coverage of counter sequences after multi-statement `exec` is thin — see gap §23 / §36.
+`exec()` runs all statements; counters reflect the **most recent** completed statement (documented README semantics). Differential coverage includes multi-statement `exec` counter sequences (`tests/contract/null/not-in-select.test.ts`, `api/freeze.test.ts`).
 
 ---
 

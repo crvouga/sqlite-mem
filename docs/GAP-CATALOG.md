@@ -298,18 +298,18 @@ Machine-readable source: [`compat/divergences.json`](../compat/divergences.json)
 
 ## Next proof obligations (blocker → high)
 
-Ordered for Phase 1+:
+Ordered after 2026-08-20 Wave 1–5 dialect pass (many former highs are **closed** — see [PROOF.md](PROOF.md)):
 
-1. **blocker — Browser SQL differential** in CI (Playwright or equivalent): same fixtures vs oracle or pre-recorded oracle JSON; wire into `ci:local` / GHA.
-2. **high — Deterministic simulation harness** (DDL+DML+txn+savepoint+snapshot+PRAGMA; seed + `PATH` replay).
-3. **high — Multi-statement `exec` counters** differential (`changes` / `lastInsertRowid` / `total_changes`).
-4. **high — `?NNN` bind** differential (today ISOLATED).
-5. **high — Bind rejection matrix** (NaN/Infinity/undefined/Date/views) vs oracle + API-only pins.
-6. **high — `NOT IN (SELECT …)` NULL trap** differential.
-7. **high — Example app** multi-statement via `exec`, transactions, document prepare vs exec.
-8. **high — Expand fuzz** (expr affinity/overflow, schema, query shapes, binds, errors) + property invariants.
-9. **medium — Promote smoke-baseline IDs** to real constructs; deepen FTS/window/date/UPSERT/UPDATE FROM thin edges.
-10. **medium — UUID / generate_series** intentional documentation + pins.
+1. **medium — Implement pragma setters** for `defer_foreign_keys` / `recursive_triggers` / `application_id` (currently pinned no-ops).
+2. **medium — Deepen FTS / window / date** remaining thin edges beyond recent promotions.
+3. **major (WASM claim only) — `.sqlite` codec, UDFs, API adapters** — product work, not dialect tests.
+4. **major — sqllogictest / multi-oracle / full in-browser contract** — external corpora and runtime matrix.
+5. **docs — Keep GAP-ANALYSIS Phase 0 tables in sync** with PROOF.md (several P1/meta items already closed).
+
+### Closed since prior “Next proof obligations” list
+
+Browser SQL smoke in CI; `?NNN`; `NOT IN (SELECT)` NULL trap; multi-`exec` counters; bind rejection pins; error/subquery depth; UPSERT/UPDATE FROM/windows/JSON/date/collate/FK+trigger edges; mixed stateful simulation; smoke-baseline emptied; affinity/bind/malformed fuzz + determinism properties.
+
 
 ---
 

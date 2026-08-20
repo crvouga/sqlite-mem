@@ -19,7 +19,12 @@ export function App() {
 
   const run = useCallback(() => {
     setNotice(null);
-    setOutcome(runSql(sql));
+    const sample = SAMPLES.find((s) => s.sql === sql);
+    const useTransaction = sample?.label === "transaction()";
+    setOutcome(runSql(sql, { useTransaction }));
+    if (useTransaction) {
+      setNotice("Ran inside Database.transaction() (BEGIN/COMMIT or ROLLBACK).");
+    }
     refresh();
   }, [refresh, sql]);
 

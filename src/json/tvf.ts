@@ -38,6 +38,8 @@ function valueOf(node: JsonNode): SqlValue {
 }
 
 export function jsonEachRows(json: SqlValue, path?: SqlValue): JsonTvfRow[] {
+  // SQL NULL → zero rows (distinct from JSON null, which yields one atom row).
+  if (json === null) return [];
   const root = ensureJson(json);
   const blob = encodeJsonb(root);
   const walk = walkJsonbTree(blob);
@@ -71,6 +73,7 @@ export function jsonEachRows(json: SqlValue, path?: SqlValue): JsonTvfRow[] {
 }
 
 export function jsonTreeRows(json: SqlValue, path?: SqlValue): JsonTvfRow[] {
+  if (json === null) return [];
   const root = ensureJson(json);
   const blob = encodeJsonb(root);
   const walk = walkJsonbTree(blob);
