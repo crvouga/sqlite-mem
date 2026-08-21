@@ -254,9 +254,9 @@ Columns: Area | SQLite 3.51 behavior | Current coverage | Severity | What proof 
 
 | Area | SQLite 3.51 behavior | Current coverage | Severity | What proof is missing | Suggested test type |
 | --- | --- | --- | --- | --- | --- |
-| Deterministic simulation harness | Long mixed sequences + snapshot + nested savepoints + PRAGMA | Proven (partial) — `tests/fuzz/dst/` + `mixed-stateful` (UPSERT/FK/checkpoint/compound SELECT) | medium | Broader schema mutation; ATTACH/triggers in mixed arb | simulation |
-| Expression / schema / query / bind / error fuzz expansion | Broad adversarial coverage | Proven (partial) — joins/subqueries/datetime/LIKE/windows/json/affinity-binds | medium | Grammar-weighted generators; overflow/bigint edges | fuzz |
-| Metamorphic oracles | TLP / NoREC | Proven (partial) — `tests/fuzz/metamorphic/` | medium | Multi-table / join TLP | metamorphic |
+| Deterministic simulation harness | Long mixed sequences + snapshot + nested savepoints + PRAGMA | Proven (partial) — `tests/fuzz/dst/` + `mixed-stateful` (UPSERT/FK/trigger/RETURNING/ATTACH/schema variants) | medium | Broader schema mutation; FTS in mixed arb | simulation |
+| Expression / schema / query / bind / error fuzz expansion | Broad adversarial coverage | Proven (partial) — joins/subqueries/datetime/LIKE/windows/json/affinity-binds/triggers/generated/FK/counters | medium | Grammar-weighted generators; overflow/bigint edges | fuzz |
+| Metamorphic oracles | TLP / NoREC | Proven (partial) — `tests/fuzz/metamorphic/` incl. join TLP | medium | Larger multi-join / OUTER TLP | metamorphic |
 | SQLLogicTest | External corpus | Proven (partial) — trimmed `vendor/sqllogictest/` | medium | Larger upstream ingest | corpus |
 | Property invariants without oracle | Snapshot≡restore; rollback PRNG; counters | Partial — ISOLATED determinism + snapshot + robustness bit-flip | medium | More README invariants | property |
 | Fail-closed for claimed-but-unproven | Inventory + requirements gate | Proven for oracle names / requirements unknown=0 | medium | Optionally fail on smoke-baseline growth; browser gate | gate |

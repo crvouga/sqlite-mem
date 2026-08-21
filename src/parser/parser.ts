@@ -1428,10 +1428,20 @@ export class Parser {
   private parseFkActions(): { onDelete: FkAction | null; onUpdate: FkAction | null } {
     let onDelete: FkAction | null = null;
     let onUpdate: FkAction | null = null;
+    // MATCH is accepted (SQLite grammar); SIMPLE is the default and FULL/PARTIAL are parsed for dialect parity.
+    while (this.match("MATCH")) {
+      this.parseIdent(); // SIMPLE | FULL | PARTIAL | …
+    }
     while (this.at("ON")) {
       if (this.peek().kind === "DELETE") onDelete = this.parseFkAction("DELETE");
       else if (this.peek().kind === "UPDATE") onUpdate = this.parseFkAction("UPDATE");
       else this.syntaxError("expected ON DELETE or ON UPDATE");
+      while (this.match("MATCH")) {
+        this.parseIdent();
+      }
+    }
+    while (this.match("MATCH")) {
+      this.parseIdent();
     }
     return { onDelete, onUpdate };
   }

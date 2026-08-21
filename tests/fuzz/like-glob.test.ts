@@ -38,4 +38,21 @@ describe("LIKE/GLOB differential fuzz", () => {
       fuzzAssertConfig(30),
     );
   });
+
+  test("LIKE ESCAPE edges match SQLite", () => {
+    fc.assert(
+      fc.property(
+        haystackArb,
+        fc.constantFrom("%a%", "a\\%", "\\_", "a%"),
+        fc.constantFrom("\\", "/", "x", "\\\\"),
+        (hay, pat, esc) => {
+          const sql = `SELECT ${sqlLiteral(hay)} LIKE ${sqlLiteral(pat)} ESCAPE ${sqlLiteral(esc)} AS v`;
+          withDatabases((memory, sqlite) => {
+            compareOrReport("like-escape", sql, { hay, pat, esc }, memory.query(sql), sqlite.query(sql));
+          });
+        },
+      ),
+      fuzzAssertConfig(30),
+    );
+  });
 });

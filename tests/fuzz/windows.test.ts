@@ -107,4 +107,30 @@ describe("window differential fuzz", () => {
       fuzzAssertConfig(25),
     );
   });
+
+  test("GROUPS frames and EXCLUDE match SQLite", () => {
+    fc.assert(
+      fc.property(
+        fc.array(rowArb, { minLength: 1, maxLength: 8 }),
+        fc.constantFrom("CURRENT ROW", "GROUP", "TIES", "NO OTHERS"),
+        (rows, exclude) => {
+          withDatabases((memory, sqlite) => {
+            for (const db of [memory, sqlite]) {
+              db.exec("CREATE TABLE scores(team TEXT, name TEXT, score INTEGER)");
+              for (const row of rows) {
+                db.exec("INSERT INTO scores(team, name, score) VALUES (?, ?, ?)", [row.team, row.name, row.score]);
+              }
+            }
+            const sql = [
+              "SELECT team, name, score,",
+              `sum(score) OVER (PARTITION BY team ORDER BY score, name GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW EXCLUDE ${exclude}) AS gsum`,
+              "FROM scores ORDER BY team, score, name",
+            ].join(" ");
+            compareOrReport("window-groups-exclude", sql, { rows, exclude }, memory.query(sql), sqlite.query(sql));
+          });
+        },
+      ),
+      fuzzAssertConfig(20),
+    );
+  });
 });

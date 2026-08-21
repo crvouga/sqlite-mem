@@ -138,7 +138,7 @@ These are not SQL features — they determine whether later green is trustworthy
 | 38 | Deterministic driver + shrink + repro files | **partial** | major | L | Seed/path replay + `tests/fuzz/dst/{minimize,repro}.ts` + `scripts/promote-fuzz-repro.ts` → corpus; shrink not fully automatic in CI. |
 | 39 | Model-based differential after every op | **partial** | major | L | `fuzz/stateful` + `mixed-stateful` via `tests/fuzz/dst/engine.ts` (DDL/DML/txn/UPSERT/FK/checkpoint). |
 | 40 | Random schema + grammar-weighted SQL generators | **partial** | major | XL | Expanded area arbs (joins/subqueries/datetime/LIKE/…); not production-weighted grammar. |
-| 41 | SQLancer-style TLP / NoREC / metamorphic | **partial** | major | XL | `tests/fuzz/metamorphic/{tlp,norec}.test.ts` — single-table start. |
+| 41 | SQLancer-style TLP / NoREC / metamorphic | **partial** | major | XL | `tests/fuzz/metamorphic/{tlp,norec}.test.ts` — includes join TLP. |
 | 42 | Robustness fuzz (never non-SqliteError / hang / corrupt) | **partial** | major | L | `tests/fuzz/robustness.test.ts` (token salad, 5s budget, Dump, SQLM bit-flip → SqliteError). |
 | 43 | Fault injection atomicity | **absent** | major | L | None. |
 | 44 | Snapshot fuzz invariants (corrupt decoder) | **partial** | major | M | Bit-flip decoder wrapped as SqliteError; deeper adversarial codecs thinner. |

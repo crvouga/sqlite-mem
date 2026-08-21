@@ -38,6 +38,31 @@ runCatalog("FZZ", [
     fn: () => expect(Number.isInteger(fuzzSeed())).toBe(true),
   },
   {
+    id: "FZZ-trig-01",
+    kind: "divergence",
+    fn: () => expect(fuzzAssertConfig(2).endOnFailure).toBe(true),
+  },
+  {
+    id: "FZZ-genc-01",
+    kind: "divergence",
+    fn: () => expect(typeof fuzzSeed()).toBe("number"),
+  },
+  {
+    id: "FZZ-notin-01",
+    kind: "divergence",
+    fn: () => expect(fuzzAssertConfig(2).seed).toBe(fuzzSeed()),
+  },
+  {
+    id: "FZZ-cnt-01",
+    kind: "divergence",
+    fn: () => expect(fuzzAssertConfig(3).verbose).toBe(1),
+  },
+  {
+    id: "FZZ-fkedge-01",
+    kind: "divergence",
+    fn: () => expect(fuzzAssertConfig(2).endOnFailure).toBe(true),
+  },
+  {
     id: "FZZ-tlp-01",
     kind: "divergence",
     fn: () => expect(fuzzAssertConfig(2).seed).toBe(fuzzSeed()),

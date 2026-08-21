@@ -327,11 +327,15 @@ function pragmaTableInfo(args: readonly SqlValue[], env: ExecutionEnv, xinfo: bo
   const tableName = requireNameArg(args, "table_info");
   const table = env.state.tables.get(tableName.toLowerCase());
   if (!table) return { columns: xinfoColumns(xinfo), rows: [] };
-  const rows: SqlValue[][] = table.columns.map((column, cid) => {
+  // SQLite's table_info omits generated columns; table_xinfo includes them (hidden 2/3).
+  const visible = xinfo ? table.columns : table.columns.filter((column) => !column.generated);
+  const rows: SqlValue[][] = visible.map((column, cid) => {
     const pkIndex = table.columns.filter((c) => c.primaryKey).findIndex((c) => c.name === column.name);
     const pk = column.primaryKey ? (pkIndex >= 0 ? pkIndex + 1 : 1) : 0;
     const dflt = column.defaultExpr ? defaultLiteral(column.defaultExpr) : null;
-    const base: SqlValue[] = [cid, column.name, column.typeName ?? "", column.notNull ? 1 : 0, dflt, pk];
+    // WITHOUT ROWID primary keys are NOT NULL in SQLite's table_info.
+    const notNull = column.notNull || (table.withoutRowid && column.primaryKey) ? 1 : 0;
+    const base: SqlValue[] = [cid, column.name, column.typeName ?? "", notNull, dflt, pk];
     if (xinfo) {
       let hidden = 0;
       if (column.generated && !column.generated.stored) hidden = 2;

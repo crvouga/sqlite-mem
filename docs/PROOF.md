@@ -1,6 +1,6 @@
 # Proof status — drop-in evidence
 
-**As of:** 2026-08-20 (DST / fuzz GAP §G overhaul). Full argument lives in [DROP-IN-CONTRACT.md](DROP-IN-CONTRACT.md) and [GAP-ANALYSIS.md](GAP-ANALYSIS.md).
+**As of:** 2026-08-20 (fuzz pass two — mixed DST + area fuzz expansion). Full argument lives in [DROP-IN-CONTRACT.md](DROP-IN-CONTRACT.md) and [GAP-ANALYSIS.md](GAP-ANALYSIS.md).
 
 ## What is proven now
 
@@ -15,12 +15,12 @@
 | Error depth (CHECK UPDATE, generated, MATCH) | `tests/contract/errors/depth.test.ts` |
 | Scalar / empty IN subquery edges | `tests/contract/subqueries/edges.test.ts` |
 | UPSERT / UPDATE FROM / windows / JSON / date / collate / FK+trigger | `tests/contract/*/thin-gaps` + related |
-| Mixed DDL+DML+txn+PRAGMA+UPSERT+FK+checkpoint DST | `tests/fuzz/dst/` + `mixed-stateful.test.ts` |
+| Mixed DDL+DML+txn+PRAGMA+UPSERT+FK+trigger/RETURNING/ATTACH DST | `tests/fuzz/dst/` + `mixed-stateful.test.ts` |
 | Dump-after-each DML (O3) | `tests/fuzz/stateful.test.ts` |
-| TLP / NoREC metamorphic | `tests/fuzz/metamorphic/` |
+| TLP / NoREC metamorphic (incl. join TLP) | `tests/fuzz/metamorphic/` |
 | Robustness (SqliteError-only, timeout, SQLM bit-flip) | `tests/fuzz/robustness.test.ts` |
 | SQLLogicTest vendor corpus | `vendor/sqllogictest/` + `tests/fuzz/sqllogictest.test.ts` |
-| Area fuzz (joins/subqueries/datetime/LIKE/windows/json/binds) | `tests/fuzz/*.test.ts` |
+| Area fuzz (joins/subqueries/datetime/LIKE/windows/json/binds/triggers/generated/FK/counters) | `tests/fuzz/*.test.ts` |
 | Smoke baseline emptied | `compat/smoke-baseline.json` (`ids: []`) — former smoke IDs promoted |
 | Affinity / bind / malformed fuzz + determinism properties | `tests/fuzz/affinity-binds.test.ts` |
 | Canaries (suite can fail) | `bun run test:canaries` |
@@ -29,6 +29,7 @@
 | Purity gate | `verify-package` bans WASM / `eval` / `new Function` / SAB / Atomics |
 | Divergences doc | Auto-generated [DIVERGENCES.md](../DIVERGENCES.md) |
 | Nightly multi-seed soak | `.github/workflows/fuzz-soak.yml` + `bun run test:fuzz:soak` |
+| Corpus regressions (FK SET DEFAULT, NATURAL FULL, …) | `tests/corpus/regressions/` + `tests/fuzz/corpus.test.ts` |
 
 ## What is NOT proven (still blockers for WASM / API drop-in)
 

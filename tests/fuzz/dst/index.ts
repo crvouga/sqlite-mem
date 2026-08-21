@@ -20,7 +20,10 @@ export {
   SIMPLE_SCHEMA,
   dmlOpArb,
   mixedOpArb,
+  schemaFor,
+  schemaKindArb,
   type DmlOp,
   type MixedOp,
+  type SchemaKind,
 } from "./ops.ts";
 export { writeCorpusRepro, writeDstReproArtifact } from "./repro.ts";

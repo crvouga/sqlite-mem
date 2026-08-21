@@ -57,6 +57,19 @@ sequenceParity(
 );
 
 errorParity(
+  "ON DELETE SET DEFAULT rejects when default is the deleted parent",
+  [
+    "PRAGMA foreign_keys=ON",
+    "CREATE TABLE p(id INTEGER PRIMARY KEY)",
+    "CREATE TABLE c(id INTEGER,parent_id INTEGER DEFAULT 1 REFERENCES p(id) ON DELETE SET DEFAULT)",
+    "INSERT INTO p VALUES (1)",
+    "INSERT INTO c VALUES (2,1)",
+  ],
+  "DELETE FROM p WHERE id=1",
+  "constraint_foreign",
+);
+
+errorParity(
   "ON DELETE RESTRICT rejects referenced parent",
   [
     "PRAGMA foreign_keys=ON",

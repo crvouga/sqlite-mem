@@ -43,4 +43,52 @@ describe("foreign key differential fuzz", () => {
       fuzzAssertConfig(30),
     );
   });
+
+  test("SET NULL SET DEFAULT and MATCH edges match SQLite", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom("SET NULL", "SET DEFAULT", "CASCADE"),
+        fc.constantFrom("SIMPLE", "FULL"),
+        fc.array(fc.integer({ min: 1, max: 6 }), { minLength: 2, maxLength: 8 }),
+        (onDelete, match, ids) => {
+          withDatabases((memory, sqlite) => {
+            for (const db of [memory, sqlite]) {
+              db.exec("PRAGMA foreign_keys=ON");
+              db.exec("CREATE TABLE parent(id INTEGER PRIMARY KEY)");
+              db.exec(
+                `CREATE TABLE child(id INTEGER PRIMARY KEY, parent_id INTEGER DEFAULT 1, FOREIGN KEY (parent_id) REFERENCES parent(id) ON DELETE ${onDelete} MATCH ${match})`,
+              );
+              db.exec("INSERT INTO parent(id) VALUES (1)");
+            }
+
+            for (const [i, id] of ids.entries()) {
+              compareOutcomeOrReport(
+                "fk-edge-ins",
+                `INSERT INTO child(id, parent_id) VALUES (${i + 10}, ${id})`,
+                { onDelete, match, id },
+                memory.exec(`INSERT INTO child(id, parent_id) VALUES (${i + 10}, ${id})`),
+                sqlite.exec(`INSERT INTO child(id, parent_id) VALUES (${i + 10}, ${id})`),
+              );
+            }
+            compareOutcomeOrReport(
+              "fk-edge-del",
+              "DELETE FROM parent WHERE id = 1",
+              { onDelete, match },
+              memory.exec("DELETE FROM parent WHERE id = 1"),
+              sqlite.exec("DELETE FROM parent WHERE id = 1"),
+            );
+            const children = "SELECT id, parent_id FROM child ORDER BY id";
+            compareOrReport(
+              "fk-edge-children",
+              children,
+              { onDelete, match, ids },
+              memory.query(children),
+              sqlite.query(children),
+            );
+          });
+        },
+      ),
+      fuzzAssertConfig(20),
+    );
+  });
 });

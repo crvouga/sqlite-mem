@@ -910,22 +910,48 @@ function assertForeignKeySatisfied(
   row: Row,
   constraint: Extract<Table["constraints"][number], { type: "foreign_key" }>,
   env: ExecutionEnv,
+  excludeParent: Row | null = null,
 ): void {
   const values = constraint.columns.map((name) => row.values.get(normalizeColumnName(name)) ?? null);
+  assertForeignKeyValues(values, constraint, env, excludeParent);
+}
+
+/** Like assertForeignKeySatisfied, but using pending column updates (ON DELETE SET DEFAULT). */
+function assertForeignKeySatisfiedWithUpdates(
+  row: Row,
+  constraint: Extract<Table["constraints"][number], { type: "foreign_key" }>,
+  updates: Map<string, SqlValue>,
+  env: ExecutionEnv,
+  excludeParent: Row | null,
+): void {
+  const values = constraint.columns.map((name) => {
+    const key = normalizeColumnName(name);
+    return updates.has(key) ? (updates.get(key) ?? null) : (row.values.get(key) ?? null);
+  });
+  assertForeignKeyValues(values, constraint, env, excludeParent);
+}
+
+function assertForeignKeyValues(
+  values: SqlValue[],
+  constraint: Extract<Table["constraints"][number], { type: "foreign_key" }>,
+  env: ExecutionEnv,
+  excludeParent: Row | null,
+): void {
   if (values.some((value) => value === null)) return;
   const parent = env.state.getTable(constraint.refTable);
   const parentColumns =
     constraint.refColumns ?? parent.columns.filter((column) => column.primaryKey).map((column) => column.name);
   if (
-    ![...parent.scan()].some((candidate) =>
-      values.every((value, index) => {
+    ![...parent.scan()].some((candidate) => {
+      if (excludeParent && candidate.rowid === excludeParent.rowid) return false;
+      return values.every((value, index) => {
         const parentColumn = parentColumns[index];
         return (
           parentColumn !== undefined &&
           compareSql(value, candidate.values.get(normalizeColumnName(parentColumn)) ?? null) === 0
         );
-      }),
-    )
+      });
+    })
   ) {
     throw new SqliteError("FOREIGN KEY constraint failed", "constraint_foreign", "SQLITE_CONSTRAINT_FOREIGNKEY");
   }
@@ -971,7 +997,10 @@ function applyReferentialDelete(parent: Table, row: Row, env: ExecutionEnv): num
           );
           changes += 1 + updated.cascaded;
         } else if (constraint.onDelete === "SET DEFAULT") {
-          const updated = updateOne(child, candidate, defaultUpdates(child, constraint.columns, env), env);
+          const updates = defaultUpdates(child, constraint.columns, env);
+          // Default must resolve to a surviving parent row (exclude the row being deleted).
+          assertForeignKeySatisfiedWithUpdates(candidate, constraint, updates, env, row);
+          const updated = updateOne(child, candidate, updates, env);
           changes += 1 + updated.cascaded;
         } else if (constraint.onDelete === "RESTRICT" || !fkIsDeferred(constraint, env)) {
           throw new SqliteError("FOREIGN KEY constraint failed", "constraint_foreign", "SQLITE_CONSTRAINT_FOREIGNKEY");

@@ -74,4 +74,47 @@ describe("TLP metamorphic fuzz", () => {
       fuzzAssertConfig(20),
     );
   });
+
+  test("two-table INNER JOIN TLP matches on both engines", () => {
+    fc.assert(
+      fc.property(
+        fc.uniqueArray(rowArb, { selector: (r) => r.id, minLength: 2, maxLength: 10 }),
+        fc.uniqueArray(rowArb, { selector: (r) => r.id, minLength: 2, maxLength: 10 }),
+        predicateArb,
+        (left, right, pred) => {
+          const p = predicateSql(pred).replaceAll(/\ba\b/g, "l.a").replaceAll(/\bb\b/g, "l.b");
+          withDatabases((memory, sqlite) => {
+            for (const db of [memory, sqlite]) {
+              db.exec("CREATE TABLE l(id INTEGER PRIMARY KEY, a INT, b TEXT)");
+              db.exec("CREATE TABLE r(id INTEGER PRIMARY KEY, a INT, b TEXT)");
+              for (const row of left) db.exec("INSERT INTO l VALUES (?, ?, ?)", [row.id, row.a, row.b]);
+              for (const row of right) db.exec("INSERT INTO r VALUES (?, ?, ?)", [row.id, row.a, row.b]);
+            }
+            const full = "SELECT l.id AS lid, r.id AS rid FROM l INNER JOIN r ON l.id = r.id ORDER BY lid, rid";
+            const partTrue = `SELECT l.id AS lid, r.id AS rid FROM l INNER JOIN r ON l.id = r.id WHERE (${p}) ORDER BY lid, rid`;
+            const partFalse = `SELECT l.id AS lid, r.id AS rid FROM l INNER JOIN r ON l.id = r.id WHERE NOT (${p}) ORDER BY lid, rid`;
+            const partNull = `SELECT l.id AS lid, r.id AS rid FROM l INNER JOIN r ON l.id = r.id WHERE (${p}) IS NULL ORDER BY lid, rid`;
+            for (const [label, sql] of [
+              ["full", full],
+              ["true", partTrue],
+              ["false", partFalse],
+              ["null", partNull],
+            ] as const) {
+              compareOrReport(`tlp-join-${label}`, sql, { left, right, pred }, memory.query(sql), sqlite.query(sql));
+            }
+            for (const db of [memory, sqlite]) {
+              const nFull = db.query(full).rows.length;
+              const nTrue = db.query(partTrue).rows.length;
+              const nFalse = db.query(partFalse).rows.length;
+              const nNull = db.query(partNull).rows.length;
+              if (nFull !== nTrue + nFalse + nNull) {
+                throw new Error(`join TLP broken: ${nFull} !== ${nTrue}+${nFalse}+${nNull}`);
+              }
+            }
+          });
+        },
+      ),
+      fuzzAssertConfig(15),
+    );
+  });
 });

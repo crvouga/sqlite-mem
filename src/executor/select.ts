@@ -513,14 +513,21 @@ export function scanFrom(item: FromItem, env: ExecutionEnv, parent?: EvalContext
     if (item.joinType === "RIGHT" || item.joinType === "FULL") {
       right.forEach((rhs, rightIndex) => {
         if (matchedRight.has(rightIndex)) return;
-        const rightCells = using
-          ? rhs.cells.map((cell) =>
-              using.some((name) => name.toLowerCase() === cell.name.toLowerCase())
-                ? { ...cell, hiddenByUsing: true }
-                : cell,
-            )
-          : rhs.cells;
-        result.push({ cells: [...nullLeft, ...rightCells] });
+        if (using) {
+          // USING/NATURAL: unmatched right rows expose right values for shared columns.
+          const leftCells = nullLeft.map((cell) => {
+            const shared = using.some((name) => name.toLowerCase() === cell.name.toLowerCase());
+            if (!shared) return cell;
+            const fromRight = rhs.cells.find((c) => c.name.toLowerCase() === cell.name.toLowerCase());
+            return { ...cell, value: fromRight?.value ?? null, hiddenByUsing: false };
+          });
+          const rightOnly = rhs.cells.filter(
+            (cell) => !using.some((name) => name.toLowerCase() === cell.name.toLowerCase()),
+          );
+          result.push({ cells: [...leftCells, ...rightOnly] });
+        } else {
+          result.push({ cells: [...nullLeft, ...rhs.cells] });
+        }
       });
     }
 

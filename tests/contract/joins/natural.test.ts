@@ -45,3 +45,14 @@ parity(
   data,
   "SELECT user_id, name, title FROM users NATURAL JOIN posts ORDER BY user_id, title",
 );
+
+parity(
+  "NATURAL FULL OUTER JOIN keeps right values on unmatched right rows",
+  [
+    "CREATE TABLE a(id INTEGER, av TEXT)",
+    "CREATE TABLE b(id INTEGER, bv TEXT)",
+    "INSERT INTO a VALUES (1,'a')",
+    "INSERT INTO b VALUES (1,'A'),(2,'B')",
+  ],
+  "SELECT id, av, bv FROM a NATURAL FULL OUTER JOIN b ORDER BY id",
+);

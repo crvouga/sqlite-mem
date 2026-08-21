@@ -2,17 +2,17 @@ import { describe, expect, test } from "bun:test";
 import * as fc from "fast-check";
 import { Database } from "../../src/index.ts";
 import { fuzzAssertConfig } from "./config.ts";
-import { mixedOpArb, runSequence } from "./dst/index.ts";
+import { mixedOpArb, runSequence, schemaKindArb } from "./dst/index.ts";
 
 const ciSteps = Number(process.env.SQLITE_MEM_MIXED_STEPS ?? "24");
 
 describe("mixed DDL/DML/txn/PRAGMA stateful simulation", () => {
   test("interleaved ops match B-tuple + Dump after every step", () => {
     fc.assert(
-      fc.property(fc.array(mixedOpArb, { minLength: 8, maxLength: ciSteps }), (ops) => {
-        runSequence(ops, { label: "mixed", finalizeCommit: true });
+      fc.property(schemaKindArb, fc.array(mixedOpArb, { minLength: 8, maxLength: ciSteps }), (schemaKind, ops) => {
+        runSequence(ops, { label: "mixed", schemaKind, finalizeCommit: true });
       }),
-      fuzzAssertConfig(12),
+      fuzzAssertConfig(16),
     );
   });
 });

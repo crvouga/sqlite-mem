@@ -13,14 +13,17 @@ import {
   SIMPLE_SCHEMA,
   type DmlOp,
   type MixedOp,
+  type SchemaKind,
   type SimState,
   initialSimState,
   resolveOp,
+  schemaFor,
 } from "./ops.ts";
 
 export interface RunSequenceOptions {
   label: string;
   schema?: string;
+  schemaKind?: SchemaKind;
   /** Use bound-parameter DML path (O3 stateful). */
   boundDml?: boolean;
   dumpAfterEveryStep?: boolean;
@@ -58,12 +61,10 @@ function runCheckpoint(
   state: SimState,
 ): void {
   if (memory.inTransaction()) {
-    // Restore is forbidden in a transaction on mem; skip.
     return;
   }
   const snap = memory.snapshot();
   state.snap = snap;
-  // Mutate memory only, then restore — Dump must still match oracle.
   memory.exec("DELETE FROM t WHERE 1");
   memory.restore(snap);
   compareStateOrReport(`${label}-checkpoint-${index}`, { op, index, sqlLog: state.sqlLog }, memory, sqlite);
@@ -73,7 +74,8 @@ function runCheckpoint(
  * Dual-engine dump-after-each simulation for a mixed (or DML-only) op sequence.
  */
 export function runSequence(ops: readonly MixedOp[], options: RunSequenceOptions): void {
-  const schema = options.schema ?? DEFAULT_SCHEMA;
+  const schemaKind = options.schemaKind ?? "plain";
+  const schema = options.schema ?? schemaFor(schemaKind);
   const dump = options.dumpAfterEveryStep ?? true;
   const label = options.label;
 
@@ -81,11 +83,13 @@ export function runSequence(ops: readonly MixedOp[], options: RunSequenceOptions
     compareOutcomeOrReport(`${label}-ddl`, schema, ops, memory.exec(schema), sqlite.exec(schema));
     if (dump) compareStateOrReport(`${label}-ddl-dump`, ops, memory, sqlite);
 
-    const state = initialSimState();
+    const state = initialSimState(schemaKind);
     state.sqlLog.push(schema);
 
     for (const [index, op] of ops.entries()) {
       if (op.kind === "checkpoint") {
+        // SQLM snapshot intentionally omits triggers / ATTACH (snapshot-exclusions).
+        if (state.hasTrigger || state.hasAttach) continue;
         runCheckpoint(label, index, op, memory, sqlite, state);
         continue;
       }
@@ -93,13 +97,27 @@ export function runSequence(ops: readonly MixedOp[], options: RunSequenceOptions
       const resolved = resolveOp(op, state);
       if (resolved === null) continue;
 
+      if (resolved.extraSql) {
+        for (const [extraIndex, extra] of resolved.extraSql.entries()) {
+          compareOutcomeOrReport(
+            `${label}-extra-${index}-${extraIndex}`,
+            extra,
+            op,
+            memory.exec(extra),
+            sqlite.exec(extra),
+          );
+          state.sqlLog.push(extra);
+          if (dump) compareStateOrReport(`${label}-extra-dump-${index}-${extraIndex}`, op, memory, sqlite);
+        }
+      }
+
       if (resolved.beginFirst) {
         compareOutcomeOrReport(`${label}-begin-${index}`, "BEGIN", op, memory.exec("BEGIN"), sqlite.exec("BEGIN"));
         state.sqlLog.push("BEGIN");
         if (dump) compareStateOrReport(`${label}-begin-dump-${index}`, op, memory, sqlite);
       }
 
-      const useOutcome = OUTCOME_KINDS.has(op.kind);
+      const useOutcome = OUTCOME_KINDS.has(op.kind) || state.hasTrigger;
       applyResolved(
         label,
         index,

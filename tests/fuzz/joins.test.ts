@@ -83,4 +83,47 @@ describe("join differential fuzz", () => {
       fuzzAssertConfig(25),
     );
   });
+
+  test("multi-column USING NATURAL FULL and 3-table joins match SQLite", () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.record({ a: fc.integer({ min: 1, max: 4 }), b: fc.integer({ min: 1, max: 4 }) }), {
+          minLength: 0,
+          maxLength: 4,
+        }),
+        fc.array(fc.record({ a: fc.integer({ min: 1, max: 4 }), b: fc.integer({ min: 1, max: 4 }) }), {
+          minLength: 0,
+          maxLength: 4,
+        }),
+        fc.array(fc.record({ a: fc.integer({ min: 1, max: 4 }), c: fc.integer({ min: 1, max: 4 }) }), {
+          minLength: 0,
+          maxLength: 4,
+        }),
+        fc.constantFrom("JOIN r USING (a, b)", "NATURAL FULL OUTER JOIN r", "JOIN m ON l.a = m.a JOIN r ON r.a = m.a"),
+        (left, right, mid, joinClause) => {
+          withDatabases((memory, sqlite) => {
+            for (const db of [memory, sqlite]) {
+              db.exec("CREATE TABLE l(a INT, b INT)");
+              db.exec("CREATE TABLE r(a INT, b INT)");
+              db.exec("CREATE TABLE m(a INT, c INT)");
+              for (const row of left) db.exec(`INSERT INTO l VALUES (${row.a}, ${row.b})`);
+              for (const row of right) db.exec(`INSERT INTO r VALUES (${row.a}, ${row.b})`);
+              for (const row of mid) db.exec(`INSERT INTO m VALUES (${row.a}, ${row.c})`);
+            }
+            // Alias every column and fully order — SELECT * + ORDER BY a,b is unstable with duplicate names.
+            const sql =
+              joinClause === "JOIN m ON l.a = m.a JOIN r ON r.a = m.a"
+                ? [
+                    "SELECT l.a AS la, l.b AS lb, m.a AS ma, m.c AS mc, r.a AS ra, r.b AS rb",
+                    `FROM l ${joinClause}`,
+                    "ORDER BY la, lb, ma, mc, ra, rb",
+                  ].join(" ")
+                : `SELECT * FROM l ${joinClause} ORDER BY a, b`;
+            compareOrReport("join-multi", sql, { left, right, mid, joinClause }, memory.query(sql), sqlite.query(sql));
+          });
+        },
+      ),
+      fuzzAssertConfig(20),
+    );
+  });
 });

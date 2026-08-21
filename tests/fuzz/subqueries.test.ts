@@ -1,7 +1,7 @@
 import { describe, test } from "bun:test";
 import * as fc from "fast-check";
 import { fuzzAssertConfig, intArb, textArb } from "./config.ts";
-import { compareOrReport, withDatabases } from "./helpers.ts";
+import { compareOrReport, compareOutcomeOrReport, withDatabases } from "./helpers.ts";
 
 const rowsArb = fc.array(fc.record({ id: fc.integer({ min: 1, max: 20 }), a: intArb, b: textArb }), {
   minLength: 1,
@@ -56,6 +56,54 @@ describe("subquery differential fuzz", () => {
         },
       ),
       fuzzAssertConfig(25),
+    );
+  });
+
+  test("NOT IN / IN with NULL rows and empty subqueries match SQLite", () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.option(intArb, { nil: null }), { minLength: 0, maxLength: 6 }),
+        fc.option(intArb, { nil: null }),
+        (haystack, needle) => {
+          withDatabases((memory, sqlite) => {
+            for (const db of [memory, sqlite]) {
+              db.exec("CREATE TABLE t(a INT)");
+              for (const value of haystack) {
+                db.exec("INSERT INTO t VALUES (?)", [value]);
+              }
+            }
+            const lit = needle === null ? "NULL" : String(needle);
+            for (const sql of [
+              `SELECT ${lit} IN (SELECT a FROM t) AS v`,
+              `SELECT ${lit} NOT IN (SELECT a FROM t) AS v`,
+              `SELECT ${lit} IN (SELECT a FROM t WHERE 0) AS v`,
+              `SELECT ${lit} NOT IN (SELECT a FROM t WHERE 0) AS v`,
+            ]) {
+              compareOrReport("notin-null", sql, { haystack, needle }, memory.query(sql), sqlite.query(sql));
+            }
+          });
+        },
+      ),
+      fuzzAssertConfig(30),
+    );
+  });
+
+  test("scalar subquery cardinality errors match SQLite", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 0, max: 4 }), (n) => {
+        withDatabases((memory, sqlite) => {
+          for (const db of [memory, sqlite]) {
+            db.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, a INT)");
+            for (let i = 1; i <= n; i++) db.exec("INSERT INTO t VALUES (?, ?)", [i, i]);
+          }
+          const sql = "SELECT (SELECT a FROM t) AS v";
+          compareOutcomeOrReport("scalar-card", sql, { n }, memory.query(sql), sqlite.query(sql));
+          if (n <= 1) {
+            compareOrReport("scalar-card-ok", sql, { n }, memory.query(sql), sqlite.query(sql));
+          }
+        });
+      }),
+      fuzzAssertConfig(20),
     );
   });
 });
