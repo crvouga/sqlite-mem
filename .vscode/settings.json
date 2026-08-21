@@ -1,3 +1,9 @@
 {
-  "cSpell.words": ["autoindexes", "commitlint"]
+  "cSpell.words": [
+    "autoindexes",
+    "commitlint",
+    "crvouga",
+    "Prng",
+    "savepoint"
+  ]
 }
