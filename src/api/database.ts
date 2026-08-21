@@ -15,6 +15,18 @@ import type { BindValue, QueryRow } from "../types/value.ts";
 import { captureSnapshot, type Snapshot } from "./snapshot.ts";
 import { Statement } from "./statement.ts";
 
+const ADOPT = Symbol("sqlite-mem.adopt");
+
+interface AdoptedDatabase {
+  readonly [ADOPT]: true;
+  readonly state: DatabaseState;
+  readonly prng: Prng;
+  readonly now: Clock;
+  readonly seed: number | bigint;
+  readonly randomMode: RandomMode;
+  readonly systemClock: boolean;
+}
+
 /**
  * Pure TypeScript in-memory SQLite database.
  *
@@ -33,18 +45,6 @@ import { Statement } from "./statement.ts";
  * const users = db.query<{ id: number; name: string }>("SELECT * FROM users");
  * ```
  */
-const ADOPT = Symbol("sqlite-mem.adopt");
-
-interface AdoptedDatabase {
-  readonly [ADOPT]: true;
-  readonly state: DatabaseState;
-  readonly prng: Prng;
-  readonly now: Clock;
-  readonly seed: number | bigint;
-  readonly randomMode: RandomMode;
-  readonly systemClock: boolean;
-}
-
 export class Database {
   /** @internal Engine catalog, tables, and mutation counters. */
   readonly state: DatabaseState;
