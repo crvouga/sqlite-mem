@@ -1,5 +1,6 @@
 import { SqliteError } from "../errors/index.ts";
 import type { SqlValue } from "../types/value.ts";
+import type { Fts5VirtualTable } from "../vtable/fts5.ts";
 import type { FunctionContext, ScalarFunction } from "./registry.ts";
 
 function requireArgs(name: string, args: SqlValue[], min: number, max = min): void {
@@ -22,11 +23,7 @@ function resolveFtsTable(args: SqlValue[], context: FunctionContext, name: strin
   return table;
 }
 
-function columnText(
-  table: import("../vtable/fts5.ts").Fts5VirtualTable,
-  context: FunctionContext,
-  colIndex: number,
-): string {
+function columnText(table: Fts5VirtualTable, context: FunctionContext, colIndex: number): string {
   const col = table.columns[colIndex];
   if (!col) return "";
   const rowid = context.ftsMatch?.rowid ?? context.ftsRowid;

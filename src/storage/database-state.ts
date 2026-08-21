@@ -279,6 +279,7 @@ export class DatabaseState {
             refColumns: constraint.columns,
             onDelete: constraint.onDelete,
             onUpdate: constraint.onUpdate,
+            match: constraint.match,
             name: null,
             deferrable: constraint.deferrable,
             initiallyDeferred: constraint.initiallyDeferred,

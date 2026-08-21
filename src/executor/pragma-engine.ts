@@ -453,6 +453,7 @@ function pragmaForeignKeyCheck(args: readonly SqlValue[], env: ExecutionEnv): Pr
           childValues.push(value);
           if (value !== null) allNull = false;
         }
+        // MATCH FULL is parsed but not enforced by SQLite (SIMPLE semantics).
         if (allNull) continue;
         if (!parent || !parentHasMatch(parent, refColumns, childValues)) {
           rows.push([table.name, row.rowid, constraint.refTable, fkid]);

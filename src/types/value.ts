@@ -137,31 +137,53 @@ export function applyAffinity(value: SqlValue, affinity: Affinity): SqlValue {
 
   switch (affinity) {
     case "TEXT":
-      if (value instanceof Uint8Array) return utf8Decode(value);
+      // BLOB and TEXT are not converted under TEXT affinity (SQLite rules).
+      if (value instanceof Uint8Array) return value;
       if (value instanceof SqlJsonText) return value.value;
       if (typeof value === "string") return value;
-      if (value instanceof SqlReal) return String(value.value);
+      if (value instanceof SqlReal) return formatRealAsText(value.value);
+      if (typeof value === "number") return String(canonicalizeNumber(value));
+      if (typeof value === "bigint") return value.toString();
       return String(value);
     case "INTEGER": {
+      if (value instanceof Uint8Array) return value;
       const n = coerceToNumber(value);
       if (n === null) return value;
       if (typeof value === "bigint") return value;
       return Number.isInteger(n) && Number.isSafeInteger(n) ? Math.trunc(n) : canonicalizeNumber(n);
     }
     case "REAL": {
+      if (value instanceof Uint8Array) return value;
       const n = coerceToNumber(value);
       return n === null ? value : asSqlReal(n);
     }
     case "NUMERIC": {
+      if (value instanceof Uint8Array) return value;
       const n = coerceToNumber(value);
       if (n === null) return value;
       if (Number.isInteger(n) && Number.isSafeInteger(n)) return Math.trunc(n);
       return canonicalizeNumber(n);
     }
     case "BLOB":
-      if (typeof value === "number") return canonicalizeNumber(value);
+      // BLOB affinity never converts storage classes.
       return value;
   }
+}
+
+/** Format a REAL for TEXT affinity / CAST AS TEXT (SQLite-like). */
+function formatRealAsText(value: number): string {
+  const n = canonicalizeNumber(value);
+  if (Object.is(n, -0) || n === 0) return "0.0";
+  if (Number.isInteger(n) && Number.isSafeInteger(n)) return `${n}.0`;
+  // Match common SQLite scientific forms for large magnitudes.
+  const abs = Math.abs(n);
+  if (abs >= 1e16 || (abs > 0 && abs < 1e-4)) {
+    return n
+      .toExponential(1)
+      .replace(/e([+-])(\d)$/, "e$10$2")
+      .replace(/e\+/, "e+");
+  }
+  return String(n);
 }
 
 /**

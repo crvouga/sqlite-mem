@@ -377,6 +377,7 @@ export interface UpdateStmt {
 export interface DeleteStmt {
   type: "delete";
   with: WithClause | null;
+  or: "replace" | "ignore" | "abort" | "rollback" | "fail" | null;
   table: string;
   alias: string | null;
   where: Expr | null;
@@ -414,6 +415,7 @@ export type ColumnConstraint =
       columns: string[] | null;
       onDelete: FkAction | null;
       onUpdate: FkAction | null;
+      match: FkMatch;
       deferrable: boolean;
       initiallyDeferred: boolean;
     }
@@ -430,6 +432,7 @@ export type TableConstraint =
       refColumns: string[] | null;
       onDelete: FkAction | null;
       onUpdate: FkAction | null;
+      match: FkMatch;
       name: string | null;
       deferrable: boolean;
       initiallyDeferred: boolean;
@@ -445,6 +448,8 @@ export interface IndexedColumn {
 
 export type ConflictAction = "ROLLBACK" | "ABORT" | "FAIL" | "IGNORE" | "REPLACE";
 export type FkAction = "SET NULL" | "SET DEFAULT" | "CASCADE" | "RESTRICT" | "NO ACTION";
+/** SQLite MATCH clause; FULL rejects partial-NULL composite keys. PARTIAL is accepted as SIMPLE. */
+export type FkMatch = "SIMPLE" | "FULL" | "PARTIAL";
 
 export interface DropTableStmt {
   type: "drop_table";

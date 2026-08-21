@@ -44,9 +44,10 @@ export const CANARIES: Canary[] = [
     id: "affinity-integer-skip",
     description: "INTEGER affinity no longer coerces numeric text",
     file: "src/types/value.ts",
-    find: 'case "INTEGER": {\n      const n = coerceToNumber(value);\n      if (n === null) return value;',
-    replace: 'case "INTEGER": {\n      const n = null;\n      if (n === null) return value;',
-    probe: ["tests/contract/types/affinity.test.ts"],
+    find: 'case "INTEGER": {\n      if (value instanceof Uint8Array) return value;\n      const n = coerceToNumber(value);\n      if (n === null) return value;',
+    replace:
+      'case "INTEGER": {\n      if (value instanceof Uint8Array) return value;\n      const n = null;\n      if (n === null) return value;',
+    probe: ["tests/contract/types/affinity.test.ts", "tests/contract/types/affinity-matrix.test.ts"],
   },
   {
     id: "order-class-flip",

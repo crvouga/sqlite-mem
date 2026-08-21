@@ -58,7 +58,7 @@ Columns: Area | SQLite 3.51 behavior | Current coverage | Severity | What proof 
 | --- | --- | --- | --- | --- | --- |
 | CREATE / DROP TABLE / INDEX / VIEW | Schema + IF EXISTS/NOT EXISTS | Proven — `tests/contract/schema/`, `ddl-if/`, `indexes/`, `views/`, catalog `DDL-*` / `PAR-*` | low | Named-constraint edge names; IF NOT EXISTS race-like sequences | differential |
 | ALTER TABLE | ADD/DROP/RENAME column (SQLite limits) | Proven — `tests/contract/alter-table/*` | low | DROP generated column; RENAME TABLE deeper | differential |
-| INSERT / UPDATE / DELETE | Standard DML + conflicts | Proven — `insert/`, `update/`, `delete/`, `conflicts/`, fuzz `dml.test.ts` | low | DELETE/UPDATE `LIMIT`/`ORDER BY` if claimed | differential |
+| INSERT / UPDATE / DELETE | Standard DML + conflicts | Proven — `insert/`, `update/`, `delete/`, `conflicts/` incl. `statement-atomicity` + `or-constraint-grid`, fuzz `conflicts.test.ts` | low | DELETE OR (not in bun:sqlite) | differential |
 | UPSERT | ON CONFLICT DO UPDATE/NOTHING, targets, WHERE | Thin — `upsert/*`, `upsert/thin-gaps.test.ts`, fuzz | medium | `OR IGNORE`/`OR REPLACE` vs UPSERT same table; AUTOINCREMENT + `last_insert_rowid`; `excluded.*`; WITHOUT ROWID; `ON CONFLICT(rowid)` | differential |
 | RETURNING | INSERT/UPDATE/DELETE RETURNING | Proven — `returning/`, UPSERT RETURNING in thin-gaps | low | `RETURNING` excluded / `old`/`new` names | differential |
 | UPDATE FROM | Join source into UPDATE | Thin — one INNER in `update-from/basic.test.ts` | medium | Multi-match, LEFT FROM, correlated FROM | differential |
@@ -71,6 +71,7 @@ Columns: Area | SQLite 3.51 behavior | Current coverage | Severity | What proof 
 | --- | --- | --- | --- | --- | --- |
 | Arithmetic / logic / CASE / CAST | Full expr surface | Proven — `expressions/`, matrices `m1`/`m2` | low | Hex integer literals `0x…` | differential |
 | Comparison affinity | Column affinity on `=` / IN / WHERE | Proven — `types/comparison-affinity.test.ts` | — | — | — |
+| Affinity matrix | Declared type × insert/CAST/UNION/INSERT SELECT | Proven — `types/affinity-matrix.test.ts`, fuzz `affinity-dml.test.ts` | low | Subquery projection of REAL wrappers | differential |
 | LIKE / GLOB / ESCAPE | ASCII CI unless `case_sensitive_like` | Thin — `like-glob-gaps.test.ts` | medium | LIKE vs column `COLLATE BINARY`; multi-char ESCAPE | differential |
 | REGEXP | Calls missing `regexp()` → error | Proven (error parity) — `expressions/regexp.test.ts` | intentional | Document “no regexp() builtin” as oracle-matching absence | intentional pin |
 | IS / IS DISTINCT FROM / boolean | NULL-safe + TRUE/FALSE | Proven — `null/`, `boolean-literals`, `distinct-from` | low | postfix ISNULL/NOTNULL; IS on BLOBs | differential |
@@ -85,7 +86,7 @@ Columns: Area | SQLite 3.51 behavior | Current coverage | Severity | What proof 
 | --- | --- | --- | --- | --- | --- |
 | Inventory names | All oracle builtins present | Proven — inventory gate + `functions/inventory.test.ts` | — | Name presence ≠ behavioral parity | — |
 | Core scalars | abs, typeof, printf, … | Thin — `functions/scalar|edges|more|scope3` | medium | soundex, unistr*, format flags, likelihood edges | differential / fuzz |
-| Date/time | date/time/datetime/strftime/modifiers | Thin — `date-time/*`, catalog `DAT-*` | medium | `subsec` / `auto` / `ceiling` / `floor`; `localtime`/`utc` no-op pins; invalid dates; timezone offsets | differential |
+| Date/time | date/time/datetime/strftime/modifiers | Proven — `date-time/*` incl. `invalid.test.ts` | low | timezone offsets beyond intentional `localtime`/`utc` no-ops | differential |
 | `timediff` / `julianday` / `unixepoch` | Oracle calendar rules | Thin — catalog has samples (`DAT-fn-04`, `DAT-fn-07`) | medium | Broader modifier matrix vs oracle | differential |
 | Aggregates + FILTER | count/sum/avg/… + FILTER | Proven — `aggregates/`, window FILTER in thin-gaps | low | — | — |
 | Windows (frames / EXCLUDE) | ROWS/RANGE/GROUPS + EXCLUDE | Thin — `window-functions/*`, fuzz `windows.test.ts` | medium | `IGNORE NULLS` / `RESPECT NULLS`; deeper `nth_value`; window in WHERE must fail; `BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING` | differential |
@@ -108,14 +109,14 @@ Columns: Area | SQLite 3.51 behavior | Current coverage | Severity | What proof 
 | Area | SQLite 3.51 behavior | Current coverage | Severity | What proof is missing | Suggested test type |
 | --- | --- | --- | --- | --- | --- |
 | PK / UNIQUE / NOT NULL / CHECK | Enforce + categories | Proven — `primary-keys/`, `unique/`, `check/`, `constraints/`, fuzz | low | `constraint_primary` vs `constraint_unique` category on IPK | errorParity |
-| Foreign keys | Immediate + deferred + actions | Proven — `foreign-keys/*` | medium | MATCH SIMPLE/FULL; FK+triggers; SET DEFAULT missing parent; FK to UNIQUE not PK; `CON-fk-09` is smoke | differential |
-| Generated columns | STORED/VIRTUAL | Thin — `generated/basic.test.ts` | medium | Insert-into-generated `errorParity` (currently ISOLATED); UPDATE; index/UNIQUE on generated; `table_xinfo` hidden | differential |
+| Foreign keys | Immediate + deferred + actions | Proven — `foreign-keys/*`, `foreign-keys/match.test.ts` (MATCH FULL≡SIMPLE as oracle) | low | FK to UNIQUE not PK; deeper deferred mid-txn | differential |
+| Generated columns | STORED/VIRTUAL | Proven — `generated/basic.test.ts` + fuzz UNIQUE on generated | low | Deeper `table_xinfo` hidden flags | differential |
 
 ### Indexes
 
 | Area | SQLite 3.51 behavior | Current coverage | Severity | What proof is missing | Suggested test type |
 | --- | --- | --- | --- | --- | --- |
-| Partial / expression / prefix | Correct results + uniqueness | Proven — `indexes/partial|expression|prefix` | medium | Non-unique partial lookup; DESC/COLLATE in expr index; partial+expression combo | differential |
+| Partial / expression / prefix | Correct results + uniqueness | Proven — `indexes/partial|expression|prefix` + fuzz `indexes.test.ts` | low | DESC/COLLATE in expr index depth | differential |
 | INDEXED BY / NOT INDEXED | Oracle errors on missing index | Intentional no-op — `indexes/indexed-by.test.ts` pins missing-index divergence | intentional | Ensure `divergences.json` `indexed-by-discarded` cites the pin tests (today cites COMPATIBILITY.md only) | intentional pin hygiene |
 | Covering / planner | Not observable beyond results | N/A for plan text; results Proven | low | — | — |
 
@@ -123,8 +124,8 @@ Columns: Area | SQLite 3.51 behavior | Current coverage | Severity | What proof 
 
 | Area | SQLite 3.51 behavior | Current coverage | Severity | What proof is missing | Suggested test type |
 | --- | --- | --- | --- | --- | --- |
-| Views | CREATE/DROP + INSTEAD OF | Thin — `views/basic`, INSTEAD OF covered | medium | View WITH; simple view INSERT without trigger | differential |
-| Non-recursive CTE | WITH / nested / shadowing | Proven — `cte/*`, fuzz | low | CTE in view definition; mixed recursive+non-recursive | differential |
+| Views | CREATE/DROP + INSTEAD OF | Proven — `views/basic`, `views/with.test.ts` | low | — | differential |
+| Non-recursive CTE | WITH / nested / shadowing | Proven — `cte/*`, fuzz | low | mixed recursive+non-recursive | differential |
 | Recursive CTE | UNION/UNION ALL, LIMIT/ORDER | Proven — `recursive-cte/*` | low | VALUES + recursive mix | differential |
 | MATERIALIZED hints | Both paths materialize | Intentional — `cte/thin-gaps.test.ts`, `CTE-mat-01` | intentional | — | — |
 
@@ -301,17 +302,17 @@ Machine-readable source: [`compat/divergences.json`](../compat/divergences.json)
 
 ## Next proof obligations (blocker → high)
 
-Ordered after 2026-08-20 Wave 1–5 dialect pass (many former highs are **closed** — see [PROOF.md](PROOF.md)):
+Ordered after 2026-08-21 core SQL dialect proof wave (see [PROOF.md](PROOF.md)):
 
 1. **medium — Implement pragma setters** for `defer_foreign_keys` / `recursive_triggers` / `application_id` (currently pinned no-ops).
-2. **medium — Deepen FTS / window / date** remaining thin edges beyond recent promotions.
+2. **medium — Deepen FTS** remaining PARTIAL edges toward VERIFIED.
 3. **major (WASM claim only) — `.sqlite` codec, UDFs, API adapters** — product work, not dialect tests.
 4. **major — sqllogictest / multi-oracle / full in-browser contract** — external corpora and runtime matrix.
 5. **docs — Keep GAP-ANALYSIS Phase 0 tables in sync** with PROOF.md (several P1/meta items already closed).
 
 ### Closed since prior “Next proof obligations” list
 
-Browser SQL smoke in CI; `?NNN`; `NOT IN (SELECT)` NULL trap; multi-`exec` counters; bind rejection pins; error/subquery depth; UPSERT/UPDATE FROM/windows/JSON/date/collate/FK+trigger edges; mixed stateful simulation; smoke-baseline emptied; affinity/bind/malformed fuzz + determinism properties.
+Browser SQL smoke in CI; `?NNN`; `NOT IN (SELECT)` NULL trap; multi-`exec` counters; bind rejection pins; error/subquery depth; UPSERT/UPDATE FROM/windows/JSON/date/collate/FK+trigger edges; mixed stateful simulation; smoke-baseline emptied; affinity/bind/malformed fuzz + determinism properties; **affinity combinatorial matrix**; **statement ABORT + OR×constraint grid**; **FK MATCH**; **views WITH + view DML reject**; **invalid date edges**; **indexes/conflicts/affinity-dml/generated fuzz**.
 
 
 ---

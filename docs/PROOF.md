@@ -1,6 +1,6 @@
 # Proof status — drop-in evidence
 
-**As of:** 2026-08-20 (fuzz pass two — mixed DST + area fuzz expansion). Full argument lives in [DROP-IN-CONTRACT.md](DROP-IN-CONTRACT.md) and [GAP-ANALYSIS.md](GAP-ANALYSIS.md).
+**As of:** 2026-08-21 (core SQL dialect proof wave — affinity matrix, statement ABORT, OR-grid, FK MATCH, area fuzz). Full argument lives in [DROP-IN-CONTRACT.md](DROP-IN-CONTRACT.md) and [GAP-ANALYSIS.md](GAP-ANALYSIS.md).
 
 ## What is proven now
 
@@ -15,12 +15,18 @@
 | Error depth (CHECK UPDATE, generated, MATCH) | `tests/contract/errors/depth.test.ts` |
 | Scalar / empty IN subquery edges | `tests/contract/subqueries/edges.test.ts` |
 | UPSERT / UPDATE FROM / windows / JSON / date / collate / FK+trigger | `tests/contract/*/thin-gaps` + related |
+| Affinity combinatorial (INSERT/CAST/UNION/INSERT SELECT) | `tests/contract/types/affinity-matrix.test.ts` + fuzz `affinity-dml.test.ts` |
+| Statement ABORT / OR-mode × constraint grid | `tests/contract/conflicts/statement-atomicity.test.ts`, `or-constraint-grid.test.ts` + fuzz `conflicts.test.ts` |
+| FK MATCH SIMPLE/FULL (oracle = SIMPLE semantics) | `tests/contract/foreign-keys/match.test.ts` + fuzz FK MATCH |
+| Views with `WITH` + reject view DML without INSTEAD OF | `tests/contract/views/with.test.ts` |
+| Invalid date/time edges | `tests/contract/date-time/invalid.test.ts` |
+| Index / generated UNIQUE fuzz | `tests/fuzz/indexes.test.ts`, deepened `generated.test.ts` |
 | Mixed DDL+DML+txn+PRAGMA+UPSERT+FK+trigger/RETURNING/ATTACH DST | `tests/fuzz/dst/` + `mixed-stateful.test.ts` |
 | Dump-after-each DML (O3) | `tests/fuzz/stateful.test.ts` |
 | TLP / NoREC metamorphic (incl. join TLP) | `tests/fuzz/metamorphic/` |
 | Robustness (SqliteError-only, timeout, SQLM bit-flip) | `tests/fuzz/robustness.test.ts` |
 | SQLLogicTest vendor corpus | `vendor/sqllogictest/` + `tests/fuzz/sqllogictest.test.ts` |
-| Area fuzz (joins/subqueries/datetime/LIKE/windows/json/binds/triggers/generated/FK/counters) | `tests/fuzz/*.test.ts` |
+| Area fuzz (joins/subqueries/datetime/LIKE/windows/json/binds/triggers/generated/FK/counters/indexes/conflicts/affinity-dml) | `tests/fuzz/*.test.ts` |
 | Smoke baseline emptied | `compat/smoke-baseline.json` (`ids: []`) — former smoke IDs promoted |
 | Affinity / bind / malformed fuzz + determinism properties | `tests/fuzz/affinity-binds.test.ts` |
 | Canaries (suite can fail) | `bun run test:canaries` |

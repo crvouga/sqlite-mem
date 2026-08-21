@@ -23,6 +23,7 @@ import type {
   DropViewStmt,
   Expr,
   FkAction,
+  FkMatch,
   FrameBound,
   FrameSpec,
   FromItem,
@@ -706,7 +707,8 @@ export class Parser {
       if (this.at("SELECT") || this.at("WITH") || this.at("VALUES")) {
         const select = this.at("SELECT") || this.at("WITH") ? this.parseSelectStmt() : this.parseValuesAsSelect();
         this.expect("RPAREN");
-        const alias = this.optionalAlias() ?? (this.syntaxError("subquery in FROM requires an alias") as never);
+        // SQLite allows omitting the alias; invent one for the AST.
+        const alias = this.optionalAlias() ?? `__subq_${this.pos}`;
         return { type: "subquery", select, alias };
       }
       const item = this.parseFromItem();
@@ -956,13 +958,26 @@ export class Parser {
 
   private parseDeleteStmt(withClause = this.parseOptionalWith()): DeleteStmt {
     this.expect("DELETE");
+    const or = this.parseOrConflict();
     this.expect("FROM");
     const table = this.parseTableName();
     const alias = this.optionalAlias();
     let where: Expr | null = null;
     if (this.match("WHERE")) where = this.parseExpr();
     const returning = this.parseReturning();
-    return { type: "delete", with: withClause, table, alias, where, returning };
+    const orMode =
+      or === null
+        ? null
+        : or === "REPLACE"
+          ? "replace"
+          : or === "IGNORE"
+            ? "ignore"
+            : or === "ABORT"
+              ? "abort"
+              : or === "ROLLBACK"
+                ? "rollback"
+                : "fail";
+    return { type: "delete", with: withClause, or: orMode, table, alias, where, returning };
   }
 
   // ── CREATE ──────────────────────────────────────────────────────────────
@@ -1304,9 +1319,9 @@ export class Parser {
       } while (this.match("COMMA"));
       this.expect("RPAREN");
     }
-    const { onDelete, onUpdate } = this.parseFkActions();
+    const { onDelete, onUpdate, match } = this.parseFkActions();
     const { deferrable, initiallyDeferred } = this.parseDeferrable();
-    return { type: "references", table, columns, onDelete, onUpdate, deferrable, initiallyDeferred };
+    return { type: "references", table, columns, onDelete, onUpdate, match, deferrable, initiallyDeferred };
   }
 
   private parseTableConstraint(): TableConstraint {
@@ -1353,7 +1368,7 @@ export class Parser {
         } while (this.match("COMMA"));
         this.expect("RPAREN");
       }
-      const { onDelete, onUpdate } = this.parseFkActions();
+      const { onDelete, onUpdate, match } = this.parseFkActions();
       const { deferrable, initiallyDeferred } = this.parseDeferrable();
       return {
         type: "foreign_key",
@@ -1362,6 +1377,7 @@ export class Parser {
         refColumns,
         onDelete,
         onUpdate,
+        match,
         name,
         deferrable,
         initiallyDeferred,
@@ -1425,25 +1441,28 @@ export class Parser {
     this.syntaxError(`expected ON ${kind} action`);
   }
 
-  private parseFkActions(): { onDelete: FkAction | null; onUpdate: FkAction | null } {
+  private parseFkActions(): { onDelete: FkAction | null; onUpdate: FkAction | null; match: FkMatch } {
     let onDelete: FkAction | null = null;
     let onUpdate: FkAction | null = null;
-    // MATCH is accepted (SQLite grammar); SIMPLE is the default and FULL/PARTIAL are parsed for dialect parity.
-    while (this.match("MATCH")) {
-      this.parseIdent(); // SIMPLE | FULL | PARTIAL | …
-    }
+    let match: FkMatch = "SIMPLE";
+    const readMatch = (): void => {
+      while (this.match("MATCH")) {
+        const word = this.parseIdent().toUpperCase();
+        if (word === "FULL") match = "FULL";
+        else if (word === "PARTIAL") match = "PARTIAL";
+        else match = "SIMPLE";
+      }
+    };
+    // MATCH is accepted (SQLite grammar); SIMPLE is the default. FULL rejects partial-NULL keys.
+    readMatch();
     while (this.at("ON")) {
       if (this.peek().kind === "DELETE") onDelete = this.parseFkAction("DELETE");
       else if (this.peek().kind === "UPDATE") onUpdate = this.parseFkAction("UPDATE");
       else this.syntaxError("expected ON DELETE or ON UPDATE");
-      while (this.match("MATCH")) {
-        this.parseIdent();
-      }
+      readMatch();
     }
-    while (this.match("MATCH")) {
-      this.parseIdent();
-    }
-    return { onDelete, onUpdate };
+    readMatch();
+    return { onDelete, onUpdate, match };
   }
 
   private parseDeferrable(): { deferrable: boolean; initiallyDeferred: boolean } {

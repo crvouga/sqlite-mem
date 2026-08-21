@@ -15,11 +15,11 @@ import { evalExpr } from "../expressions/eval.ts";
 import { tryIndexedTableRows } from "../planner/access.ts";
 import { splitQualifiedName, type ViewInfo } from "../storage/database-state.ts";
 import type { Row, Rowid } from "../storage/row.ts";
-import { normalizeColumnName } from "../storage/row.ts";
+import { cloneRow, normalizeColumnName } from "../storage/row.ts";
 import { makeColumnInfo, Table } from "../storage/table.ts";
 import { normalizeForCollation } from "../types/collation.ts";
 import { applyStrictValue } from "../types/strict.ts";
-import { applyAffinity, compareSql, isTruthySql, type SqlValue } from "../types/value.ts";
+import { applyAffinity, asSqlReal, compareSql, isTruthySql, type SqlValue } from "../types/value.ts";
 import type { Fts5Row, Fts5VirtualTable } from "../vtable/fts5.ts";
 import type { ExecutionEnv, ScopeRow } from "./env.ts";
 import { emptyResult, type ResultSet, resultValues, valuesToResult } from "./result.ts";
@@ -54,7 +54,7 @@ function executeInsertCore(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
   if (view) return executeViewInsert(stmt, view, env, totalBefore);
   const fast = tryFastInsert(stmt, env);
   if (fast) return fast;
-  const table = env.state.getWritableTable(stmt.table);
+  let table = env.state.getWritableTable(stmt.table);
   const columnNames = stmt.columns ?? table.columns.map((column) => column.name);
   const rowidIndexes = columnNames.map((name, index) => (isRowidName(name) ? index : -1)).filter((index) => index >= 0);
   if (rowidIndexes.length > 1) throw new SqliteError("duplicate column name: rowid", "other");
@@ -100,129 +100,161 @@ function executeInsertCore(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
     return emptyResult(changes, last);
   }
 
-  for (const source of sourceRows) {
-    if (source.length !== columnNames.length)
-      throw new SqliteError(
-        stmt.columns
-          ? `${source.length} values for ${columnNames.length} columns`
-          : `table ${table.name} has ${columnNames.length} columns but ${source.length} values were supplied`,
-        "other",
-      );
-    const values = new Map<string, SqlValue>();
-    for (const column of table.columns) {
-      if (column.generated) continue;
-      const suppliedIndex = suppliedIndexes[table.columns.indexOf(column)] ?? -1;
-      const value =
-        suppliedIndex >= 0
-          ? (source[suppliedIndex] ?? null)
-          : column.defaultExpr
-            ? evalExpr(column.defaultExpr, env.createEvalContext())
-            : null;
-      values.set(column.nameLower ?? column.name.toLowerCase(), storeColumnValue(table, column, value));
+  // ABORT undoes earlier rows from this statement without cloning the whole DB (critical for
+  // bulk single-row inserts inside a user transaction — savepoints would be O(n²)).
+  const abortMode = insertAbortResolution(stmt.mode) === "abort";
+  const undoInserted: Rowid[] = [];
+  const undoRemoved: Row[] = [];
+  const undoStatement = (): void => {
+    if (!abortMode) return;
+    for (let i = undoInserted.length - 1; i >= 0; i--) {
+      const row = table.rows.get(undoInserted[i]!);
+      if (row) removeOne(table, row, env);
     }
-    for (const column of table.columns) {
-      if (!column.generated) continue;
-      if (columnNames.some((name) => name.toLowerCase() === column.name.toLowerCase())) {
-        throw new SqliteError(`cannot INSERT into generated column "${column.name}"`, "misuse");
-      }
-      if (column.generated.stored) {
-        const genCtx = env.createEvalContext({
-          cells: table.columns
-            .filter((c) => !c.generated || c === column)
-            .flatMap((c) => {
-              if (c.generated && c !== column) return [];
-              if (c === column) return [];
-              return [
-                {
-                  table: table.name,
-                  name: c.name,
-                  value: values.get(normalizeColumnName(c.name)) ?? null,
-                  affinity: c.affinity,
-                  collate: c.collate,
-                },
-              ];
-            }),
-        });
-        const computed = evalExpr(column.generated.expr, genCtx);
-        values.set(normalizeColumnName(column.name), storeColumnValue(table, column, computed));
-      } else {
-        values.set(normalizeColumnName(column.name), null);
-      }
+    for (let i = undoRemoved.length - 1; i >= 0; i--) {
+      const row = undoRemoved[i]!;
+      table = env.state.ensureWritableTable(table);
+      table.rows.set(row.rowid, row);
+      if (table.indexes.length > 0) addIndexes(table, row, env);
     }
+  };
 
-    if (fireInsertTriggers("BEFORE", table, values, null, env) === "ignore") continue;
+  try {
+    for (const source of sourceRows) {
+      if (source.length !== columnNames.length)
+        throw new SqliteError(
+          stmt.columns
+            ? `${source.length} values for ${columnNames.length} columns`
+            : `table ${table.name} has ${columnNames.length} columns but ${source.length} values were supplied`,
+          "other",
+        );
+      const values = new Map<string, SqlValue>();
+      for (const column of table.columns) {
+        if (column.generated) continue;
+        const suppliedIndex = suppliedIndexes[table.columns.indexOf(column)] ?? -1;
+        const value =
+          suppliedIndex >= 0
+            ? (source[suppliedIndex] ?? null)
+            : column.defaultExpr
+              ? evalExpr(column.defaultExpr, env.createEvalContext())
+              : null;
+        values.set(column.nameLower ?? column.name.toLowerCase(), storeColumnValue(table, column, value));
+      }
+      for (const column of table.columns) {
+        if (!column.generated) continue;
+        if (columnNames.some((name) => name.toLowerCase() === column.name.toLowerCase())) {
+          throw new SqliteError(`cannot INSERT into generated column "${column.name}"`, "misuse");
+        }
+        if (column.generated.stored) {
+          const genCtx = env.createEvalContext({
+            cells: table.columns
+              .filter((c) => !c.generated || c === column)
+              .flatMap((c) => {
+                if (c.generated && c !== column) return [];
+                if (c === column) return [];
+                return [
+                  {
+                    table: table.name,
+                    name: c.name,
+                    value: values.get(normalizeColumnName(c.name)) ?? null,
+                    affinity: c.affinity,
+                    collate: c.collate,
+                  },
+                ];
+              }),
+          });
+          const computed = evalExpr(column.generated.expr, genCtx);
+          values.set(normalizeColumnName(column.name), storeColumnValue(table, column, computed));
+        } else {
+          values.set(normalizeColumnName(column.name), null);
+        }
+      }
 
-    const conflicts = conflictingRows(table, values, env);
-    if (conflicts.length > 0) {
-      if (stmt.upsert) {
-        const targetConflicts = conflictsForUpsert(table, values, env, stmt.upsert);
-        if (targetConflicts.length === 0) {
-          // Conflict is on a different unique constraint than the ON CONFLICT target.
+      if (fireInsertTriggers("BEFORE", table, values, null, env) === "ignore") continue;
+
+      const conflicts = conflictingRows(table, values, env);
+      if (conflicts.length > 0) {
+        if (stmt.upsert) {
+          const targetConflicts = conflictsForUpsert(table, values, env, stmt.upsert);
+          if (targetConflicts.length === 0) {
+            throw new SqliteError(
+              `UNIQUE constraint failed: ${table.name}`,
+              "constraint_unique",
+              "SQLITE_CONSTRAINT_UNIQUE",
+            );
+          }
+          if (stmt.upsert.action === "nothing") continue;
+          const row = targetConflicts[0]!;
+          const scope = scopeFor(table, row, stmt.table, env);
+          const excluded: ScopeRow = {
+            cells: table.columns.map((column) => ({
+              table: "excluded",
+              name: column.name,
+              value: values.get(normalizeColumnName(column.name)) ?? null,
+            })),
+          };
+          const merged = { cells: [...scope.cells, ...excluded.cells], rowid: row.rowid, sourceTable: table.name };
+          const ctx = env.createEvalContext(merged);
+          if (stmt.upsert.action.where && isTruthySql(evalExpr(stmt.upsert.action.where, ctx)) !== true) continue;
+          const updates = evaluateSet(stmt.upsert.action.set, table, ctx);
+          const updated = updateOne(table, row, updates, env);
+          changes += 1 + updated.cascaded;
+          if (stmt.returning.length)
+            returningRows.push(projectReturning(stmt.returning, scopeFor(table, updated.row, stmt.table, env), env));
+          continue;
+        }
+        const mode = stmt.mode;
+        if (mode === "insert_or_ignore") continue;
+        if (mode === "replace" || mode === "insert_or_replace") {
+          for (const row of conflicts) {
+            if (abortMode) undoRemoved.push(cloneRow(row));
+            removeOne(table, row, env);
+          }
+        } else {
           throw new SqliteError(
             `UNIQUE constraint failed: ${table.name}`,
             "constraint_unique",
             "SQLITE_CONSTRAINT_UNIQUE",
           );
         }
-        if (stmt.upsert.action === "nothing") continue;
-        const row = targetConflicts[0]!;
-        const scope = scopeFor(table, row, stmt.table, env);
-        const excluded: ScopeRow = {
-          cells: table.columns.map((column) => ({
-            table: "excluded",
-            name: column.name,
-            value: values.get(normalizeColumnName(column.name)) ?? null,
-          })),
-        };
-        const merged = { cells: [...scope.cells, ...excluded.cells], rowid: row.rowid, sourceTable: table.name };
-        const ctx = env.createEvalContext(merged);
-        if (stmt.upsert.action.where && isTruthySql(evalExpr(stmt.upsert.action.where, ctx)) !== true) continue;
-        const updates = evaluateSet(stmt.upsert.action.set, table, ctx);
-        const updated = updateOne(table, row, updates, env);
-        changes += 1 + updated.cascaded;
-        if (stmt.returning.length)
-          returningRows.push(projectReturning(stmt.returning, scopeFor(table, updated.row, stmt.table, env), env));
-        continue;
       }
-      const mode = stmt.mode;
-      if (mode === "insert_or_ignore") continue;
-      if (mode === "replace" || mode === "insert_or_replace") {
-        for (const row of conflicts) removeOne(table, row, env);
-      } else {
-        throw new SqliteError(
-          `UNIQUE constraint failed: ${table.name}`,
-          "constraint_unique",
-          "SQLITE_CONSTRAINT_UNIQUE",
-        );
-      }
-    }
 
-    let insertedRowid: Rowid | undefined;
-    try {
-      const suppliedRowid = rowidIndexes.length ? asExplicitRowid(source[rowidIndexes[0]!] ?? null) : undefined;
-      const rowid = table.insert({ values, rowid: suppliedRowid }, { prepared: true });
-      insertedRowid = rowid;
-      const row = table.rows.get(rowid)!;
-      validateRow(table, row, env);
-      if (table.indexes.length > 0) addIndexes(table, row, env);
-      if (env.state.foreignKeysEnabled) checkForeignKeys(table, row, env);
-      if (!table.withoutRowid) {
-        last = rowid;
-        env.state.lastInsertRowid = rowid;
+      let insertedRowid: Rowid | undefined;
+      try {
+        const suppliedRowid = rowidIndexes.length ? asExplicitRowid(source[rowidIndexes[0]!] ?? null) : undefined;
+        const rowid = table.insert({ values, rowid: suppliedRowid }, { prepared: true });
+        insertedRowid = rowid;
+        const row = table.rows.get(rowid)!;
+        validateRow(table, row, env);
+        if (table.indexes.length > 0) addIndexes(table, row, env);
+        if (env.state.foreignKeysEnabled) checkForeignKeys(table, row, env);
+        if (!table.withoutRowid) {
+          last = rowid;
+          env.state.lastInsertRowid = rowid;
+        }
+        fireInsertTriggers("AFTER", table, row.values, null, env);
+        changes++;
+        if (abortMode) undoInserted.push(rowid);
+        if (stmt.returning.length)
+          returningRows.push(projectReturning(stmt.returning, scopeFor(table, row, stmt.table, env), env));
+      } catch (error) {
+        if (insertedRowid !== undefined) {
+          const inserted = table.rows.get(insertedRowid);
+          if (inserted) removeOne(table, inserted, env);
+        }
+        if (
+          stmt.mode === "insert_or_ignore" &&
+          error instanceof SqliteError &&
+          error.category.startsWith("constraint") &&
+          error.category !== "constraint_foreign"
+        )
+          continue;
+        throw error;
       }
-      fireInsertTriggers("AFTER", table, row.values, null, env);
-      changes++;
-      if (stmt.returning.length)
-        returningRows.push(projectReturning(stmt.returning, scopeFor(table, row, stmt.table, env), env));
-    } catch (error) {
-      if (insertedRowid !== undefined) {
-        const inserted = table.rows.get(insertedRowid);
-        if (inserted) removeOne(table, inserted, env);
-      }
-      if (stmt.mode === "insert_or_ignore" && error instanceof SqliteError && error.category.startsWith("constraint"))
-        continue;
-      throw error;
     }
+  } catch (error) {
+    undoStatement();
+    throw error;
   }
   const reportedChanges = finalizeDmlChanges(totalBefore, changes, env, last);
   if (stmt.returning.length === 0) return emptyResult(reportedChanges, last);
@@ -236,8 +268,6 @@ function evaluateInsertSource(stmt: InsertStmt, env: ExecutionEnv): SqlValue[][]
   return stmt.values.map((items) =>
     items.map((expr) => {
       if (expr.type === "parameter") return env.getBoundParameter(expr.name);
-      if (expr.type === "literal") return expr.value;
-      if (expr.type === "null") return null;
       return evalExpr(expr, ctx);
     }),
   );
@@ -309,7 +339,7 @@ function buildFastInsertPlan(stmt: InsertStmt, env: ExecutionEnv): FastInsertPla
       const name = expr.name;
       slots.push({ key, affinity: column.affinity, read: (exec) => exec.getBoundParameter(name) });
     } else if (expr.type === "literal") {
-      const value = expr.value;
+      const value = expr.forceReal && typeof expr.value === "number" ? asSqlReal(expr.value) : expr.value;
       slots.push({ key, affinity: column.affinity, read: () => value });
     } else if (expr.type === "null") {
       slots.push({ key, affinity: column.affinity, read: () => null });
@@ -334,14 +364,16 @@ function executeUpdateCore(stmt: UpdateStmt, env: ExecutionEnv): ResultSet {
   const totalBefore = env.state.totalChanges;
   const view = writableView(stmt.table, "UPDATE", env);
   if (view) return executeViewUpdate(stmt, view, env, totalBefore);
-  const table = env.state.getWritableTable(stmt.table);
+  // Scan for candidates before any statement savepoint. getWritableTable must run *after*
+  // freeze/clone so all row mutations share one live writable table (not re-clone from frozen).
+  const scanTable = env.state.getTable(stmt.table);
   const alias = stmt.alias ?? stmt.table;
   const candidates: { row: Row; scope: ScopeRow }[] = [];
 
   if (stmt.from) {
     const fromRows = scanFrom(stmt.from, env);
-    for (const row of table.scan()) {
-      const targetScope = scopeFor(table, row, alias, env);
+    for (const row of scanTable.scan()) {
+      const targetScope = scopeFor(scanTable, row, alias, env);
       let matchedScope: ScopeRow | null = null;
       for (const fromRow of fromRows) {
         const joined: ScopeRow = {
@@ -359,49 +391,77 @@ function executeUpdateCore(stmt: UpdateStmt, env: ExecutionEnv): ResultSet {
       stmt.where === null
         ? null
         : tryIndexedTableRows({ type: "table", schema: null, name: stmt.table, alias: stmt.alias }, stmt.where, env);
-    const scanRows = indexed ? indexed.rows : table.scan();
+    const scanRows = indexed ? indexed.rows : scanTable.scan();
     for (const row of scanRows) {
-      const scope = scopeFor(table, row, alias, env);
+      const scope = scopeFor(scanTable, row, alias, env);
       if (stmt.where && isTruthySql(evalExpr(stmt.where, env.createEvalContext(scope))) !== true) continue;
       candidates.push({ row, scope });
     }
   }
 
-  const returningRows: SqlValue[][] = [];
-  let changes = 0;
-  for (const { row, scope } of candidates) {
-    const ctx = env.createEvalContext(scope);
-    const updates = evaluateSet(stmt.set, table, ctx);
-    const newValues = mergedValues(table, row, updates);
-    const updatedColumns = new Set(
-      [...updates.keys()].map((key) => {
-        const column = table.columns.find((item) => normalizeColumnName(item.name) === key);
-        return column?.name ?? key;
-      }),
-    );
-    if (fireUpdateTriggers("BEFORE", table, row, newValues, updatedColumns, env) === "ignore") continue;
-    try {
-      const updated = updateOne(table, row, updates, env);
-      fireUpdateTriggers("AFTER", table, row, updated.row.values, updatedColumns, env);
-      changes += 1 + updated.cascaded;
-      if (stmt.returning.length)
-        returningRows.push(projectReturning(stmt.returning, scopeFor(table, updated.row, alias, env), env));
-    } catch (error) {
-      if (stmt.or === "ignore" && error instanceof SqliteError && error.category.startsWith("constraint")) continue;
-      throw error;
+  const applyUpdates = (): ResultSet => {
+    let table = env.state.getWritableTable(stmt.table);
+    const returningRows: SqlValue[][] = [];
+    let changes = 0;
+    for (const { row, scope } of candidates) {
+      const ctx = env.createEvalContext(scope);
+      const updates = evaluateSet(stmt.set, table, ctx);
+      const newValues = mergedValues(table, row, updates);
+      const updatedColumns = new Set(
+        [...updates.keys()].map((key) => {
+          const column = table.columns.find((item) => normalizeColumnName(item.name) === key);
+          return column?.name ?? key;
+        }),
+      );
+      if (fireUpdateTriggers("BEFORE", table, row, newValues, updatedColumns, env) === "ignore") continue;
+      try {
+        if (stmt.or === "replace") {
+          for (const conflict of conflictingRows(table, newValues, env)) {
+            if (conflict.rowid === row.rowid) continue;
+            removeOne(table, conflict, env);
+            table = env.state.getWritableTable(stmt.table);
+            changes++;
+          }
+        }
+        const updated = updateOne(table, row, updates, env);
+        table = env.state.getWritableTable(stmt.table);
+        fireUpdateTriggers("AFTER", table, row, updated.row.values, updatedColumns, env);
+        changes += 1 + updated.cascaded;
+        if (stmt.returning.length)
+          returningRows.push(projectReturning(stmt.returning, scopeFor(table, updated.row, alias, env), env));
+      } catch (error) {
+        if (
+          stmt.or === "ignore" &&
+          error instanceof SqliteError &&
+          error.category.startsWith("constraint") &&
+          error.category !== "constraint_foreign"
+        )
+          continue;
+        throw error;
+      }
     }
+    const reportedChanges = finalizeDmlChanges(totalBefore, changes, env);
+    return valuesToResult(
+      returningNames(stmt.returning, table),
+      returningRows,
+      reportedChanges,
+      env.state.lastInsertRowid,
+    );
+  };
+
+  if (updateAbortResolution(stmt.or) === "abort" && candidates.length > 1) {
+    return withStatementAtomicity(env, "abort", applyUpdates);
   }
-  const reportedChanges = finalizeDmlChanges(totalBefore, changes, env);
-  return valuesToResult(
-    returningNames(stmt.returning, table),
-    returningRows,
-    reportedChanges,
-    env.state.lastInsertRowid,
-  );
+  return applyUpdates();
 }
 
 export function executeDelete(stmt: DeleteStmt, env: ExecutionEnv): ResultSet {
-  return withDmlCtes(stmt.with, env, () => executeDeleteCore(stmt, env));
+  try {
+    return withDmlCtes(stmt.with, env, () => executeDeleteCore(stmt, env));
+  } catch (error) {
+    handleConflictRollback(stmt.or === "rollback", error, env);
+    throw error;
+  }
 }
 
 function executeDeleteCore(stmt: DeleteStmt, env: ExecutionEnv): ResultSet {
@@ -411,36 +471,62 @@ function executeDeleteCore(stmt: DeleteStmt, env: ExecutionEnv): ResultSet {
   const totalBefore = env.state.totalChanges;
   const view = writableView(stmt.table, "DELETE", env);
   if (view) return executeViewDelete(stmt, view, env, totalBefore);
-  const table = env.state.getWritableTable(stmt.table);
+  // Select targets before any statement savepoint; get writable only inside applyDeletes.
+  const scanTable = env.state.getTable(stmt.table);
   const selectedSource =
     stmt.where === null
       ? null
       : tryIndexedTableRows({ type: "table", schema: null, name: stmt.table, alias: stmt.alias }, stmt.where, env);
-  const selected = [...(selectedSource ? selectedSource.rows : table.scan())].filter((row) => {
+  const selected = [...(selectedSource ? selectedSource.rows : scanTable.scan())].filter((row) => {
     if (!stmt.where) return true;
     return (
-      isTruthySql(evalExpr(stmt.where, env.createEvalContext(scopeFor(table, row, stmt.alias ?? stmt.table, env)))) ===
-      true
+      isTruthySql(
+        evalExpr(stmt.where, env.createEvalContext(scopeFor(scanTable, row, stmt.alias ?? stmt.table, env))),
+      ) === true
     );
   });
-  const returningRows: SqlValue[][] = [];
-  let changes = 0;
-  for (const row of selected) {
-    if (fireDeleteTriggers("BEFORE", table, row, env) === "ignore") continue;
-    if (stmt.returning.length)
-      returningRows.push(projectReturning(stmt.returning, scopeFor(table, row, stmt.alias ?? stmt.table, env), env));
-    changes += applyReferentialDelete(table, row, env);
-    removeOne(table, row, env);
-    fireDeleteTriggers("AFTER", table, row, env);
-    changes++;
+
+  const applyDeletes = (): ResultSet => {
+    let table = env.state.getWritableTable(stmt.table);
+    const returningRows: SqlValue[][] = [];
+    let changes = 0;
+    for (const row of selected) {
+      try {
+        if (fireDeleteTriggers("BEFORE", table, row, env) === "ignore") continue;
+        if (stmt.returning.length)
+          returningRows.push(
+            projectReturning(stmt.returning, scopeFor(table, row, stmt.alias ?? stmt.table, env), env),
+          );
+        changes += applyReferentialDelete(table, row, env);
+        table = env.state.getWritableTable(stmt.table);
+        removeOne(table, row, env);
+        table = env.state.getWritableTable(stmt.table);
+        fireDeleteTriggers("AFTER", table, row, env);
+        changes++;
+      } catch (error) {
+        if (
+          stmt.or === "ignore" &&
+          error instanceof SqliteError &&
+          error.category.startsWith("constraint") &&
+          error.category !== "constraint_foreign"
+        )
+          continue;
+        throw error;
+      }
+    }
+    const reportedChanges = finalizeDmlChanges(totalBefore, changes, env);
+    return valuesToResult(
+      returningNames(stmt.returning, table),
+      returningRows,
+      reportedChanges,
+      env.state.lastInsertRowid,
+    );
+  };
+
+  if (deleteAbortResolution(stmt.or) === "abort" && selected.length > 1) {
+    return withStatementAtomicity(env, "abort", applyDeletes);
   }
-  const reportedChanges = finalizeDmlChanges(totalBefore, changes, env);
-  return valuesToResult(
-    returningNames(stmt.returning, table),
-    returningRows,
-    reportedChanges,
-    env.state.lastInsertRowid,
-  );
+  return applyDeletes();
 }
 
 function withDmlCtes(withClause: WithClause | null, env: ExecutionEnv, execute: () => ResultSet): ResultSet {
@@ -466,6 +552,49 @@ function handleConflictRollback(rollback: boolean, error: unknown, env: Executio
   }
 }
 
+let statementSavepointSeq = 0;
+let statementAtomicityDepth = 0;
+
+/** SQLite ABORT: undo all changes from the current statement; FAIL keeps prior row changes. */
+function withStatementAtomicity<T>(env: ExecutionEnv, resolution: "abort" | "fail", run: () => T): T {
+  if (resolution === "fail") return run();
+  // Nested DML (e.g. triggers) shares the outer statement savepoint; re-freezing would
+  // invalidate caller table references mid-statement.
+  if (statementAtomicityDepth > 0) return run();
+  const name = `__mem_stmt_${++statementSavepointSeq}`;
+  statementAtomicityDepth++;
+  env.transactions.savepoint(name);
+  try {
+    const result = run();
+    env.transactions.release(name);
+    return result;
+  } catch (error) {
+    if (env.transactions.inTransaction) {
+      try {
+        env.transactions.rollback(name);
+        env.transactions.release(name);
+      } catch {
+        // Transaction may already have been rolled back (OR ROLLBACK).
+      }
+    }
+    throw error;
+  } finally {
+    statementAtomicityDepth--;
+  }
+}
+
+function insertAbortResolution(mode: InsertStmt["mode"]): "abort" | "fail" {
+  return mode === "insert_or_fail" ? "fail" : "abort";
+}
+
+function updateAbortResolution(or: UpdateStmt["or"]): "abort" | "fail" {
+  return or === "fail" ? "fail" : "abort";
+}
+
+function deleteAbortResolution(or: DeleteStmt["or"]): "abort" | "fail" {
+  return or === "fail" ? "fail" : "abort";
+}
+
 interface WritableView {
   schema: string | null;
   name: string;
@@ -483,7 +612,6 @@ function writableView(name: string, event: "INSERT" | "UPDATE" | "DELETE", env: 
       trigger.tableName.toLowerCase() === bare.toLowerCase() && trigger.event === event && trigger.timing === "INSTEAD",
   );
   if (!hasInsteadOf) {
-    env.state.getWritableTable(name);
     throw new SqliteError(`cannot modify ${bare} because it is a view`, "other");
   }
   const names = view.columns ?? executeSelect(view.select, env).columns;
@@ -618,6 +746,7 @@ function updateOne(
   updates: Map<string, SqlValue>,
   env: ExecutionEnv,
 ): { row: Row; cascaded: number } {
+  table = env.state.ensureWritableTable(table);
   const before = { rowid: row.rowid, values: new Map(row.values) };
   let after: Row | undefined;
   let indexesAdded = false;
@@ -697,6 +826,7 @@ function removeIndexes(table: Table, row: Row, env: ExecutionEnv): void {
 }
 
 function removeOne(table: Table, row: Row, env: ExecutionEnv): void {
+  table = env.state.ensureWritableTable(table);
   removeIndexes(table, row, env);
   table.delete(row.rowid);
 }
@@ -937,6 +1067,7 @@ function assertForeignKeyValues(
   env: ExecutionEnv,
   excludeParent: Row | null,
 ): void {
+  // SQLite parses MATCH FULL/PARTIAL but enforces MATCH SIMPLE only (any NULL skips the check).
   if (values.some((value) => value === null)) return;
   const parent = env.state.getTable(constraint.refTable);
   const parentColumns =
@@ -971,10 +1102,13 @@ function applyReferentialDelete(parent: Table, row: Row, env: ExecutionEnv): num
   if (!env.state.foreignKeysEnabled) return 0;
   let changes = 0;
   const parentPk = parent.columns.filter((column) => column.primaryKey).map((column) => column.name);
-  for (const child of env.state.tables.values()) {
+  for (const childKey of [...env.state.tables.keys()]) {
+    let child = env.state.tables.get(childKey);
+    if (!child) continue;
     for (const constraint of child.constraints) {
       if (constraint.type !== "foreign_key" || constraint.refTable.toLowerCase() !== parent.name.toLowerCase())
         continue;
+      child = env.state.ensureWritableTable(child);
       const referenced = constraint.refColumns ?? parentPk;
       const matches = [...child.scan()].filter(
         (candidate) =>
@@ -1015,10 +1149,13 @@ function applyReferentialUpdate(parent: Table, before: Row, after: Row, env: Exe
   if (!env.state.foreignKeysEnabled) return 0;
   let changes = 0;
   const parentPk = parent.columns.filter((column) => column.primaryKey).map((column) => column.name);
-  for (const child of env.state.tables.values()) {
+  for (const childKey of [...env.state.tables.keys()]) {
+    let child = env.state.tables.get(childKey);
+    if (!child) continue;
     for (const constraint of child.constraints) {
       if (constraint.type !== "foreign_key" || constraint.refTable.toLowerCase() !== parent.name.toLowerCase())
         continue;
+      child = env.state.ensureWritableTable(child);
       const referenced = constraint.refColumns ?? parentPk;
       const oldValues = referenced.map((name) => before.values.get(normalizeColumnName(name)) ?? null);
       const newValues = referenced.map((name) => after.values.get(normalizeColumnName(name)) ?? null);

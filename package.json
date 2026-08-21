@@ -91,7 +91,8 @@
     "secrets:sync": "bun run scripts/secrets/sync-github.ts",
     "npm:seed": "bun run scripts/seed-npm.ts",
     "gh": "open https://github.com/crvouga/sqlite-mem/actions",
-    "example:react-vite": "cd examples/react-vite && bun install && bun run dev"
+    "example:react-vite": "cd examples/react-vite && bun install && bun run dev",
+    "fc": "clear && bun format && bun ci:local"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",

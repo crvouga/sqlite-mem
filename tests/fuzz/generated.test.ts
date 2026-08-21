@@ -40,4 +40,29 @@ describe("generated column differential fuzz", () => {
       fuzzAssertConfig(20),
     );
   });
+
+  test("UNIQUE index on generated column matches SQLite", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom("STORED", "VIRTUAL"),
+        fc.array(intArb, { minLength: 2, maxLength: 7 }),
+        (kind, values) => {
+          withDatabases((memory, sqlite) => {
+            const ddl = `CREATE TABLE t(id INTEGER PRIMARY KEY, a INT, g INT GENERATED ALWAYS AS (a * 2) ${kind})`;
+            for (const db of [memory, sqlite]) {
+              db.exec(ddl);
+              db.exec("CREATE UNIQUE INDEX idx_g ON t(g)");
+            }
+            for (const [i, a] of values.entries()) {
+              const sql = `INSERT INTO t(id, a) VALUES (${i + 1}, ${a})`;
+              compareOutcomeOrReport("gen-unique-ins", sql, { kind, values, i }, memory.exec(sql), sqlite.exec(sql));
+            }
+            const select = "SELECT id, a, g FROM t ORDER BY id";
+            compareOrReport("gen-unique-sel", select, { kind, values }, memory.query(select), sqlite.query(select));
+          });
+        },
+      ),
+      fuzzAssertConfig(20),
+    );
+  });
 });

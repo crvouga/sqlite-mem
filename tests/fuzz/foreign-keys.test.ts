@@ -91,4 +91,47 @@ describe("foreign key differential fuzz", () => {
       fuzzAssertConfig(20),
     );
   });
+
+  test("composite MATCH SIMPLE and FULL with NULL children match SQLite", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom("SIMPLE", "FULL"),
+        fc.array(
+          fc.record({
+            id: fc.integer({ min: 10, max: 30 }),
+            a: fc.oneof(fc.constant(null), fc.integer({ min: 1, max: 3 })),
+            b: fc.oneof(fc.constant(null), fc.integer({ min: 1, max: 3 })),
+          }),
+          { minLength: 1, maxLength: 6 },
+        ),
+        (match, children) => {
+          withDatabases((memory, sqlite) => {
+            for (const db of [memory, sqlite]) {
+              db.exec("PRAGMA foreign_keys=ON");
+              db.exec("CREATE TABLE parent(a INTEGER, b INTEGER, PRIMARY KEY(a,b))");
+              db.exec(
+                `CREATE TABLE child(id INTEGER PRIMARY KEY, a INTEGER, b INTEGER, FOREIGN KEY(a,b) REFERENCES parent(a,b) MATCH ${match})`,
+              );
+              db.exec("INSERT INTO parent VALUES (1,1),(2,2),(3,3)");
+            }
+            for (const [index, row] of children.entries()) {
+              const a = row.a === null ? "NULL" : String(row.a);
+              const b = row.b === null ? "NULL" : String(row.b);
+              const sql = `INSERT INTO child(id, a, b) VALUES (${row.id}, ${a}, ${b})`;
+              compareOutcomeOrReport(
+                "fk-match-ins",
+                sql,
+                { match, children, index },
+                memory.exec(sql),
+                sqlite.exec(sql),
+              );
+            }
+            const select = "SELECT id, a, b FROM child ORDER BY id";
+            compareOrReport("fk-match-sel", select, { match, children }, memory.query(select), sqlite.query(select));
+          });
+        },
+      ),
+      fuzzAssertConfig(20),
+    );
+  });
 });
