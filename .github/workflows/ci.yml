@@ -37,7 +37,7 @@ jobs:
 
       # Direct pushes to main cannot rewrite already-landed messages.
       # Conventional Commits are enforced on pull requests (commits + title).
-      # semantic-release still ignores non-releasable commits on main.
+      # On main, unmatched subjects still publish as a patch (see .releaserc.json).
       - name: Note push commitlint policy
         if: github.event_name == 'push'
         run: |
@@ -45,7 +45,7 @@ jobs:
           bunx commitlint --last --verbose
           status=$?
           if [ "$status" -ne 0 ]; then
-            echo "::warning::HEAD is not Conventional Commits. Enforced on PRs; semantic-release will skip this commit."
+            echo "::warning::HEAD is not Conventional Commits. Enforced on PRs. On main, semantic-release still publishes a patch unless a feat/fix/BREAKING message selects a higher bump."
           fi
 
       - name: Validate PR commits

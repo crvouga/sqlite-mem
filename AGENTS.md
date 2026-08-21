@@ -154,4 +154,4 @@ bun run build
 
 ## PR and commits
 
-Use [Conventional Commits](https://www.conventionalcommits.org/) for commits and PR titles (enforced in CI). Prefer squash merges with a conventional title. Releasing is automated via semantic-release — see [README.md](README.md#releasing).
+Use [Conventional Commits](https://www.conventionalcommits.org/) for commits and PR titles (enforced on PRs). Prefer squash merges with a conventional title so the npm bump is `feat` → minor / `fix` → patch. Direct pushes to `main` with any other subject still publish a patch. See [README.md](README.md#releasing).

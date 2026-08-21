@@ -287,16 +287,16 @@ Publishing is fully automated. You never bump `version` or run `npm publish` by 
 
 ### How a release happens
 
-1. Push or merge to `main` with [Conventional Commits](https://www.conventionalcommits.org/).
+1. Push or merge to `main`. Prefer [Conventional Commits](https://www.conventionalcommits.org/) so the bump is `feat` → minor / `fix` → patch / `BREAKING` → major; any other subject still publishes a patch.
 2. CI runs commitlint, format/lint/typecheck, build, package verification, tests, browser smoke, and benchmarks.
 3. If every gate is green, [semantic-release](https://semantic-release.gitbook.io/) analyzes commits since the last git tag, bumps semver, publishes to npm, and creates a GitHub Release.
 
 | Commit | Version bump |
 | --- | --- |
-| `fix: …` | patch (`0.1.0` → `0.1.1`) |
-| `feat: …` | minor (`0.1.0` → `0.2.0`) |
-| `feat!: …` or `BREAKING CHANGE:` footer | major (`0.2.0` → `1.0.0`) |
-| `docs:`, `chore:`, `refactor:`, `test:`, … | no release |
+| `fix: …` / `perf: …` | patch (`1.9.0` → `1.9.1`) |
+| `feat: …` | minor (`1.9.0` → `1.10.0`) |
+| `feat!: …` or `BREAKING CHANGE:` footer | major (`1.10.0` → `2.0.0`) |
+| any other message on `main` (including Cursor-style subjects) | patch |
 
 Examples:
 
@@ -305,8 +305,7 @@ feat: add window function support
 fix: handle NULL in UNIQUE constraints
 feat!: rename snapshot() return type
 
-chore: tweak CI timeouts
-docs: clarify determinism table
+Refactor AdoptedDatabase interface   # still publishes a patch
 ```
 
 PR titles must also follow Conventional Commits (enforced in CI). Prefer squash merges with a conventional title.
@@ -340,7 +339,7 @@ Do this once so CI can publish. Full checklist: **[docs/SECRETS.md](./docs/SECRE
 
 Validate the checklist anytime with `bun run secrets:doctor`.
 
-After that, every green push to `main` with releasable commits updates npm automatically.
+After that, every green push to `main` updates npm automatically (`feat`/`fix`/`BREAKING` pick the bump; anything else is a patch).
 
 ## License
 

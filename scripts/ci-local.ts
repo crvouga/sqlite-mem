@@ -104,7 +104,9 @@ async function commitlintJob(): Promise<void> {
     const code = await proc.exited;
     const seconds = (performance.now() - started) / 1000;
     if (code !== 0) {
-      console.warn("HEAD is not Conventional Commits. Enforced on PRs; semantic-release will skip this commit.");
+      console.warn(
+        "HEAD is not Conventional Commits. Enforced on PRs. On main, semantic-release still publishes a patch unless a feat/fix/BREAKING message selects a higher bump.",
+      );
       printCommitlintHelp("last");
     }
     finished.push({ label: "Commitlint (--last, warning on main)", seconds });
