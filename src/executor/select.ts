@@ -631,7 +631,7 @@ function hashJoinRaw(
   const buckets = new Map<string, Row[]>();
   const source = right.table.withoutRowid ? right.table.clusteredRows.values() : right.table.rows.values();
   for (const row of source) {
-    const values = rightKeys.map((key) => normalizeForCollation(row.values.get(key) ?? null, "BINARY"));
+    const values = rightKeys.map((key) => normalizeForCollation(right.table.cell(row, key), "BINARY"));
     const mapKey = serializeIndexKey(values);
     if (mapKey === null) continue;
     const bucket = buckets.get(mapKey);
@@ -660,7 +660,7 @@ function hashJoinRaw(
       if (matches) {
         for (const row of matches) {
           const rhsCells = right.table.columns.map((column) =>
-            makeCell(right.alias, column.name, row.values.get(column.nameLower ?? column.name.toLowerCase()) ?? null, {
+            makeCell(right.alias, column.name, right.table.cell(row, column.nameLower ?? column.name.toLowerCase()), {
               affinity: column.affinity,
               collate: column.collate,
             }),
@@ -690,7 +690,7 @@ function scopesFromTableRows(
     const baseCells = table.columns
       .filter((c) => !c.generated || c.generated.stored)
       .map((column) =>
-        makeCell(alias, column.name, row.values.get(column.nameLower ?? column.name.toLowerCase()) ?? null, {
+        makeCell(alias, column.name, table.cell(row, column.nameLower ?? column.name.toLowerCase()), {
           affinity: column.affinity,
           collate: column.collate,
         }),
@@ -703,7 +703,7 @@ function scopesFromTableRows(
           collate: column.collate,
         });
       }
-      return makeCell(alias, column.name, row.values.get(column.nameLower ?? column.name.toLowerCase()) ?? null, {
+      return makeCell(alias, column.name, table.cell(row, column.nameLower ?? column.name.toLowerCase()), {
         affinity: column.affinity,
         collate: column.collate,
       });

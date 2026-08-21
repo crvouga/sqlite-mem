@@ -1,4 +1,7 @@
-import type { Statement } from "../ast/nodes.ts";
+import type { ReindexStmt, Statement } from "../ast/nodes.ts";
+import { SqliteError } from "../errors/index.ts";
+import { heapRowCells, rebuildIndexFromTable } from "../indexes/keys.ts";
+import type { DatabaseState, IndexInfo } from "../storage/database-state.ts";
 import { executeAttach, executeDetach } from "./attach.ts";
 import {
   executeAlterTable,
@@ -84,13 +87,71 @@ export function executeStatement(stmt: Statement, env: ExecutionEnv): ResultSet 
     case "analyze":
       return executeAnalyze(stmt, env);
     case "reindex":
-      env.state.recordChange(0);
-      return emptyResult(0, env.state.lastInsertRowid);
+      return executeReindex(stmt, env);
     case "vacuum":
       // :memory: VACUUM is a successful no-op (matches bun:sqlite).
       env.state.recordChange(0);
       return emptyResult(0, env.state.lastInsertRowid);
   }
+}
+
+function executeReindex(stmt: ReindexStmt, env: ExecutionEnv): ResultSet {
+  const targets = resolveReindexTargets(stmt, env);
+  for (const { db, index } of targets) rebuildOneIndex(env, db, index);
+  env.state.recordChange(0);
+  return emptyResult(0, env.state.lastInsertRowid);
+}
+
+function resolveReindexTargets(stmt: ReindexStmt, env: ExecutionEnv): Array<{ db: DatabaseState; index: IndexInfo }> {
+  if (stmt.name === null) {
+    return allDatabaseStates(env.state).flatMap((db) => [...db.indexes.values()].map((index) => ({ db, index })));
+  }
+  const name = stmt.name;
+  const collation = builtinCollationName(name);
+  // SQLite: collation-name wins over a table/index of the same name when un-qualified.
+  if (stmt.schema === null && collation) {
+    return allDatabaseStates(env.state).flatMap((db) =>
+      [...db.indexes.values()].filter((index) => indexUsesCollation(index, collation)).map((index) => ({ db, index })),
+    );
+  }
+  const db = env.state.databaseForSchema(stmt.schema, stmt.schema ? `${stmt.schema}.${name}` : name);
+  const table = db.tables.get(name.toLowerCase());
+  if (table) {
+    return table.indexes
+      .map((indexName) => db.indexes.get(indexName.toLowerCase()))
+      .filter((index): index is IndexInfo => index !== undefined)
+      .map((index) => ({ db, index }));
+  }
+  const index = db.indexes.get(name.toLowerCase());
+  if (index) return [{ db, index }];
+  throw new SqliteError(`unable to identify the object to be reindexed: ${qualifiedReindexName(stmt)}`, "other");
+}
+
+function rebuildOneIndex(env: ExecutionEnv, db: DatabaseState, index: IndexInfo): void {
+  const table = db.tables.get(index.tableName.toLowerCase());
+  if (!table) return;
+  const writable = db.ensureWritableIndex(index);
+  rebuildIndexFromTable(writable, table, (row) =>
+    env.createEvalContext({ rowid: row.rowid, sourceTable: table.name, cells: heapRowCells(table, row) }),
+  );
+}
+
+function allDatabaseStates(root: DatabaseState): DatabaseState[] {
+  return [root, ...[...root.attached.values()].map((entry) => entry.state)];
+}
+
+function indexUsesCollation(index: IndexInfo, collation: string): boolean {
+  return index.columns.some((column) => (column.collate ?? "BINARY").toUpperCase() === collation);
+}
+
+function builtinCollationName(name: string): "BINARY" | "NOCASE" | "RTRIM" | null {
+  const upper = name.toUpperCase();
+  if (upper === "BINARY" || upper === "NOCASE" || upper === "RTRIM") return upper;
+  return null;
+}
+
+function qualifiedReindexName(stmt: ReindexStmt): string {
+  return stmt.schema ? `${stmt.schema}.${stmt.name}` : (stmt.name ?? "");
 }
 
 function executeAnalyze(stmt: import("../ast/nodes.ts").AnalyzeStmt, env: ExecutionEnv): ResultSet {

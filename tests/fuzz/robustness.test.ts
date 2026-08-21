@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import * as fc from "fast-check";
-import { Database, SqliteError } from "../../src/index.ts";
+import { Database, Snapshot, SqliteError } from "../../src/index.ts";
 import { dumpLogicalState } from "../harness/state-dump.ts";
 import { fuzzAssertConfig, intArb, textArb } from "./config.ts";
 import { compareStateOrReport, withDatabases } from "./helpers.ts";
@@ -108,12 +108,12 @@ describe("robustness fuzz", () => {
         try {
           db.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, a INT)");
           db.exec("INSERT INTO t VALUES (1, 1)");
-          const snap = db.snapshot();
+          const snap = db.snapshot().encode();
           const corrupt = new Uint8Array(snap);
           const idx = Math.min(offset, Math.max(0, corrupt.length - 1));
           corrupt[idx] = byte;
           try {
-            db.restore(corrupt);
+            Snapshot.decode(corrupt);
             // Some flips may still decode — only assert non-SqliteError never escapes.
           } catch (error) {
             expect(error).toBeInstanceOf(SqliteError);

@@ -11,8 +11,8 @@
     {
       "id": "snapshot-sqlm",
       "scope": "snapshot",
-      "predicate": "snapshot() bytes are SQLM, not a .sqlite file",
-      "specifiedBehavior": "Custom codec; logical Dump after restore matches pre-snapshot Dump.",
+      "predicate": "snapshot().encode() bytes are SQLM, not a .sqlite file",
+      "specifiedBehavior": "Custom codec; logical Dump after Snapshot.open matches pre-snapshot Dump.",
       "pinnedBy": ["SNP-hdr-01", "SNP-rt-01"]
     },
     {
@@ -82,7 +82,7 @@
       "id": "snapshot-exclusions",
       "scope": "snapshot",
       "predicate": "triggers, ATTACH, virtual tables, and user_version are not in SQLM",
-      "specifiedBehavior": "restore() outcome is pinned per omitted feature.",
+      "specifiedBehavior": "decode().open() outcome is pinned per omitted feature.",
       "pinnedBy": ["SNP-omit-01", "SNP-omit-02", "SNP-omit-03", "SNP-omit-04", "TRG-snap-01", "ATT-snap-01", "FTS-snap-01"]
     },
     {
@@ -116,8 +116,8 @@
     {
       "id": "user-version-snapshot",
       "scope": "pragma",
-      "predicate": "user_version is not restored from SQLM",
-      "specifiedBehavior": "PRAGMA user_version after restore is the default unless re-set.",
+      "predicate": "user_version is not encoded in SQLM",
+      "specifiedBehavior": "PRAGMA user_version after decode().open() is the default unless re-set.",
       "pinnedBy": ["PRG-beh-05", "SNP-omit-04"]
     },
     {

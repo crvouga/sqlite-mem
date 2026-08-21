@@ -3,18 +3,18 @@ import { SqliteError } from "../errors/index.ts";
 import type { IndexStore } from "../indexes/index.ts";
 import type { Row, Rowid } from "../storage/row.ts";
 import { normalizeColumnName } from "../storage/row.ts";
-import type { ColumnInfo, Table } from "../storage/table.ts";
+import type { Table } from "../storage/table.ts";
 import type { SqlValue } from "../types/value.ts";
 import { isTruthySql } from "../types/value.ts";
 
 export type CheckEvaluator = (expr: Expr, row: Row) => SqlValue;
 
-export function checkNotNull(columns: readonly ColumnInfo[], row: Row, tableName = "table"): void {
-  for (const column of columns) {
+export function checkNotNull(table: Table, row: Row): void {
+  for (const column of table.columns) {
     if (!column.notNull) continue;
-    if ((row.values.get(normalizeColumnName(column.name)) ?? null) === null) {
+    if (table.cell(row, normalizeColumnName(column.name)) === null) {
       throw new SqliteError(
-        `NOT NULL constraint failed: ${tableName}.${column.name}`,
+        `NOT NULL constraint failed: ${table.name}.${column.name}`,
         "constraint_notnull",
         "SQLITE_CONSTRAINT_NOTNULL",
       );
@@ -22,12 +22,12 @@ export function checkNotNull(columns: readonly ColumnInfo[], row: Row, tableName
   }
 }
 
-export function checkPrimaryKey(columns: readonly ColumnInfo[], row: Row, tableName = "table"): void {
-  for (const column of columns) {
+export function checkPrimaryKey(table: Table, row: Row): void {
+  for (const column of table.columns) {
     if (!column.primaryKey) continue;
-    if ((row.values.get(normalizeColumnName(column.name)) ?? null) === null) {
+    if (table.cell(row, normalizeColumnName(column.name)) === null) {
       throw new SqliteError(
-        `PRIMARY KEY constraint failed: ${tableName}.${column.name}`,
+        `PRIMARY KEY constraint failed: ${table.name}.${column.name}`,
         "constraint_primary",
         "SQLITE_CONSTRAINT_PRIMARYKEY",
       );
@@ -58,8 +58,8 @@ export function checkExpressions(
 }
 
 export function checkTableConstraints(table: Table, row: Row, evaluate: CheckEvaluator): void {
-  checkNotNull(table.columns, row, table.name);
-  checkPrimaryKey(table.columns, row, table.name);
+  checkNotNull(table, row);
+  checkPrimaryKey(table, row);
   for (const constraint of table.constraints) {
     if (constraint.type !== "check") continue;
     checkExpressions([constraint.expr], row, evaluate, constraint.name ?? table.name);

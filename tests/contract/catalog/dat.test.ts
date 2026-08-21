@@ -71,9 +71,9 @@ runCatalog("DAT", [
     id: "DAT-now-06",
     kind: "divergence",
     fn: (db) => {
-      const snap = db.snapshot();
-      db.restore(snap);
-      expect(db.query<{ d: string }>("SELECT date('now') AS d")[0]!.d).toBe("2000-01-01");
+      const opened = db.snapshot().open();
+      expect(opened.query<{ d: string }>("SELECT date('now') AS d")[0]!.d).toBe("2000-01-01");
+      opened.close();
     },
   },
 ]);

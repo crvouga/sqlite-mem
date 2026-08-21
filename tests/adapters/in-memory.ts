@@ -1,4 +1,4 @@
-import { Database, SqliteError, type Statement } from "../../src/index.ts";
+import { Database, Snapshot, SqliteError, type Statement } from "../../src/index.ts";
 import { normalizeError } from "../harness/normalize.ts";
 import { failResult, okWithSession } from "../harness/session.ts";
 import type { ContractDb, ContractStatement, ErrorPhase, QueryResult, SqlValue } from "../harness/types.ts";
@@ -117,10 +117,12 @@ export function safeExec(db: Database, sql: string, params?: SqlValue[]): QueryR
 }
 
 export class InMemoryAdapter implements ContractDb {
-  private readonly db: Database;
+  private db: Database;
+  private readonly options?: ConstructorParameters<typeof Database>[0];
   private closed = false;
 
   constructor(options?: ConstructorParameters<typeof Database>[0]) {
+    this.options = options;
     this.db = new Database(options);
     this.db.exec("PRAGMA foreign_keys = ON");
   }
@@ -177,14 +179,16 @@ export class InMemoryAdapter implements ContractDb {
     if (this.closed) {
       throw new Error("Database is closed");
     }
-    return this.db.snapshot();
+    return this.db.snapshot().encode();
   }
 
   restore(bytes: Uint8Array): void {
     if (this.closed) {
       throw new Error("Database is closed");
     }
-    this.db.restore(bytes);
+    this.db.close();
+    this.db = Snapshot.decode(bytes).open(this.options);
+    this.db.exec("PRAGMA foreign_keys = ON");
   }
 
   close(): void {

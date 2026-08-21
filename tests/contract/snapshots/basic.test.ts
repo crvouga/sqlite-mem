@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { Database, SqliteError } from "../../../src/index.ts";
+import { Database, Snapshot, SqliteError } from "../../../src/index.ts";
+import { encodeDatabaseState } from "../../../src/serialization/codec.ts";
 import { InMemoryAdapter } from "../../adapters/in-memory.ts";
 import { expectParity } from "../../harness/assert.ts";
 import { matrixBoth } from "../../harness/matrix.ts";
@@ -137,18 +138,18 @@ test("snapshot preserves rowids across restore and further inserts", () => {
   }
 });
 
-test("restore rejects newer snapshot format version", () => {
+test("decode rejects newer snapshot format version", () => {
   const db = new Database();
   db.exec("CREATE TABLE t(id INTEGER)");
-  const snap = db.snapshot();
+  const snap = db.snapshot().encode();
   // SQLM + little-endian u32 version at offset 4
   const bumped = new Uint8Array(snap);
   const view = new DataView(bumped.buffer, bumped.byteOffset, bumped.byteLength);
   const current = view.getUint32(4, true);
   view.setUint32(4, current + 1, true);
   try {
-    db.restore(bumped);
-    expect.unreachable("expected restore to throw");
+    Snapshot.decode(bumped);
+    expect.unreachable("expected decode to throw");
   } catch (err) {
     expect(err).toBeInstanceOf(SqliteError);
     expect((err as SqliteError).category).toBe("snapshot_version");
@@ -158,15 +159,15 @@ test("restore rejects newer snapshot format version", () => {
   db.close();
 });
 
-test("restore rejects corrupt magic with a distinct error", () => {
+test("decode rejects corrupt magic with a distinct error", () => {
   const db = new Database();
   db.exec("CREATE TABLE t(id INTEGER)");
-  const snap = db.snapshot();
+  const snap = db.snapshot().encode();
   const corrupt = new Uint8Array(snap);
   corrupt[0] = "X".charCodeAt(0);
   try {
-    db.restore(corrupt);
-    expect.unreachable("expected restore to throw");
+    Snapshot.decode(corrupt);
+    expect.unreachable("expected decode to throw");
   } catch (err) {
     expect(err).toBeInstanceOf(SqliteError);
     expect((err as SqliteError).category).toBe("other");
@@ -181,12 +182,104 @@ test("current snapshot version round-trips", () => {
   a.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, name TEXT)");
   a.prepare("INSERT INTO t(name) VALUES (?)").run("Ada");
   const snap = a.snapshot();
-  expect(String.fromCharCode(snap[0]!, snap[1]!, snap[2]!, snap[3]!)).toBe("SQLM");
-  const version = new DataView(snap.buffer, snap.byteOffset, snap.byteLength).getUint32(4, true);
-  expect(version).toBe(2);
-  const b = new Database();
-  b.restore(snap);
+  const bytes = snap.encode();
+  expect(String.fromCharCode(bytes[0]!, bytes[1]!, bytes[2]!, bytes[3]!)).toBe("SQLM");
+  const version = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(4, true);
+  expect(version).toBe(4);
+  const b = snap.open();
   expect(b.query("SELECT name FROM t")).toEqual([{ name: "Ada" }]);
   a.close();
   b.close();
+});
+
+test("SQLM v2 blobs still hydrate by rebuilding indexes", () => {
+  const source = new Database({ seed: 3 });
+  source.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, name TEXT UNIQUE)");
+  source.exec("INSERT INTO t(name) VALUES ('a'), ('b')");
+  const v2 = encodeDatabaseState(source.state, { prngState: source.prng.getState(), nowMs: source.now().getTime() }, 2);
+  expect(new DataView(v2.buffer, v2.byteOffset).getUint32(4, true)).toBe(2);
+  const opened = Snapshot.decode(v2).open();
+  expect(opened.query("SELECT name FROM t ORDER BY id")).toEqual([{ name: "a" }, { name: "b" }]);
+  expect(() => opened.exec("INSERT INTO t(name) VALUES ('a')")).toThrow(/UNIQUE/);
+  source.close();
+  opened.close();
+});
+
+test("SQLM v4 round-trips index stores and is byte-stable", () => {
+  const a = new Database({ seed: 3 });
+  a.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, name TEXT UNIQUE)");
+  a.exec("INSERT INTO t(name) VALUES ('a'), ('b')");
+  const snap = a.snapshot();
+  const bytes = snap.encode();
+  expect(new DataView(bytes.buffer, bytes.byteOffset).getUint32(4, true)).toBe(4);
+  const b = snap.open();
+  expect([...b.snapshot().encode()]).toEqual([...bytes]);
+  expect(() => b.exec("INSERT INTO t(name) VALUES ('a')")).toThrow(/UNIQUE/);
+  a.close();
+  b.close();
+});
+
+test("open isolates writes and preserves encode bytes", () => {
+  const parent = new Database();
+  parent.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, name TEXT)");
+  parent.exec("INSERT INTO t(name) VALUES ('a')");
+  const child = parent.snapshot().open();
+  expect([...child.snapshot().encode()]).toEqual([...parent.snapshot().encode()]);
+  child.exec("INSERT INTO t(name) VALUES ('b')");
+  expect(parent.query("SELECT name FROM t ORDER BY id")).toEqual([{ name: "a" }]);
+  expect(child.query("SELECT name FROM t ORDER BY id")).toEqual([{ name: "a" }, { name: "b" }]);
+  parent.close();
+  child.close();
+});
+
+test("decode hydrates independently and does not mutate input bytes", () => {
+  const source = new Database();
+  source.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, name TEXT)");
+  source.exec("INSERT INTO t(name) VALUES ('a')");
+  const snap = source.snapshot();
+  const original = Uint8Array.from(snap.encode());
+  const opened = snap.open();
+  expect([...snap.encode()]).toEqual([...original]);
+  expect(opened.query("SELECT name FROM t")).toEqual([{ name: "a" }]);
+  opened.exec("INSERT INTO t(name) VALUES ('b')");
+  expect(source.query("SELECT name FROM t")).toEqual([{ name: "a" }]);
+  source.close();
+  opened.close();
+});
+
+test("Snapshot.open is copy-on-write isolated from the template", () => {
+  const template = new Database();
+  template.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, name TEXT)");
+  template.exec("INSERT INTO t(name) VALUES ('a')");
+  const seed = template.snapshot();
+  const a = seed.open();
+  const b = seed.open();
+  a.exec("INSERT INTO t(name) VALUES ('b')");
+  expect(b.query("SELECT name FROM t ORDER BY id")).toEqual([{ name: "a" }]);
+  expect(template.query("SELECT name FROM t ORDER BY id")).toEqual([{ name: "a" }]);
+  template.close();
+  a.close();
+  b.close();
+});
+
+test("decode reuses the same Uint8Array via WeakMap", () => {
+  const source = new Database();
+  source.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, name TEXT)");
+  source.exec("INSERT INTO t(name) VALUES ('a')");
+  const bytes = source.snapshot().encode();
+  const first = Snapshot.decode(bytes).open();
+  first.exec("INSERT INTO t(name) VALUES ('b')");
+  const second = Snapshot.decode(bytes).open();
+  expect(second.query("SELECT name FROM t ORDER BY id")).toEqual([{ name: "a" }]);
+  source.close();
+  first.close();
+  second.close();
+});
+
+test("snapshot rejects an open transaction", () => {
+  const db = new Database();
+  db.exec("BEGIN");
+  expect(() => db.snapshot()).toThrow(SqliteError);
+  db.exec("ROLLBACK");
+  db.close();
 });

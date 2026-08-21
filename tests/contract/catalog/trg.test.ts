@@ -1,4 +1,5 @@
 import { expect } from "bun:test";
+import { Snapshot } from "../../../src/index.ts";
 import { runCatalog } from "./run.ts";
 
 runCatalog("TRG", [
@@ -127,11 +128,10 @@ runCatalog("TRG", [
     fn: (db) => {
       db.exec("CREATE TABLE t(a INT)");
       db.exec("CREATE TRIGGER g AFTER INSERT ON t BEGIN SELECT 1; END");
-      const snap = db.snapshot();
-      db.exec("DROP TABLE t");
-      db.restore(snap);
-      const n = db.query<{ n: number }>("SELECT count(*) AS n FROM sqlite_master WHERE type='trigger'")[0]!.n;
+      const other = Snapshot.decode(db.snapshot().encode()).open();
+      const n = other.query<{ n: number }>("SELECT count(*) AS n FROM sqlite_master WHERE type='trigger'")[0]!.n;
       expect(n).toBe(0);
+      other.close();
     },
   },
 ]);

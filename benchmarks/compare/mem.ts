@@ -1,4 +1,4 @@
-import { Database } from "../../src/index.ts";
+import { Database, Snapshot } from "../../src/index.ts";
 import type { NamedFactory } from "../harness/types.ts";
 import type { BenchEngine, BenchStatement } from "../harness/types.ts";
 
@@ -11,7 +11,7 @@ function wrapStatement(stmt: ReturnType<Database["prepare"]>): BenchStatement {
 }
 
 export function createMemEngine(): BenchEngine {
-  const db = new Database();
+  let db = new Database();
   return {
     name: "sqlite-mem",
     exec: (sql, params = []) => {
@@ -21,8 +21,11 @@ export function createMemEngine(): BenchEngine {
     query: <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => db.query<T>(sql, params),
     prepare: (sql) => wrapStatement(db.prepare(sql)),
     transaction: (fn) => db.transaction(fn),
-    snapshot: () => db.snapshot(),
-    restore: (bytes) => db.restore(bytes),
+    snapshot: () => db.snapshot().encode(),
+    restore: (bytes) => {
+      db.close();
+      db = Snapshot.decode(bytes).open();
+    },
     close: () => db.close(),
   };
 }

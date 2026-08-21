@@ -140,8 +140,9 @@ describe("README determinism property invariants", () => {
       expect(left.query("SELECT id, v FROM t ORDER BY id")).toEqual(right.query("SELECT id, v FROM t ORDER BY id"));
       const snap = left.snapshot();
       left.exec("DELETE FROM t");
-      left.restore(snap);
-      expect(left.query("SELECT id, v FROM t ORDER BY id")).toEqual(right.query("SELECT id, v FROM t ORDER BY id"));
+      const opened = snap.open();
+      expect(opened.query("SELECT id, v FROM t ORDER BY id")).toEqual(right.query("SELECT id, v FROM t ORDER BY id"));
+      opened.close();
     } finally {
       left.close();
       right.close();

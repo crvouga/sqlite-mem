@@ -1,4 +1,5 @@
 import { expect } from "bun:test";
+import { Snapshot } from "../../../src/index.ts";
 import { runCatalog } from "./run.ts";
 
 runCatalog("ATT", [
@@ -57,9 +58,9 @@ runCatalog("ATT", [
     fn: (db) => {
       db.exec("ATTACH ':memory:' AS other");
       db.exec("CREATE TABLE other.t(a INT)");
-      const snap = db.snapshot();
-      db.restore(snap);
-      expect(db.query<{ n: number }>("SELECT count(*) AS n FROM pragma_database_list()")[0]!.n).toBe(1);
+      const other = Snapshot.decode(db.snapshot().encode()).open();
+      expect(other.query<{ n: number }>("SELECT count(*) AS n FROM pragma_database_list()")[0]!.n).toBe(1);
+      other.close();
     },
   },
 ]);

@@ -33,18 +33,17 @@ test("os random() is not rewound by ROLLBACK", () => {
   }
 });
 
-test("system clock date('now') is today's UTC date and restore does not freeze it", () => {
+test("system clock date('now') is today's UTC date and open with system clock stays live", () => {
   const db = new Database({ now: "system" });
   try {
     const today = new Date().toISOString().slice(0, 10);
     expect(db.query<{ d: string }>("SELECT date('now') AS d")[0]!.d).toBe(today);
     const snap = db.snapshot();
-    const restored = new Database({ now: "system" });
+    const opened = snap.open({ now: "system" });
     try {
-      restored.restore(snap);
-      expect(restored.query<{ d: string }>("SELECT date('now') AS d")[0]!.d).toBe(today);
+      expect(opened.query<{ d: string }>("SELECT date('now') AS d")[0]!.d).toBe(today);
     } finally {
-      restored.close();
+      opened.close();
     }
   } finally {
     db.close();

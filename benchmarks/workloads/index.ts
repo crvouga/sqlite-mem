@@ -6,6 +6,7 @@ import { ftsSpecs, jsonSpecs } from "./json-fts.ts";
 import { largeSpecs } from "./large.ts";
 import { memoryFootprintSpecs } from "./memory-footprint.ts";
 import { microSpecs } from "./micro.ts";
+import { isolationSpecs } from "./isolation.ts";
 import { snapshotSpecs } from "./snapshots.ts";
 import type { BenchSpec } from "../harness/types.ts";
 
@@ -25,5 +26,6 @@ export function allSpecs(): BenchSpec[] {
     ...joinSpecs(),
     ...hotspotSpecs(),
     ...snapshotSpecs(),
+    ...isolationSpecs(),
   ];
 }

@@ -27,8 +27,9 @@ export class IndexStore {
   }
 
   checkUnique(values: readonly SqlValue[], rowid?: Rowid): void {
-    const key = serializeIndexKey(values);
-    if (key === null) return;
+    // SQLite treats NULLs as distinct for UNIQUE; skip conflict checks.
+    if (values.some((value) => value === null)) return;
+    const key = serializeIndexEntry(values);
     const existing = this.entries.get(key);
     if (!existing) return;
     for (const id of existing) {
@@ -44,8 +45,7 @@ export class IndexStore {
 
   insert(values: readonly SqlValue[], rowid: Rowid, unique = true): void {
     this.assertMutable();
-    const key = serializeIndexKey(values);
-    if (key === null) return;
+    const key = serializeIndexEntry(values);
     if (unique) this.checkUnique(values, rowid);
     const existing = this.entries.get(key);
     if (!existing) {
@@ -59,16 +59,17 @@ export class IndexStore {
   }
 
   lookup(values: readonly SqlValue[]): readonly Rowid[] {
-    const key = serializeIndexKey(values);
-    if (key === null) return [];
+    // SQL `=` never matches NULL; IS NULL is a different access path.
+    if (values.some((value) => value === null)) return [];
+    const key = serializeIndexEntry(values);
     return this.entries.get(key) ?? [];
   }
 
   /** Leftmost prefix match: INDEX(a,b) used for WHERE a = ?. */
   lookupPrefix(values: readonly SqlValue[]): readonly Rowid[] {
     if (values.length === 0) return [];
-    const prefix = serializeIndexKey(values);
-    if (prefix === null) return [];
+    if (values.some((value) => value === null)) return [];
+    const prefix = serializeIndexEntry(values);
     const exact = this.entries.get(prefix);
     const needle = `${prefix}|`;
     const rowids: Rowid[] = exact ? [...exact] : [];
@@ -87,7 +88,7 @@ export class IndexStore {
     const keys = this.orderedKeys();
     for (const key of keys) {
       const values = this.keyValues.get(key);
-      if (!values || values[0] === undefined) continue;
+      if (!values || values[0] === undefined || values[0] === null) continue;
       const cmp = compareSerializedOrder(values[0]!, bound);
       let ok = false;
       if (op === ">") ok = cmp > 0;
@@ -118,8 +119,7 @@ export class IndexStore {
 
   remove(values: readonly SqlValue[], rowid?: Rowid): boolean {
     this.assertMutable();
-    const key = serializeIndexKey(values);
-    if (key === null) return false;
+    const key = serializeIndexEntry(values);
     const existing = this.entries.get(key);
     if (!existing) return false;
     if (rowid === undefined) {
@@ -154,6 +154,29 @@ export class IndexStore {
     this.frozen = true;
   }
 
+  /** Sorted entries for SQLM v3 persistence. */
+  snapshotEntries(): Array<{ key: string; rowids: Rowid[]; values: SqlValue[] }> {
+    const keys = [...this.entries.keys()].sort();
+    return keys.map((key) => ({
+      key,
+      rowids: [...(this.entries.get(key) ?? [])],
+      values: [...(this.keyValues.get(key) ?? [])],
+    }));
+  }
+
+  /** Sorted keys + rowids for SQLM v4 (values rebuilt from the table). */
+  snapshotKeys(): Array<{ key: string; rowids: Rowid[] }> {
+    const keys = [...this.entries.keys()].sort();
+    return keys.map((key) => ({
+      key,
+      rowids: [...(this.entries.get(key) ?? [])],
+    }));
+  }
+
+  rememberKeyValues(key: string, values: readonly SqlValue[]): void {
+    this.keyValues.set(key, [...values]);
+  }
+
   get size(): number {
     return this.entries.size;
   }
@@ -167,7 +190,12 @@ export class IndexStore {
       if (!left || !right) return a < b ? -1 : a > b ? 1 : 0;
       const n = Math.min(left.length, right.length);
       for (let i = 0; i < n; i++) {
-        const cmp = compareSql(left[i] ?? null, right[i] ?? null);
+        const a = left[i] ?? null;
+        const b = right[i] ?? null;
+        if (a === null && b === null) continue;
+        if (a === null) return -1;
+        if (b === null) return 1;
+        const cmp = compareSql(a, b);
         if (cmp !== 0) return cmp ?? 0;
       }
       return left.length - right.length;
@@ -181,13 +209,24 @@ export class IndexStore {
   }
 }
 
+/** Hash-join / covering-hash key: NULL components never match. */
 export function serializeIndexKey(values: readonly SqlValue[]): string | null {
   if (values.some((value) => value === null)) return null;
-  return (values as readonly Exclude<SqlValue, null>[])
-    .map(serializeValue)
-    .map((part) => `${part.length}:${part}`)
+  return serializeIndexEntry(values);
+}
+
+/** Index-store key: NULL is a distinct component so composite prefix lookups still hit. */
+export function serializeIndexEntry(values: readonly SqlValue[]): string {
+  return values
+    .map((value) => {
+      const part = value === null ? NULL_PART : serializeValue(value);
+      return `${part.length}:${part}`;
+    })
     .join("|");
 }
+
+/** Dedicated tag; non-NULL encodings stay `t:` / `n:` / `f:` / `b:` (SQLM v3 compatible). */
+const NULL_PART = "z";
 
 function serializeValue(value: Exclude<SqlValue, null>): string {
   if (isSqlReal(value)) {

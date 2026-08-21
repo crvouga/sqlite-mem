@@ -12,12 +12,12 @@ import { checkTableConstraints } from "../constraints/check.ts";
 import { SqliteError } from "../errors/index.ts";
 import { exprEquals } from "../expressions/equals.ts";
 import { evalExpr } from "../expressions/eval.ts";
+import { indexKeyValues } from "../indexes/keys.ts";
 import { tryIndexedTableRows } from "../planner/access.ts";
 import { splitQualifiedName, type ViewInfo } from "../storage/database-state.ts";
 import type { Row, Rowid } from "../storage/row.ts";
 import { cloneRow, normalizeColumnName } from "../storage/row.ts";
 import { makeColumnInfo, Table } from "../storage/table.ts";
-import { normalizeForCollation } from "../types/collation.ts";
 import { applyStrictValue } from "../types/strict.ts";
 import { applyAffinity, asSqlReal, compareSql, isTruthySql, type SqlValue } from "../types/value.ts";
 import type { Fts5Row, Fts5VirtualTable } from "../vtable/fts5.ts";
@@ -232,7 +232,7 @@ function executeInsertCore(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
           last = rowid;
           env.state.lastInsertRowid = rowid;
         }
-        fireInsertTriggers("AFTER", table, row.values, null, env);
+        fireInsertTriggers("AFTER", table, table.namedValues(row), null, env);
         changes++;
         if (abortMode) undoInserted.push(rowid);
         if (stmt.returning.length)
@@ -425,7 +425,7 @@ function executeUpdateCore(stmt: UpdateStmt, env: ExecutionEnv): ResultSet {
         }
         const updated = updateOne(table, row, updates, env);
         table = env.state.getWritableTable(stmt.table);
-        fireUpdateTriggers("AFTER", table, row, updated.row.values, updatedColumns, env);
+        fireUpdateTriggers("AFTER", table, row, table.namedValues(updated.row), updatedColumns, env);
         changes += 1 + updated.cascaded;
         if (stmt.returning.length)
           returningRows.push(projectReturning(stmt.returning, scopeFor(table, updated.row, alias, env), env));
@@ -683,11 +683,11 @@ function scanView(target: WritableView, alias: string, env: ExecutionEnv): Scope
 }
 
 function viewRow(table: Table, scope: ScopeRow): Row {
-  const values = new Map<string, SqlValue>();
+  const values: SqlValue[] = [];
   for (const column of table.columns) {
     const key = normalizeColumnName(column.name);
     const cell = scope.cells.find((candidate) => normalizeColumnName(candidate.name) === key);
-    values.set(key, cell?.value ?? null);
+    values.push(cell?.value ?? null);
   }
   return { rowid: scope.rowid ?? 0, values };
 }
@@ -704,7 +704,7 @@ function mergedValues(table: Table, row: Row, updates: Map<string, SqlValue>): M
   const values = new Map<string, SqlValue>();
   for (const column of table.columns) {
     const key = normalizeColumnName(column.name);
-    values.set(key, updates.has(key) ? updates.get(key)! : (row.values.get(key) ?? null));
+    values.set(key, updates.has(key) ? updates.get(key)! : table.cell(row, key));
   }
   return values;
 }
@@ -747,12 +747,12 @@ function updateOne(
   env: ExecutionEnv,
 ): { row: Row; cascaded: number } {
   table = env.state.ensureWritableTable(table);
-  const before = { rowid: row.rowid, values: new Map(row.values) };
+  const before = row;
   let after: Row | undefined;
   let indexesAdded = false;
   removeIndexes(table, before, env);
   try {
-    const merged = new Map(row.values);
+    const merged = table.namedValues(row);
     for (const [name, value] of updates) merged.set(name, value);
     for (const column of table.columns) {
       if (!column.generated?.stored) continue;
@@ -993,16 +993,8 @@ function conflictsForSets(
 }
 
 function indexValues(columns: IndexedColumn[], row: Row, env?: ExecutionEnv, table?: Table): SqlValue[] {
-  if (!env || !table) {
-    return columns.map((column) =>
-      normalizeForCollation(row.values.get(normalizeColumnName(column.name)) ?? null, column.collate ?? "BINARY"),
-    );
-  }
-  const ctx = env.createEvalContext(scopeFor(table, row, table.name, env));
-  return columns.map((column) => {
-    const raw = column.expr ? evalExpr(column.expr, ctx) : (row.values.get(normalizeColumnName(column.name)) ?? null);
-    return normalizeForCollation(raw, column.collate ?? "BINARY");
-  });
+  if (!env || !table) return indexKeyValues(columns, row, null, table);
+  return indexKeyValues(columns, row, env.createEvalContext(scopeFor(table, row, table.name, env)), table);
 }
 
 function indexValuesFromMap(
@@ -1011,12 +1003,12 @@ function indexValuesFromMap(
   table: Table,
   env: ExecutionEnv,
 ): SqlValue[] {
-  const fake: Row = { rowid: 0, values };
+  const fake = table.rowFromNamed(values);
   return indexValues(columns, fake, env, table);
 }
 
 function indexWhereMatches(where: Expr, values: Map<string, SqlValue>, table: Table, env: ExecutionEnv): boolean {
-  const fake: Row = { rowid: 0, values };
+  const fake = table.rowFromNamed(values);
   return isTruthySql(evalExpr(where, env.createEvalContext(scopeFor(table, fake, table.name, env)))) === true;
 }
 
@@ -1025,7 +1017,7 @@ function checkForeignKeys(table: Table, row: Row, env: ExecutionEnv): void {
   for (const constraint of table.constraints) {
     if (constraint.type !== "foreign_key") continue;
     if (fkIsDeferred(constraint, env)) continue;
-    assertForeignKeySatisfied(row, constraint, env);
+    assertForeignKeySatisfied(table, row, constraint, env);
   }
 }
 
@@ -1037,17 +1029,19 @@ function fkIsDeferred(
 }
 
 function assertForeignKeySatisfied(
+  table: Table,
   row: Row,
   constraint: Extract<Table["constraints"][number], { type: "foreign_key" }>,
   env: ExecutionEnv,
   excludeParent: Row | null = null,
 ): void {
-  const values = constraint.columns.map((name) => row.values.get(normalizeColumnName(name)) ?? null);
+  const values = constraint.columns.map((name) => table.cell(row, normalizeColumnName(name)));
   assertForeignKeyValues(values, constraint, env, excludeParent);
 }
 
 /** Like assertForeignKeySatisfied, but using pending column updates (ON DELETE SET DEFAULT). */
 function assertForeignKeySatisfiedWithUpdates(
+  table: Table,
   row: Row,
   constraint: Extract<Table["constraints"][number], { type: "foreign_key" }>,
   updates: Map<string, SqlValue>,
@@ -1056,7 +1050,7 @@ function assertForeignKeySatisfiedWithUpdates(
 ): void {
   const values = constraint.columns.map((name) => {
     const key = normalizeColumnName(name);
-    return updates.has(key) ? (updates.get(key) ?? null) : (row.values.get(key) ?? null);
+    return updates.has(key) ? (updates.get(key) ?? null) : table.cell(row, key);
   });
   assertForeignKeyValues(values, constraint, env, excludeParent);
 }
@@ -1079,7 +1073,7 @@ function assertForeignKeyValues(
         const parentColumn = parentColumns[index];
         return (
           parentColumn !== undefined &&
-          compareSql(value, candidate.values.get(normalizeColumnName(parentColumn)) ?? null) === 0
+          compareSql(value, parent.cell(candidate, normalizeColumnName(parentColumn))) === 0
         );
       });
     })
@@ -1093,7 +1087,7 @@ export function checkDeferredForeignKeys(env: ExecutionEnv): void {
   for (const table of env.state.tables.values()) {
     for (const constraint of table.constraints) {
       if (constraint.type !== "foreign_key" || !constraint.initiallyDeferred) continue;
-      for (const row of table.scan()) assertForeignKeySatisfied(row, constraint, env);
+      for (const row of table.scan()) assertForeignKeySatisfied(table, row, constraint, env);
     }
   }
 }
@@ -1109,11 +1103,12 @@ function applyReferentialDelete(parent: Table, row: Row, env: ExecutionEnv): num
       if (constraint.type !== "foreign_key" || constraint.refTable.toLowerCase() !== parent.name.toLowerCase())
         continue;
       child = env.state.ensureWritableTable(child);
+      const target = child;
       const referenced = constraint.refColumns ?? parentPk;
-      const matches = [...child.scan()].filter(
+      const matches = [...target.scan()].filter(
         (candidate) =>
-          !(child === parent && candidate.rowid === row.rowid) &&
-          foreignKeyMatches(constraint.columns, candidate, referenced, row),
+          !(target === parent && candidate.rowid === row.rowid) &&
+          foreignKeyMatches(constraint.columns, candidate, referenced, row, target, parent),
       );
       for (const candidate of matches) {
         if (constraint.onDelete === "CASCADE") {
@@ -1133,7 +1128,7 @@ function applyReferentialDelete(parent: Table, row: Row, env: ExecutionEnv): num
         } else if (constraint.onDelete === "SET DEFAULT") {
           const updates = defaultUpdates(child, constraint.columns, env);
           // Default must resolve to a surviving parent row (exclude the row being deleted).
-          assertForeignKeySatisfiedWithUpdates(candidate, constraint, updates, env, row);
+          assertForeignKeySatisfiedWithUpdates(child, candidate, constraint, updates, env, row);
           const updated = updateOne(child, candidate, updates, env);
           changes += 1 + updated.cascaded;
         } else if (constraint.onDelete === "RESTRICT" || !fkIsDeferred(constraint, env)) {
@@ -1156,18 +1151,19 @@ function applyReferentialUpdate(parent: Table, before: Row, after: Row, env: Exe
       if (constraint.type !== "foreign_key" || constraint.refTable.toLowerCase() !== parent.name.toLowerCase())
         continue;
       child = env.state.ensureWritableTable(child);
+      const target = child;
       const referenced = constraint.refColumns ?? parentPk;
-      const oldValues = referenced.map((name) => before.values.get(normalizeColumnName(name)) ?? null);
-      const newValues = referenced.map((name) => after.values.get(normalizeColumnName(name)) ?? null);
+      const oldValues = referenced.map((name) => parent.cell(before, normalizeColumnName(name)));
+      const newValues = referenced.map((name) => parent.cell(after, normalizeColumnName(name)));
       if (oldValues.every((value, index) => compareSql(value, newValues[index] ?? null) === 0)) continue;
 
-      const matches = [...child.scan()].filter((candidate) =>
-        foreignKeyMatches(constraint.columns, candidate, referenced, before),
+      const matches = [...target.scan()].filter((candidate) =>
+        foreignKeyMatches(constraint.columns, candidate, referenced, before, target, parent),
       );
       for (const candidate of matches) {
         if (constraint.onUpdate === "CASCADE") {
           const updated = updateOne(
-            child,
+            target,
             candidate,
             new Map(constraint.columns.map((name, index) => [normalizeColumnName(name), newValues[index] ?? null])),
             env,
@@ -1175,14 +1171,14 @@ function applyReferentialUpdate(parent: Table, before: Row, after: Row, env: Exe
           changes += 1 + updated.cascaded;
         } else if (constraint.onUpdate === "SET NULL") {
           const updated = updateOne(
-            child,
+            target,
             candidate,
             new Map(constraint.columns.map((name) => [normalizeColumnName(name), null])),
             env,
           );
           changes += 1 + updated.cascaded;
         } else if (constraint.onUpdate === "SET DEFAULT") {
-          const updated = updateOne(child, candidate, defaultUpdates(child, constraint.columns, env), env);
+          const updated = updateOne(target, candidate, defaultUpdates(target, constraint.columns, env), env);
           changes += 1 + updated.cascaded;
         } else if (constraint.onUpdate === "RESTRICT" || !fkIsDeferred(constraint, env)) {
           throw new SqliteError("FOREIGN KEY constraint failed", "constraint_foreign", "SQLITE_CONSTRAINT_FOREIGNKEY");
@@ -1193,14 +1189,20 @@ function applyReferentialUpdate(parent: Table, before: Row, after: Row, env: Exe
   return changes;
 }
 
-function foreignKeyMatches(childColumns: string[], child: Row, parentColumns: string[], parent: Row): boolean {
-  const childValues = childColumns.map((name) => child.values.get(normalizeColumnName(name)) ?? null);
+function foreignKeyMatches(
+  childColumns: string[],
+  child: Row,
+  parentColumns: string[],
+  parent: Row,
+  childTable: Table,
+  parentTable: Table,
+): boolean {
+  const childValues = childColumns.map((name) => childTable.cell(child, normalizeColumnName(name)));
   if (childValues.some((value) => value === null)) return false;
   return childValues.every((value, index) => {
     const parentColumn = parentColumns[index];
     return (
-      parentColumn !== undefined &&
-      compareSql(value, parent.values.get(normalizeColumnName(parentColumn)) ?? null) === 0
+      parentColumn !== undefined && compareSql(value, parentTable.cell(parent, normalizeColumnName(parentColumn))) === 0
     );
   });
 }
@@ -1224,7 +1226,7 @@ function scopeFor(table: Table, row: Row, alias: string, env?: ExecutionEnv): Sc
     .map((column) => ({
       table: alias,
       name: column.name,
-      value: row.values.get(normalizeColumnName(column.name)) ?? null,
+      value: table.cell(row, normalizeColumnName(column.name)),
       affinity: column.affinity,
       collate: column.collate,
     }));

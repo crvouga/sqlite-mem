@@ -1,7 +1,7 @@
 import type { Expr, FromItem, TableRef } from "../ast/nodes.ts";
 import type { ExecutionEnv } from "../executor/env.ts";
-import { evalExpr } from "../expressions/eval.ts";
 import { exprEquals } from "../expressions/equals.ts";
+import { evalExpr } from "../expressions/eval.ts";
 import type { IndexInfo } from "../storage/database-state.ts";
 import type { Row, Rowid } from "../storage/row.ts";
 import type { Table } from "../storage/table.ts";
@@ -137,7 +137,7 @@ export function lookupTableRows(from: TableRef, where: Expr, env: ExecutionEnv):
   const byColumn = new Map<string, SqlValue>();
   for (const eq of resolved) byColumn.set(eq.column.toLowerCase(), eq.value);
 
-  let best: { rowids: readonly Rowid[]; columns: string[] } | null = null;
+  let best: IndexLookup | null = null;
   for (const indexName of table.indexes) {
     const index = db.indexes.get(indexName.toLowerCase());
     if (!index) continue;
@@ -159,10 +159,16 @@ export function lookupTableRows(from: TableRef, where: Expr, env: ExecutionEnv):
         prefix.push(normalizeForCollation(value, column.collate ?? "BINARY"));
       }
       if (prefix.length === 0) continue;
-      const rowids =
-        prefix.length === index.columns.length ? index.store.lookup(prefix) : index.store.lookupPrefix(prefix);
-      best = { rowids, columns: index.columns.map((column) => column.name.toLowerCase()) };
-      if (index.unique || rowids.length <= 1) break;
+      const full = prefix.length === index.columns.length;
+      const rowids = full ? index.store.lookup(prefix) : index.store.lookupPrefix(prefix);
+      const next = considerIndexLookup(best, {
+        rowids,
+        columns: index.columns.slice(0, prefix.length).map((column) => column.name.toLowerCase()),
+        prefixLen: prefix.length,
+        uniqueFull: index.unique && full,
+      });
+      best = next.best;
+      if (next.stop) break;
       continue;
     }
 
@@ -173,11 +179,16 @@ export function lookupTableRows(from: TableRef, where: Expr, env: ExecutionEnv):
       prefix.push(normalizeForCollation(value, column.collate ?? "BINARY"));
     }
     if (prefix.length === 0) continue;
-    const rowids =
-      prefix.length === index.columns.length ? index.store.lookup(prefix) : index.store.lookupPrefix(prefix);
-    best = { rowids, columns: index.columns.slice(0, prefix.length).map((column) => column.name.toLowerCase()) };
-    if (index.unique && prefix.length === index.columns.length) break;
-    if (rowids.length <= 1) break;
+    const full = prefix.length === index.columns.length;
+    const rowids = full ? index.store.lookup(prefix) : index.store.lookupPrefix(prefix);
+    const next = considerIndexLookup(best, {
+      rowids,
+      columns: index.columns.slice(0, prefix.length).map((column) => column.name.toLowerCase()),
+      prefixLen: prefix.length,
+      uniqueFull: index.unique && full,
+    });
+    best = next.best;
+    if (next.stop) break;
   }
 
   if (best) {
@@ -285,6 +296,24 @@ export function tryIndexedOrder(
     return { table, alias, rows, coveredColumns: new Set([col]) };
   }
   return null;
+}
+
+interface IndexLookup {
+  rowids: readonly Rowid[];
+  columns: string[];
+  prefixLen: number;
+  uniqueFull: boolean;
+}
+
+/** Unique full-key lookups are authoritative (including misses). Empty prefix hits are not. */
+function considerIndexLookup(
+  best: IndexLookup | null,
+  candidate: IndexLookup,
+): { best: IndexLookup | null; stop: boolean } {
+  if (candidate.uniqueFull) return { best: candidate, stop: true };
+  if (candidate.rowids.length === 0) return { best, stop: false };
+  if (!best || candidate.prefixLen > best.prefixLen) return { best: candidate, stop: false };
+  return { best, stop: false };
 }
 
 function compareRowids(left: Rowid, right: Rowid): number {

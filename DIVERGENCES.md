@@ -2,12 +2,12 @@
 
 > Auto-generated from [`compat/divergences.json`](compat/divergences.json). Do not edit by hand — run `bun run divergences`.
 
-Generated: 2026-08-20 · 20 entries
+Generated: 2026-08-21 · 20 entries
 
 | ID | Scope | Predicate | Pinned by |
 | --- | --- | --- | --- |
 | `oracle-platform-sqlite-version` | oracle | sqlite_version() is 3.51.0 (macOS system libsqlite) or 3.53.0 (Bun Linux/Windows amalgamation) | `scripts/sqlite-compat-gate.ts`, `tests/harness/oracle-version.test.ts` |
-| `snapshot-sqlm` | snapshot | snapshot() bytes are SQLM, not a .sqlite file | `SNP-hdr-01`, `SNP-rt-01` |
+| `snapshot-sqlm` | snapshot | snapshot().encode() bytes are SQLM, not a .sqlite file | `SNP-hdr-01`, `SNP-rt-01` |
 | `deterministic-random-now` | runtime | default random() and date('now') are seeded/fixed | `DAT-now-01`, `DET-seed-01`, `DET-negzero-01` |
 | `negzero-canonicalization` | types | IEEE -0 becomes +0 on bind, affinity, and arithmetic | `TYP-negzero-01`, `TYP-negzero-02`, `TYP-negzero-03`, `DET-negzero-01` |
 | `attach-empty-schema` | attach | ATTACH filename is ignored; attached schema is empty in-memory | `ATT-att-01` |
@@ -22,7 +22,7 @@ Generated: 2026-08-20 · 20 entries
 | `nan-infinity-bind` | bind | JS NaN and Infinity binds are rejected | `TYP-nan-04`, `TYP-nan-05` |
 | `double-quote-string-fallback` | lexer | SQLite may treat unknown double-quoted identifiers as strings; sqlite-mem rejects them | `TOK-07` |
 | `lone-surrogate-bind` | unicode | JS lone surrogates in string binds are engine-defined | `UNI-surr-01` |
-| `user-version-snapshot` | pragma | user_version is not restored from SQLM | `PRG-beh-05`, `SNP-omit-04` |
+| `user-version-snapshot` | pragma | user_version is not encoded in SQLM | `PRG-beh-05`, `SNP-omit-04` |
 | `pragma-setter-noop` | pragma | Some pragma setters are accepted but do not change engine state yet | `PRG-beh-02`, `PRG-beh-03`, `PRG-beh-07` |
 | `generate-series-extension` | tvf | generate_series is a sqlite-mem extension | `FTS-series-01` |
 | `datetime-localtime-utc` | datetime | localtime/utc modifiers do not apply host timezone conversion | `tests/contract/date-time/modifiers.test.ts` |
@@ -35,7 +35,7 @@ Harness bootstrap asserts sqlite_version() is in {3.51.0, 3.53.0}. Dialect tests
 
 ### `snapshot-sqlm`
 
-Custom codec; logical Dump after restore matches pre-snapshot Dump.
+Custom codec; logical Dump after Snapshot.open matches pre-snapshot Dump.
 
 ### `deterministic-random-now`
 
@@ -75,7 +75,7 @@ bind/iterate/pluck/raw/pragma()/loadExtension/serialize/safeIntegers throw. stmt
 
 ### `snapshot-exclusions`
 
-restore() outcome is pinned per omitted feature.
+decode().open() outcome is pinned per omitted feature.
 
 ### `json-api-unwrap`
 
@@ -95,7 +95,7 @@ sqlite-mem stores the JS string as UTF-16-unpaired text; oracle may replace or e
 
 ### `user-version-snapshot`
 
-PRAGMA user_version after restore is the default unless re-set.
+PRAGMA user_version after decode().open() is the default unless re-set.
 
 ### `pragma-setter-noop`
 

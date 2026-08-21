@@ -4,7 +4,7 @@ import { Database } from "../../../src/index.ts";
 test("SQLM synchronizes a supported schema and data corpus between databases", () => {
   const options = { seed: 0x5a17, now: new Date("2024-02-03T04:05:06.000Z") };
   const source = new Database(options);
-  const replica = new Database({ seed: 999, now: new Date("1999-01-01T00:00:00.000Z") });
+  let replica: Database | undefined;
   try {
     source.exec(`
       CREATE TABLE accounts (
@@ -30,7 +30,7 @@ test("SQLM synchronizes a supported schema and data corpus between databases", (
     `);
     source.query("SELECT random() AS consumed");
 
-    replica.restore(source.snapshot());
+    replica = source.snapshot().open();
 
     const checks = [
       "SELECT id, email, balance, hex(avatar) AS avatar, note FROM accounts ORDER BY id",
@@ -46,10 +46,10 @@ test("SQLM synchronizes a supported schema and data corpus between databases", (
 
     expect(replica.query("SELECT datetime('now') AS now")).toEqual(source.query("SELECT datetime('now') AS now"));
     expect(replica.query("SELECT random() AS value")).toEqual(source.query("SELECT random() AS value"));
-    expect(replica.snapshot()).toEqual(source.snapshot());
+    expect(replica.snapshot().encode()).toEqual(source.snapshot().encode());
   } finally {
     source.close();
-    replica.close();
+    replica?.close();
   }
 });
 
@@ -63,22 +63,21 @@ const snapshotCorpus = [
 
 test.each(snapshotCorpus)("SQLM round-trips $label table data and indexes", ({ literal }) => {
   const source = new Database();
-  const restored = new Database();
   try {
     source.exec(`
       CREATE TABLE corpus(id INTEGER PRIMARY KEY, value);
       CREATE INDEX corpus_value ON corpus(value);
       INSERT INTO corpus(value) VALUES (${literal});
     `);
-    restored.restore(source.snapshot());
+    const restored = source.snapshot().open();
     expect(restored.query("SELECT id, typeof(value) AS storage, value FROM corpus")).toEqual(
       source.query("SELECT id, typeof(value) AS storage, value FROM corpus"),
     );
     expect(restored.query("SELECT name, origin FROM pragma_index_list('corpus') ORDER BY name")).toEqual(
       source.query("SELECT name, origin FROM pragma_index_list('corpus') ORDER BY name"),
     );
+    restored.close();
   } finally {
     source.close();
-    restored.close();
   }
 });

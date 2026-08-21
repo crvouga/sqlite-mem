@@ -23,5 +23,5 @@ Vite aliases `@crvouga/sqlite-mem` to the library source, so you do not need to 
 - Synchronous `Database` / `Statement` API
 - `prepare().result()` including empty result-set column names
 - `SqliteError.category`
-- `snapshot()` / `restore()` persisted in `localStorage` (SQLM bytes, not a `.sqlite` file)
+- `snapshot().encode()` / `Snapshot.decode(bytes).open()` persisted in `localStorage` (SQLM bytes, not a `.sqlite` file)
 - Live `'now'` via `new Database({ now: () => new Date() })` — the library default is a fixed year-2000 clock

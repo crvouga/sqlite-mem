@@ -21,7 +21,7 @@
  *
  * @module
  */
-export { Database, type DatabaseOptions } from "./api/database.ts";
+export { Database, Snapshot, type DatabaseOptions } from "./api/database.ts";
 export { type RunResult, Statement } from "./api/statement.ts";
 export { type ErrorCategory, SqliteError } from "./errors/index.ts";
 export type { ResultSet } from "./executor/result.ts";

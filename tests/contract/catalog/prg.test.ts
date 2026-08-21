@@ -1,4 +1,5 @@
 import { expect } from "bun:test";
+import { Snapshot } from "../../../src/index.ts";
 import { runCatalog } from "./run.ts";
 
 runCatalog("PRG", [
@@ -80,11 +81,9 @@ runCatalog("PRG", [
     fn: (db) => {
       db.exec("PRAGMA user_version=7");
       expect(db.query("PRAGMA user_version")).toEqual([{ user_version: 7 }]);
-      const snap = db.snapshot();
-      db.exec("PRAGMA user_version=0");
-      db.restore(snap);
-      // Intentional: user_version is not restored from SQLM (user-version-snapshot).
-      expect(db.query("PRAGMA user_version")).toEqual([{ user_version: 0 }]);
+      const other = Snapshot.decode(db.snapshot().encode()).open();
+      expect(other.query("PRAGMA user_version")).toEqual([{ user_version: 0 }]);
+      other.close();
     },
   },
   {

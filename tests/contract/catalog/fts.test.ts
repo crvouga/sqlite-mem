@@ -1,4 +1,5 @@
 import { expect } from "bun:test";
+import { Snapshot } from "../../../src/index.ts";
 import { runCatalog } from "./run.ts";
 
 runCatalog("FTS", [
@@ -89,9 +90,10 @@ runCatalog("FTS", [
     fn: (db) => {
       db.exec("CREATE VIRTUAL TABLE docs USING fts5(body)");
       db.exec("INSERT INTO docs(body) VALUES ('hello')");
-      const snap = db.snapshot();
-      db.restore(snap);
-      expect(db.query("SELECT name FROM sqlite_master WHERE name='docs'").length).toBe(0);
+      const snap = db.snapshot().encode();
+      const other = Snapshot.decode(snap).open();
+      expect(other.query("SELECT name FROM sqlite_master WHERE name='docs'").length).toBe(0);
+      other.close();
     },
   },
   {

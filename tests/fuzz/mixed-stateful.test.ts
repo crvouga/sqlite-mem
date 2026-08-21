@@ -36,8 +36,9 @@ describe("snapshot mid-sequence property", () => {
       const snap = db.snapshot();
       db.exec("DELETE FROM t");
       expect(db.query("SELECT count(*) AS n FROM t")).toEqual([{ n: 0 }]);
-      db.restore(snap);
-      expect(db.query("SELECT id, a, b FROM t ORDER BY id")).toEqual(before);
+      const opened = snap.open();
+      expect(opened.query("SELECT id, a, b FROM t ORDER BY id")).toEqual(before);
+      opened.close();
     } finally {
       db.close();
     }

@@ -9,11 +9,10 @@ import type {
 } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
 import { evalExpr } from "../expressions/eval.ts";
+import { heapRowCells, rebuildIndexFromTable } from "../indexes/keys.ts";
 import { appendAddColumnToMasterSql, normalizeMasterSql, synthesizeCtasMasterSql } from "../schema/master-sql.ts";
 import { normalizeColumnName } from "../storage/row.ts";
 import { makeColumnInfo } from "../storage/table.ts";
-import { normalizeForCollation } from "../types/collation.ts";
-import { isTruthySql } from "../types/value.ts";
 import type { ExecutionEnv } from "./env.ts";
 import { emptyResult, type ResultSet, resultValues } from "./result.ts";
 import { executeSelect } from "./select.ts";
@@ -40,16 +39,9 @@ export function executeCreateTable(stmt: CreateTableStmt, env: ExecutionEnv): Re
   for (const indexName of table.indexes) {
     const index = db.indexes.get(indexName.toLowerCase());
     if (!index) continue;
-    index.store.clear();
-    for (const row of table.scan()) {
-      index.store.insert(
-        index.columns.map((column) =>
-          normalizeForCollation(row.values.get(normalizeColumnName(column.name)) ?? null, column.collate ?? "BINARY"),
-        ),
-        row.rowid,
-        index.unique,
-      );
-    }
+    rebuildIndexFromTable(index, table, (row) =>
+      env.createEvalContext({ rowid: row.rowid, sourceTable: table.name, cells: heapRowCells(table, row) }),
+    );
   }
   env.state.recordChange(0);
   return emptyResult(0, env.state.lastInsertRowid);
@@ -59,28 +51,9 @@ export function executeCreateIndex(stmt: CreateIndexStmt, env: ExecutionEnv): Re
   const index = env.state.createIndex(stmt, env.statementSql ? normalizeMasterSql(env.statementSql) : null);
   const table = env.state.getTable(stmt.table);
   try {
-    for (const row of table.scan()) {
-      const ctx = env.createEvalContext({
-        rowid: row.rowid,
-        sourceTable: table.name,
-        cells: table.columns.map((column) => ({
-          table: table.name,
-          name: column.name,
-          value: row.values.get(normalizeColumnName(column.name)) ?? null,
-        })),
-      });
-      if (stmt.where && isTruthySql(evalExpr(stmt.where, ctx)) !== true) continue;
-      index.store.insert(
-        stmt.columns.map((column) => {
-          const raw = column.expr
-            ? evalExpr(column.expr, ctx)
-            : (row.values.get(normalizeColumnName(column.name)) ?? null);
-          return normalizeForCollation(raw, column.collate ?? "BINARY");
-        }),
-        row.rowid,
-        stmt.unique,
-      );
-    }
+    rebuildIndexFromTable(index, table, (row) =>
+      env.createEvalContext({ rowid: row.rowid, sourceTable: table.name, cells: heapRowCells(table, row) }),
+    );
   } catch (error) {
     env.state.dropIndex(stmt.name, true);
     throw error;
@@ -98,14 +71,9 @@ export function executeAlterTable(stmt: AlterTableStmt, env: ExecutionEnv): Resu
     if (!column) throw new SqliteError(`no such column: ${action.oldName}`, "no_such_column");
     if (table.columns.some((item) => item.name.toLowerCase() === action.newName.toLowerCase()))
       throw new SqliteError(`duplicate column name: ${action.newName}`, "other");
-    const oldKey = normalizeColumnName(column.name);
     column.name = action.newName;
     column.nameLower = action.newName.toLowerCase();
-    for (const row of table.rows.values()) {
-      const value = row.values.get(oldKey) ?? null;
-      row.values.delete(oldKey);
-      row.values.set(normalizeColumnName(action.newName), value);
-    }
+    table.rebuildColIndex();
     for (const constraint of table.constraints) renameConstraintColumn(constraint, action.oldName, action.newName);
     for (const name of table.indexes) {
       const index = env.state.getWritableIndex(name);
@@ -137,7 +105,8 @@ export function executeAlterTable(stmt: AlterTableStmt, env: ExecutionEnv): Resu
     if (column.notNull && defaultValue === null && table.rows.size > 0)
       throw new SqliteError("Cannot add a NOT NULL column with default value NULL", "other");
     table.columns.push(column);
-    for (const row of table.rows.values()) row.values.set(normalizeColumnName(column.name), defaultValue);
+    table.rebuildColIndex();
+    for (const row of table.rows.values()) row.values.push(defaultValue);
     table.originalSql = appendAddColumnToMasterSql(table.originalSql, env.statementSql);
     table.clearEqualityHashes();
     env.state.schemaVersion++;
@@ -175,7 +144,8 @@ export function executeAlterTable(stmt: AlterTableStmt, env: ExecutionEnv): Resu
       }
     }
     table.columns.splice(index, 1);
-    for (const row of table.rows.values()) row.values.delete(normalizeColumnName(action.name));
+    table.rebuildColIndex();
+    for (const row of table.rows.values()) row.values.splice(index, 1);
     table.clearEqualityHashes();
     env.state.schemaVersion++;
   }

@@ -449,7 +449,7 @@ function pragmaForeignKeyCheck(args: readonly SqlValue[], env: ExecutionEnv): Pr
         let allNull = true;
         const childValues: SqlValue[] = [];
         for (const col of constraint.columns) {
-          const value = row.values.get(col.toLowerCase()) ?? null;
+          const value = table.cell(row, col.toLowerCase());
           childValues.push(value);
           if (value !== null) allNull = false;
         }
@@ -470,7 +470,7 @@ function parentHasMatch(parent: Table, refColumns: string[], childValues: SqlVal
   for (const row of parent.scan()) {
     let ok = true;
     for (let i = 0; i < refColumns.length; i++) {
-      const parentVal = row.values.get(refColumns[i]!.toLowerCase()) ?? null;
+      const parentVal = parent.cell(row, refColumns[i]!.toLowerCase());
       if (!sqlValuesEqual(parentVal, childValues[i] ?? null)) {
         ok = false;
         break;

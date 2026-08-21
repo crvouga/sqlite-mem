@@ -5,8 +5,8 @@ import { compareWithCollation, normalizeForCollation } from "../types/collation.
 import { applyStrictValue } from "../types/strict.ts";
 import type { Affinity, SqlValue } from "../types/value.ts";
 import { affinityFromTypeName, applyAffinity, cloneSqlValue, compareSql } from "../types/value.ts";
-import type { Row, Rowid, RowValues } from "./row.ts";
-import { cloneRow, normalizeColumnName, rowValues } from "./row.ts";
+import type { NamedRowValues, Row, Rowid, RowValues } from "./row.ts";
+import { cloneRow, isValueArray, normalizeColumnName, rowValues } from "./row.ts";
 
 /** Build a covering equality hash once a table is large enough that scans dominate. */
 const EQUALITY_HASH_MIN_ROWS = 16;
@@ -66,6 +66,8 @@ export class Table {
   /** Cached maximum rowid. `undefined` means recompute after deleting the maximum. */
   private maximumRowid: Rowid | null | undefined = null;
   frozen = false;
+  /** nameLower → column index; rebuilt after ALTER. */
+  private colIndex = new Map<string, number>();
 
   constructor(name: string, columns: ColumnInfo[], options: TableOptions = {}) {
     this.name = name;
@@ -79,6 +81,51 @@ export class Table {
     this.strict = options.strict ?? false;
     this.clusteredRows = new Map();
     this.scanCache = null;
+    this.rebuildColIndex();
+  }
+
+  rebuildColIndex(): void {
+    this.colIndex = new Map();
+    for (let i = 0; i < this.columns.length; i++) {
+      const column = this.columns[i]!;
+      this.colIndex.set(column.nameLower ?? column.name.toLowerCase(), i);
+    }
+  }
+
+  columnOffset(nameLower: string): number | undefined {
+    return this.colIndex.get(nameLower);
+  }
+
+  hasColumn(nameLower: string): boolean {
+    return this.colIndex.has(nameLower);
+  }
+
+  cell(row: Row, nameLower: string): SqlValue {
+    const i = this.colIndex.get(nameLower);
+    return i === undefined ? null : (row.values[i] ?? null);
+  }
+
+  setCell(row: Row, nameLower: string, value: SqlValue): void {
+    const i = this.colIndex.get(nameLower);
+    if (i === undefined) throw new SqliteError(`no such column: ${nameLower}`, "no_such_column");
+    row.values[i] = value;
+  }
+
+  namedValues(row: Row): Map<string, SqlValue> {
+    const map = new Map<string, SqlValue>();
+    for (let i = 0; i < this.columns.length; i++) {
+      const column = this.columns[i]!;
+      map.set(column.nameLower ?? column.name.toLowerCase(), row.values[i] ?? null);
+    }
+    return map;
+  }
+
+  rowFromNamed(values: Map<string, SqlValue>, rowid: Rowid = 0): Row {
+    const cells: SqlValue[] = [];
+    for (const column of this.columns) {
+      cells.push(values.get(normalizeColumnName(column.name)) ?? null);
+    }
+    return { rowid, values: cells };
   }
 
   integerPkColumn(): ColumnInfo | undefined {
@@ -156,7 +203,7 @@ export class Table {
     const map = new Map<string, Rowid[]>();
     const collate = column.collate ?? "BINARY";
     for (const row of this.rows.values()) {
-      const key = serializeIndexKey([normalizeForCollation(row.values.get(columnLower) ?? null, collate)]);
+      const key = serializeIndexKey([normalizeForCollation(this.cell(row, columnLower), collate)]);
       if (key === null) continue;
       const bucket = map.get(key);
       if (bucket) bucket.push(row.rowid);
@@ -174,9 +221,7 @@ export class Table {
     if (!this.equalityHashes) return;
     for (const [columnLower, map] of this.equalityHashes) {
       const column = this.columns.find((item) => item.nameLower === columnLower);
-      const key = serializeIndexKey([
-        normalizeForCollation(row.values.get(columnLower) ?? null, column?.collate ?? "BINARY"),
-      ]);
+      const key = serializeIndexKey([normalizeForCollation(this.cell(row, columnLower), column?.collate ?? "BINARY")]);
       if (key === null) continue;
       const bucket = map.get(key);
       if (bucket) {
@@ -189,9 +234,7 @@ export class Table {
     if (!this.equalityHashes) return;
     for (const [columnLower, map] of this.equalityHashes) {
       const column = this.columns.find((item) => item.nameLower === columnLower);
-      const key = serializeIndexKey([
-        normalizeForCollation(row.values.get(columnLower) ?? null, column?.collate ?? "BINARY"),
-      ]);
+      const key = serializeIndexKey([normalizeForCollation(this.cell(row, columnLower), column?.collate ?? "BINARY")]);
       if (key === null) continue;
       const bucket = map.get(key);
       if (!bucket) continue;
@@ -204,11 +247,7 @@ export class Table {
   insert(input: InsertRow | RowValues, options?: InsertOptions): Rowid {
     this.assertMutable();
     const supplied = isInsertRow(input) ? input : { values: input };
-    const values = options?.prepared
-      ? supplied.values instanceof Map
-        ? supplied.values
-        : rowValues(supplied.values)
-      : this.prepareValues(supplied.values);
+    const values = this.cellsFromInput(supplied.values, options?.prepared === true);
 
     if (this.withoutRowid) {
       if (supplied.rowid !== undefined) {
@@ -232,7 +271,7 @@ export class Table {
     let rowid = supplied.rowid;
 
     if (alias) {
-      const value = values.get(normalizeColumnName(alias.name)) ?? null;
+      const value = this.cell({ rowid: 0, values }, normalizeColumnName(alias.name));
       if (rowid === undefined && value !== null) rowid = asRowid(value, alias.name);
     }
     rowid = canonicalRowid(rowid ?? this.allocateRowid());
@@ -244,7 +283,7 @@ export class Table {
         "SQLITE_CONSTRAINT_PRIMARYKEY",
       );
     }
-    if (alias) values.set(normalizeColumnName(alias.name), rowid);
+    if (alias) this.setCell({ rowid, values }, normalizeColumnName(alias.name), rowid);
 
     const candidate: Row = { rowid, values };
     if (!options?.skipValidate) this.validate(candidate);
@@ -260,11 +299,20 @@ export class Table {
     const existing = this.rows.get(key);
     if (!existing) return undefined;
 
-    const values = new Map(existing.values);
-    const incoming = rowValues(updates);
-    for (const [name, value] of incoming) {
-      const column = this.column(name);
-      values.set(normalizeColumnName(column.name), applyAffinity(cloneSqlValue(value), column.affinity));
+    const values = existing.values.slice();
+    const incoming = isValueArray(updates) ? updates : rowValues(updates);
+    if (isValueArray(updates)) {
+      for (let i = 0; i < updates.length && i < this.columns.length; i++) {
+        const column = this.columns[i]!;
+        values[i] = applyAffinity(cloneSqlValue(updates[i] ?? null), column.affinity);
+      }
+    } else {
+      for (const [name, value] of incoming as Map<string, SqlValue>) {
+        const column = this.column(name);
+        const offset = this.columnOffset(normalizeColumnName(column.name));
+        if (offset === undefined) continue;
+        values[offset] = applyAffinity(cloneSqlValue(value), column.affinity);
+      }
     }
 
     if (this.withoutRowid) {
@@ -283,7 +331,8 @@ export class Table {
     }
 
     const alias = this.integerPrimaryKeyAlias();
-    const targetKey = alias ? asRowid(values.get(normalizeColumnName(alias.name)) ?? null, alias.name) : key;
+    const aliasRow: Row = { rowid: key, values };
+    const targetKey = alias ? asRowid(this.cell(aliasRow, normalizeColumnName(alias.name)), alias.name) : key;
     if (targetKey !== key && this.rows.has(targetKey)) {
       throw new SqliteError(
         `UNIQUE constraint failed: ${this.name}.${alias?.name ?? "rowid"}`,
@@ -291,7 +340,7 @@ export class Table {
         "SQLITE_CONSTRAINT_UNIQUE",
       );
     }
-    if (alias) values.set(normalizeColumnName(alias.name), targetKey);
+    if (alias) this.setCell(aliasRow, normalizeColumnName(alias.name), targetKey);
     const candidate: Row = { rowid: targetKey, values };
     this.validate(candidate, key);
     if (targetKey !== key) {
@@ -366,15 +415,28 @@ export class Table {
     this.clearEqualityHashes();
   }
 
-  private prepareValues(input: RowValues): Map<string, SqlValue> {
+  private cellsFromInput(input: RowValues, prepared: boolean): SqlValue[] {
+    if (isValueArray(input)) {
+      if (prepared && input.length === this.columns.length) return [...input];
+      return this.prepareValues(namedFromArray(this, input));
+    }
+    if (prepared) {
+      const named = rowValues(input);
+      const cells: SqlValue[] = [];
+      for (const column of this.columns) cells.push(named.get(normalizeColumnName(column.name)) ?? null);
+      return cells;
+    }
+    return this.prepareValues(input);
+  }
+
+  private prepareValues(input: NamedRowValues): SqlValue[] {
     const supplied = rowValues(input);
     for (const name of supplied.keys()) this.column(name);
 
-    const result = new Map<string, SqlValue>();
+    const result: SqlValue[] = [];
     for (const column of this.columns) {
       const key = normalizeColumnName(column.name);
-      result.set(
-        key,
+      result.push(
         this.strict
           ? applyStrictValue(cloneSqlValue(supplied.get(key) ?? null), column.typeName ?? "", this.name, column.name)
           : applyAffinity(cloneSqlValue(supplied.get(key) ?? null), column.affinity),
@@ -391,8 +453,9 @@ export class Table {
   }
 
   private validate(row: Row, excludedRowid?: Rowid): void {
-    for (const column of this.columns) {
-      const value = row.values.get(normalizeColumnName(column.name)) ?? null;
+    for (let i = 0; i < this.columns.length; i++) {
+      const column = this.columns[i]!;
+      const value = row.values[i] ?? null;
       if ((column.notNull || column.primaryKey) && value === null) {
         const category = column.primaryKey ? "constraint_primary" : "constraint_notnull";
         const code = column.primaryKey ? "SQLITE_CONSTRAINT_PRIMARYKEY" : "SQLITE_CONSTRAINT_NOTNULL";
@@ -405,18 +468,16 @@ export class Table {
     }
 
     const uniqueSets = this.uniqueColumnSets();
-    // Prefer O(1)/O(k) enforcement via IndexStore in the DML path (autoindexes).
-    // Keep a scan only when this table has no indexes registered yet.
     if (this.indexes.length === 0) {
       for (const names of uniqueSets) {
-        const values = names.map((name) => row.values.get(normalizeColumnName(name)) ?? null);
+        const values = names.map((name) => this.cell(row, normalizeColumnName(name)));
         if (values.some((value) => value === null)) continue;
         for (const other of this.rows.values()) {
           if (excludedRowid !== undefined && other.rowid === excludedRowid) continue;
           if (
             values.every((value, index) => {
               const column = this.column(names[index]!);
-              const otherValue = other.values.get(normalizeColumnName(names[index]!)) ?? null;
+              const otherValue = this.cell(other, normalizeColumnName(names[index]!));
               const collation = column.collate ?? "BINARY";
               return compareWithCollation(value, otherValue, collation) === 0;
             })
@@ -432,7 +493,6 @@ export class Table {
       }
     } else if (uniqueSets.length > 0) {
       // Indexes exist: uniqueness is enforced by IndexStore on addIndexes / conflict checks.
-      // Still guard INTEGER PRIMARY KEY collisions via the rowid map in insert/update.
     }
   }
 
@@ -458,10 +518,11 @@ export class Table {
     return this.columns.filter((column) => column.primaryKey);
   }
 
-  private makeClusterKey(values: Map<string, SqlValue>): string {
+  private makeClusterKey(values: readonly SqlValue[]): string {
     return this.primaryKeyColumns()
       .map((column) => {
-        const value = values.get(normalizeColumnName(column.name)) ?? null;
+        const offset = this.columnOffset(normalizeColumnName(column.name)) ?? 0;
+        const value = values[offset] ?? null;
         const normalized = normalizeForCollation(value, column.collate ?? "BINARY");
         return serializePkComponent(normalized);
       })
@@ -470,8 +531,9 @@ export class Table {
 
   private comparePrimaryKeys(left: Row, right: Row): number {
     for (const column of this.primaryKeyColumns()) {
-      const leftValue = left.values.get(normalizeColumnName(column.name)) ?? null;
-      const rightValue = right.values.get(normalizeColumnName(column.name)) ?? null;
+      const key = normalizeColumnName(column.name);
+      const leftValue = this.cell(left, key);
+      const rightValue = this.cell(right, key);
       const comparison = column.collate
         ? compareWithCollation(leftValue, rightValue, column.collate)
         : compareSql(leftValue, rightValue);
@@ -557,7 +619,17 @@ function cloneAst<T>(value: T): T {
 }
 
 function isInsertRow(input: InsertRow | RowValues): input is InsertRow {
-  return !(input instanceof Map) && "values" in input;
+  return (
+    typeof input === "object" && input !== null && !Array.isArray(input) && !(input instanceof Map) && "values" in input
+  );
+}
+
+function namedFromArray(table: Table, values: readonly SqlValue[]): Map<string, SqlValue> {
+  const named = new Map<string, SqlValue>();
+  for (let i = 0; i < table.columns.length; i++) {
+    named.set(normalizeColumnName(table.columns[i]!.name), values[i] ?? null);
+  }
+  return named;
 }
 
 function asRowid(value: SqlValue, column: string): Rowid {

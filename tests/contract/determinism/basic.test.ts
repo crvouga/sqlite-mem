@@ -50,7 +50,7 @@ describe("determinism", () => {
     const right = new Database({ seed: 7 });
     setup(left);
     setup(right);
-    expect([...left.snapshot()]).toEqual([...right.snapshot()]);
+    expect([...left.snapshot().encode()]).toEqual([...right.snapshot().encode()]);
   });
 
   test("Prng is deterministic across clones of state", () => {
@@ -79,8 +79,7 @@ describe("determinism", () => {
     expect(Object.is(before, -0)).toBe(false);
     expect(before).toBe(0);
     const snap = db.snapshot();
-    const restored = new Database();
-    restored.restore(snap);
+    const restored = snap.open();
     const after = restored.query<{ x: number }>("SELECT x FROM t")[0]!.x;
     expect(Object.is(after, -0)).toBe(false);
     expect(after).toBe(0);
@@ -92,8 +91,7 @@ describe("determinism", () => {
     const snap = source.snapshot();
     const secondOnSource = String(source.query<{ v: bigint | number }>("SELECT random() AS v")[0]!.v);
 
-    const restored = new Database({ seed: 999 });
-    restored.restore(snap);
+    const restored = snap.open({ seed: 999 });
     const secondOnRestored = String(restored.query<{ v: bigint | number }>("SELECT random() AS v")[0]!.v);
     expect(secondOnRestored).toBe(secondOnSource);
     expect(secondOnRestored).not.toBe(first);
@@ -124,8 +122,7 @@ describe("determinism", () => {
     expect(idsBefore).toEqual([1, 2, 3]);
     expect(concatBefore).toBe("a,b,c");
 
-    const restored = new Database();
-    restored.restore(db.snapshot());
+    const restored = db.snapshot().open();
     expect(restored.query<{ id: number }>("SELECT id FROM t").map((row) => row.id)).toEqual(idsBefore);
     expect(restored.query<{ c: string }>("SELECT group_concat(v) AS c FROM t")[0]!.c).toBe(concatBefore);
   });
@@ -142,8 +139,7 @@ describe("determinism", () => {
   test("snapshot restores clock instant", () => {
     const source = new Database({ now: new Date("2019-04-01T00:00:00.000Z") });
     const snap = source.snapshot();
-    const restored = new Database({ now: new Date("1999-01-01T00:00:00.000Z") });
-    restored.restore(snap);
+    const restored = snap.open({ now: new Date("1999-01-01T00:00:00.000Z") });
     expect(restored.query<{ d: string }>("SELECT date('now') AS d")[0]!.d).toBe("2019-04-01");
   });
 });

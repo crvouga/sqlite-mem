@@ -338,13 +338,16 @@ function comparisonClass(v: SqlValue): number {
 }
 
 /** UTF-8 encode `s` (SQLite TEXT → BLOB). */
+const TEXT_ENCODER = new TextEncoder();
+const TEXT_DECODER = new TextDecoder();
+
 export function utf8Encode(s: string): Uint8Array {
-  return new TextEncoder().encode(s);
+  return TEXT_ENCODER.encode(s);
 }
 
 /** UTF-8 decode `b` (SQLite BLOB → TEXT). */
 export function utf8Decode(b: Uint8Array): string {
-  return new TextDecoder().decode(b);
+  return TEXT_DECODER.decode(b);
 }
 
 /** Deep-copy blobs and REAL/JSON wrappers; primitives are returned as-is. */

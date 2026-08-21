@@ -6,8 +6,8 @@ import { Database, SqliteError } from "../../../src/index.ts";
 import { expectParity, matrixBoth } from "../../harness/index.ts";
 
 describe("public API exports", () => {
-  test("main entry runtime keys are exactly Database, Statement, SqliteError", () => {
-    expect(Object.keys(sqliteMem).sort()).toEqual(["Database", "SqliteError", "Statement"]);
+  test("main entry runtime keys are exactly Database, Snapshot, Statement, SqliteError", () => {
+    expect(Object.keys(sqliteMem).sort()).toEqual(["Database", "Snapshot", "SqliteError", "Statement"]);
   });
 
   test("package.json exports only . and ./unstable", () => {

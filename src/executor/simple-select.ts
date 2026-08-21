@@ -2,7 +2,7 @@ import type { Expr, ResultColumn, SelectStmt } from "../ast/nodes.ts";
 import { conjunctions, equalityAgainstConst, lookupTableRows, tryJoinEqualityKeys } from "../planner/access.ts";
 import type { Row } from "../storage/row.ts";
 import type { Table } from "../storage/table.ts";
-import { applyAffinity, compareSql, toInteger, type SqlValue } from "../types/value.ts";
+import { applyAffinity, compareSql, type SqlValue, toInteger } from "../types/value.ts";
 import type { ExecutionEnv } from "./env.ts";
 import { type ResultSet, valuesToResult } from "./result.ts";
 
@@ -101,7 +101,7 @@ export function tryExecuteSimpleSelect(stmt: SelectStmt, env: ExecutionEnv): Res
   let skipped = 0;
 
   for (const row of source) {
-    if (!alreadyFiltered && filters.length > 0 && !rowMatches(row, filters)) continue;
+    if (!alreadyFiltered && filters.length > 0 && !rowMatches(table, row, filters)) continue;
     if (skipped < offset) {
       skipped++;
       continue;
@@ -173,29 +173,29 @@ export function tryExecuteSimpleJoin(stmt: SelectStmt, env: ExecutionEnv): Resul
     names.push(column.alias ?? column.expr.name);
     if (onLeft) {
       if (isRowidName(key)) projectors.push((left) => left.rowid);
-      else projectors.push((left) => left.values.get(key) ?? null);
+      else projectors.push((left) => leftTable.cell(left, key));
     } else {
       if (isRowidName(key)) projectors.push((_left, right) => right.rowid);
-      else projectors.push((_left, right) => right.values.get(key) ?? null);
+      else projectors.push((_left, right) => rightTable.cell(right, key));
     }
   }
 
   const values: SqlValue[][] = [];
   for (const left of leftTable.scan()) {
-    const matches = rightTable.lookupEquality(rightCol, left.values.get(leftCol) ?? null);
+    const matches = rightTable.lookupEquality(rightCol, leftTable.cell(left, leftCol));
     if (!matches) return null;
     for (const right of matches) values.push(projectors.map((fn) => fn(left, right)));
   }
   return pack(env, names, values);
 }
 
-function rowMatches(row: Row, filters: { column: string; value: SqlValue }[]): boolean {
+function rowMatches(table: Table, row: Row, filters: { column: string; value: SqlValue }[]): boolean {
   for (const filter of filters) {
     if (isRowidName(filter.column)) {
       if (compareSql(row.rowid, filter.value) !== 0) return false;
       continue;
     }
-    if (compareSql(row.values.get(filter.column) ?? null, filter.value) !== 0) return false;
+    if (compareSql(table.cell(row, filter.column), filter.value) !== 0) return false;
   }
   return true;
 }
@@ -224,7 +224,7 @@ function projectionFns(columns: ResultColumn[], table: Table): ((row: Row) => Sq
     if (column.type === "star") {
       for (const item of table.columns) {
         const key = item.nameLower ?? item.name.toLowerCase();
-        fns.push((row) => row.values.get(key) ?? null);
+        fns.push((row) => table.cell(row, key));
       }
       continue;
     }
@@ -232,7 +232,7 @@ function projectionFns(columns: ResultColumn[], table: Table): ((row: Row) => Sq
     if (expr.type !== "column") continue;
     const key = expr.name.toLowerCase();
     if (isRowidName(key)) fns.push((row) => row.rowid);
-    else fns.push((row) => row.values.get(key) ?? null);
+    else fns.push((row) => table.cell(row, key));
   }
   return fns;
 }

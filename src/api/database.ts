@@ -4,16 +4,15 @@ import {
   type Clock,
   type DatabaseOptions,
   DEFAULT_DATABASE_SEED,
-  fixedClock,
   OsEntropy,
   Prng,
   type RandomMode,
   resolveClock,
 } from "../runtime/index.ts";
-import { decodeDatabaseState, encodeDatabaseState } from "../serialization/codec.ts";
 import { DatabaseState } from "../storage/database-state.ts";
 import { TransactionManager } from "../transactions/manager.ts";
 import type { BindValue, QueryRow } from "../types/value.ts";
+import { captureSnapshot, type Snapshot } from "./snapshot.ts";
 import { Statement } from "./statement.ts";
 
 /**
@@ -34,15 +33,27 @@ import { Statement } from "./statement.ts";
  * const users = db.query<{ id: number; name: string }>("SELECT * FROM users");
  * ```
  */
+const ADOPT = Symbol("sqlite-mem.adopt");
+
+interface AdoptedDatabase {
+  readonly [ADOPT]: true;
+  readonly state: DatabaseState;
+  readonly prng: Prng;
+  readonly now: Clock;
+  readonly seed: number | bigint;
+  readonly randomMode: RandomMode;
+  readonly systemClock: boolean;
+}
+
 export class Database {
   /** @internal Engine catalog, tables, and mutation counters. */
-  readonly state = new DatabaseState();
+  readonly state: DatabaseState;
   /** Seed used to construct the PRNG. Ignored when {@link randomMode} is `"os"`. */
   readonly seed: number | bigint;
   /** Entropy mode for `random()` / `randomblob()`. */
   readonly randomMode: RandomMode;
   /**
-   * When true, `'now'` follows the wall clock and {@link restore} does not freeze it.
+   * When true, `'now'` follows the wall clock and is not frozen by {@link Snapshot.open}.
    * @internal
    */
   readonly systemClock: boolean;
@@ -71,11 +82,22 @@ export class Database {
    * @param options - Determinism knobs. See {@link DatabaseOptions}.
    */
   constructor(options: DatabaseOptions = {}) {
+    if (isAdopted(options)) {
+      this.seed = options.seed;
+      this.randomMode = options.randomMode;
+      this.systemClock = options.systemClock;
+      this.prng = options.prng;
+      this.now = options.now;
+      this.state = options.state;
+      this.transactions = new TransactionManager(this.state, this.prng);
+      return;
+    }
     this.seed = options.seed ?? DEFAULT_DATABASE_SEED;
     this.randomMode = options.random ?? "deterministic";
     this.systemClock = options.now === "system";
     this.prng = this.randomMode === "os" ? new OsEntropy() : new Prng(this.seed);
     this.now = resolveClock(options.now);
+    this.state = new DatabaseState();
     this.transactions = new TransactionManager(this.state, this.prng);
   }
 
@@ -164,42 +186,19 @@ export class Database {
   }
 
   /**
-   * Serialize schema, rows, PRNG state, and clock into a custom snapshot blob.
+   * Freeze this database into a reusable {@link Snapshot} template.
    *
-   * This is not a `.sqlite` file. Restore it with {@link restore}.
+   * Does not encode SQLM bytes. Call {@link Snapshot.encode} to persist, or
+   * {@link Snapshot.open} for a copy-on-write fork.
    *
-   * @throws {SqliteError} If the database is closed.
+   * @throws {SqliteError} If the database is closed or a transaction is open.
    */
-  snapshot(): Uint8Array {
+  snapshot(): Snapshot {
     this.assertOpen();
-    return encodeDatabaseState(this.state, {
-      prngState: this.prng.getState(),
-      nowMs: this.now().getTime(),
-    });
-  }
-
-  /**
-   * Replace this database's contents with a blob from {@link snapshot}.
-   *
-   * Restores PRNG state and the clock when the snapshot includes them (v2).
-   * Newer library versions can restore older snapshots; older libraries cannot
-   * restore newer format versions.
-   *
-   * @param snapshot - Bytes previously returned by {@link snapshot}.
-   * @throws {SqliteError} If the database is closed, a transaction is open, or the blob is invalid.
-   */
-  restore(snapshot: Uint8Array): void {
-    this.assertOpen();
-    if (this.transactions.inTransaction) throw new SqliteError("cannot restore during a transaction", "transaction");
-    // Drop live state before decode so peak ≈ snapshot bytes + one decoded tree
-    // (not old DB + decoded + snapshot).
-    this.state.replaceWith(new DatabaseState(), { adopt: true });
-    const decoded = decodeDatabaseState(snapshot);
-    this.state.replaceWith(decoded.state, { adopt: true });
-    if (decoded.runtime) {
-      this.prng.setState(decoded.runtime.prngState);
-      if (!this.systemClock) this.now = fixedClock(new Date(decoded.runtime.nowMs));
+    if (this.transactions.inTransaction) {
+      throw new SqliteError("cannot snapshot during a transaction", "transaction");
     }
+    return captureSnapshot(this.state, this.prng, this.now, this.seed, this.randomMode, this.systemClock);
   }
 
   /**
@@ -284,4 +283,17 @@ if (typeof disposeKey === "symbol") {
   });
 }
 
+function isAdopted(value: object): value is AdoptedDatabase {
+  return ADOPT in value;
+}
+
+/** @internal Used by {@link Snapshot.open}. */
+export function createAdoptedDatabase(opts: Omit<AdoptedDatabase, typeof ADOPT>): Database {
+  return new Database({
+    [ADOPT]: true,
+    ...opts,
+  } as DatabaseOptions);
+}
+
+export { Snapshot } from "./snapshot.ts";
 export type { DatabaseOptions };

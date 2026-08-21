@@ -41,7 +41,7 @@ Requires Node.js ≥ 20 or Bun ≥ 1.1. The published package is **ESM only** (`
 ## Usage
 
 ```ts
-import { Database } from "@crvouga/sqlite-mem";
+import { Database, Snapshot } from "@crvouga/sqlite-mem";
 
 const db = new Database();
 
@@ -57,9 +57,10 @@ db.prepare(`INSERT INTO users (name) VALUES (?)`).run("Alice");
 const users = db.query<{ id: number; name: string }>(`SELECT * FROM users`);
 console.log(users);
 
-const snap = db.snapshot();
-const db2 = new Database();
-db2.restore(snap);
+const seed = db.snapshot();
+const db2 = seed.open();
+const bytes = seed.encode();
+const db3 = Snapshot.decode(bytes).open();
 ```
 
 All methods are **synchronous** — do not `await` them. Browser and Node/Bun share the same in-memory JS surface (no filesystem; `ATTACH` opens a new empty in-memory schema, not a file).
@@ -79,7 +80,7 @@ From the repo root after that install: `bun run example`.
 ## API
 
 ```ts
-import { Database, SqliteError } from "@crvouga/sqlite-mem";
+import { Database, Snapshot, SqliteError } from "@crvouga/sqlite-mem";
 
 interface DatabaseOptions {
   seed?: number | bigint;                 // default 1 — ignored when random is "os"
@@ -93,8 +94,7 @@ interface Database {
   query<T = QueryRow>(sql: string, params?: BindValue[]): T[];
   prepare(sql: string): Statement;
   transaction<T>(fn: () => T): T;
-  snapshot(): Uint8Array;
-  restore(snapshot: Uint8Array): void;
+  snapshot(): Snapshot;
   close(): void;
   [Symbol.dispose]?(): void;        // alias for close() when Symbol.dispose exists
   readonly changes: number;
@@ -121,6 +121,12 @@ interface ResultSet {
   lastInsertRowid: number | bigint;
 }
 
+class Snapshot {
+  open(options?: DatabaseOptions): Database;
+  encode(): Uint8Array;
+  static decode(bytes: Uint8Array): Snapshot;
+}
+
 class SqliteError extends Error {
   readonly category: ErrorCategory; // syntax, no_such_table, constraint_unique, misuse, …
   readonly sqliteCode: string;      // always set; default "SQLITE_ERROR"
@@ -128,7 +134,7 @@ class SqliteError extends Error {
 }
 ```
 
-Stick to `Database`, `Statement`, and `SqliteError` for application code. Advanced internals (`parse`, `tokenize`, `evalExpr`, snapshot codec pieces, `SqlValue` utilities, `Prng`, …) are available only from `@crvouga/sqlite-mem/unstable` and are **exempt from semver**.
+Stick to `Database`, `Snapshot`, `Statement`, and `SqliteError` for application code. Advanced internals (`parse`, `tokenize`, `evalExpr`, snapshot codec pieces, `SqlValue` utilities, `Prng`, …) are available only from `@crvouga/sqlite-mem/unstable` and are **exempt from semver**.
 
 ### Method semantics
 
@@ -138,7 +144,10 @@ Stick to `Database`, `Statement`, and `SqliteError` for application code. Advanc
 | `query(sql, params?)` | **Single statement only** (trailing `;` is fine). Returns all rows. Multi-statement scripts throw `misuse`. |
 | `prepare(sql)` | **Single statement only**. Parses immediately; AST is reused. Pass binds as rest args to `run` / `all` / `get` / `result` on each call. |
 | `transaction(fn)` | If idle: `BEGIN` → `fn()` → `COMMIT`, or `ROLLBACK` + rethrow. If already in a transaction: nested savepoint. Nested SQL `BEGIN` still errors. `close()` inside `fn` throws `misuse`. |
-| `snapshot` / `restore` | Custom binary format (see below). |
+| `snapshot()` | Freeze a reusable {@link Snapshot} template (no encode). Illegal inside a transaction. |
+| `Snapshot.open()` | Copy-on-write fork from a template. Parent stays open. |
+| `Snapshot.encode()` | Lazy SQLM blob for persistence / worker boot (computed once, cached). |
+| `Snapshot.decode(bytes)` | Decode a blob once per `Uint8Array` (WeakMap); later `open()` calls are CoW. |
 | `close()` | Idempotent; rolls back an open SQL transaction; further ops throw `misuse`. Also available as `[Symbol.dispose]` when supported. |
 
 SQL `BEGIN` / `COMMIT` / `ROLLBACK` / `SAVEPOINT` / `RELEASE` are first-class. Empty / comment-only SQL on `prepare` / `query` throws `misuse` (`empty statement`), matching SQLite prepare failure.
@@ -174,13 +183,17 @@ Duplicate column names collapse in row objects (last write wins). Use `stmt.resu
 
 ### Snapshots
 
+- `db.snapshot()` returns a frozen in-memory {@link Snapshot}. Per-test isolation should `seed.open()` (copy-on-write, ~µs). Encoded bytes are **lazy** via `snapshot.encode()`.
 - Format magic `SQLM` followed by an explicit little-endian format-version `u32` — **not** a portable `.sqlite` file and not loadable by the SQLite CLI.
-- Round-trips ordinary tables, views, indexes, change counters, PRNG state, and clock.
+- Round-trips ordinary tables, views, indexes (SQLM v4 compact index keys; v3 persisted full `IndexStore`; v1/v2 blobs rebuild indexes on hydrate), change counters, PRNG state, and clock.
 - **Not** encoded: triggers, ATTACH’d schemas, virtual tables (FTS / RTREE / …), `userVersion`.
-- Cannot `restore()` while a transaction is open.
-- `restore()` replaces `now` with a fixed clock from the snapshot (a live `() => Date` is overwritten). `{ now: "system" }` stays live after restore.
-- Equivalent databases produce byte-identical snapshots (schema/rows sorted) **within a single library version**.
-- **Compatibility policy:** newer library versions can always restore older snapshots; older libraries cannot restore newer format versions (`snapshot_version` / `SQLITE_FORMAT`). Corrupt magic yields a distinct error.
+- Cannot `snapshot()` while a transaction is open.
+- `Snapshot.decode(bytes)` does not mutate the input `Uint8Array`. The same buffer object is decoded once (WeakMap) and later opens are CoW.
+- `open()` shares frozen tables until either side writes; idle `open().snapshot().encode()` is byte-identical to `snapshot().encode()`.
+- `open()` uses a fixed clock from the snapshot unless you pass `{ now: "system" }`, which stays live.
+- Equivalent databases produce byte-identical `encode()` output (schema/rows sorted) **within a single library version**.
+- Per-test isolation (CI-tier, 200 users + 800 items): `Snapshot.open` ~µs; `encode()` / `decode().open()` is the persistence path. See [benchmarks/PERFORMANCE.md](benchmarks/PERFORMANCE.md).
+- **Compatibility policy:** newer library versions can always decode older snapshots; older libraries cannot decode newer format versions (`snapshot_version` / `SQLITE_FORMAT`). Corrupt magic yields a distinct error.
 
 ## Determinism
 
@@ -189,9 +202,9 @@ The engine is deterministic by default. Invariants:
 | Source | Default | Override / notes |
 | --- | --- | --- |
 | `random()` / `randomblob()` | Seeded xorshift64* (`seed: 1`) | `new Database({ seed })` or `{ random: "os" }` for CSPRNG (not rolled back / not restored) |
-| `date('now')` / friends | Fixed `2000-01-01T00:00:00.000Z` | `new Database({ now: Date \| (() => Date) \| "system" })` — `"system"` is wall clock and is **not** frozen by `restore()` |
-| Table scans | Rowid order | Same order after `snapshot`/`restore` |
-| Snapshots | Sorted schema/rows + PRNG state + clock | Restored into PRNG and `now` |
+| `date('now')` / friends | Fixed `2000-01-01T00:00:00.000Z` | `new Database({ now: Date \| (() => Date) \| "system" })` — `"system"` is wall clock and is **not** frozen by `open()` |
+| Table scans | Rowid order | Same order after `snapshot`/`open` |
+| Snapshots | Sorted schema/rows + PRNG state + clock | Applied by `open()` into PRNG and `now` |
 | Transactions | PRNG rolls back with `ROLLBACK`/`SAVEPOINT` | Matches data rollback |
 | Numbers | IEEE `-0` canonicalized to `+0` | Bind, affinity, and arithmetic |
 
@@ -238,7 +251,7 @@ This is **not** a drop-in replacement for `sql.js`, `@sqlite.org/sqlite-wasm`, o
 2. **No named-object binds and no sticky `bind()`** — pass positional rest args / arrays in declaration order to `query` / `run` / `all` / `get` / `result`.
 3. **`query` / `prepare` are single-statement only** — multi-statement scripts belong in `exec()` (which does not take bind parameters).
 4. **`exec` returns `void` and takes no params** — use `db.prepare(…).run(…)` or `db.query(…)` for binds; use `db.changes` / `stmt.run()` for counters.
-5. **`'now'` is not wall-clock** unless you pass `{ now: "system" }` or `{ now: () => new Date() }`. Default is year 2000. `restore()` freezes a snapshot clock except when constructed with `"system"`.
+5. **`'now'` is not wall-clock** unless you pass `{ now: "system" }` or `{ now: () => new Date() }`. Default is year 2000. `open()` freezes a snapshot clock except when constructed with `"system"`.
 6. **`random()` is seeded**, not OS entropy, unless you pass `{ random: "os" }`. Snapshots restore the seeded PRNG; OS entropy is not rewound.
 7. **Snapshots are not `.sqlite` files** and do not round-trip FTS / triggers / ATTACH.
 8. **No better-sqlite3 extras** — no `iterate`, `pluck`/`raw`, `safeIntegers` option, `pragma()` helper, `loadExtension`, or SQLite-file `serialize()`.

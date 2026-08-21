@@ -2,7 +2,7 @@
  * Compile-only checks that the published `dist` types are complete and strict.
  * Run after `bun run build` via `bun run typecheck:package`.
  */
-import { Database, SqliteError, Statement } from "../../dist/index.js";
+import { Database, Snapshot, SqliteError, Statement } from "../../dist/index.js";
 import type {
   BindValue,
   DatabaseOptions,
@@ -54,9 +54,12 @@ db.transaction(() => {
   db.prepare("INSERT INTO users (name) VALUES (?)").run("Eve");
 });
 
-const snap: Uint8Array = db.snapshot();
-const restored = new Database();
-restored.restore(snap);
+const snap: Snapshot = db.snapshot();
+const snapBytes: Uint8Array = snap.encode();
+const fromSnap: Database = snap.open();
+const fromBytes: Database = Snapshot.decode(snapBytes).open();
+fromBytes.close();
+fromSnap.close();
 
 const seed: number | bigint = db.seed;
 const defaultSeed: number = DEFAULT_DATABASE_SEED;

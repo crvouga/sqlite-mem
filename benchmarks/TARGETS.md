@@ -36,7 +36,7 @@ Targets were set **after** measuring the unoptimized baseline on 2026-08-17, not
 | Hydrate p95 | 7.4 ms | < 20 ms | PASS (8.2 ms) |
 | Export MB/sec | ~10 | > 30 | PASS (~89) |
 | Hydrate MB/sec | ~143 | > 50 | PASS (~127) |
-| Format | SQLM v2 unchanged | no fidelity loss | PASS |
+| Format | SQLM v3 (v1/v2 still hydrate) | no fidelity loss | PASS |
 
 ## Bundle
 

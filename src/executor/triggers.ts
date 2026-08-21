@@ -164,7 +164,7 @@ function triggerScope(table: Table, oldRow: Row | null, newValues: Map<string, S
     cells.push({
       table: "old",
       name: column.name,
-      value: oldRow ? (oldRow.values.get(key) ?? null) : null,
+      value: oldRow ? table.cell(oldRow, key) : null,
       affinity: column.affinity,
       collate: column.collate,
     });

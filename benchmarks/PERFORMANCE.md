@@ -81,7 +81,7 @@ Engine changes (semantics preserved; differential suite green):
 - SQLM writer uses a growable `Uint8Array`; restore adopts decoded state
 - Uncorrelated equality RHS (including scalar subqueries) evaluated once for access-path selection
 
-SQLM v2 layout is unchanged. Public API is unchanged.
+SQLM v3 persists `IndexStore` payloads (v1/v2 blobs still hydrate by rebuilding indexes). Public snapshot API is unchanged.
 
 ## Final results
 
@@ -162,20 +162,31 @@ CI records `benchmarks/results/ci-baseline.json`. The regression gate **fails cl
 
 ## Snapshot Performance
 
-| | Baseline (Bun) | After (Bun) | After (mobile 4×) |
-| --- | --- | --- | --- |
-| Database | 1000 × 1 KB payload | same | same |
-| Snapshot size | 1,051,507 B | 1,051,507 B | 1,051,507 B |
-| Export p50/p95/p99 | 26 / 29 / 29 ms | 1.8 / 2.6 / 2.6 ms | 11 / 12 / ~12 ms |
-| Export MB/sec | ~37 | ~518 | ~89 |
-| Hydration p50/p95/p99 | 1.6 / 2.1 / 2.2 ms | 1.40 / 1.41 / 1.42 ms | 7.7 / 8.2 / ~8 ms |
-| Hydration MB/sec | ~571 | ~714 | ~127 |
-| Round-trip | 29 ms | 3.7 ms | (included in suite) |
-| Memory | `number[]` × payload | growable `Uint8Array`; restore without extra clone | Chrome heap API quantized |
+SQLM v4 intern + columnar packing. The `1mb` corpus is 1000 identical 1 KB TEXT payloads, so intern collapses the blob (~22 KB) while live rows stay 1000 × 1 KB.
+
+| | Baseline (pre-v4) | After (SQLM v4, Darwin arm64) |
+| --- | --- | --- |
+| Database | 1000 × 1 KB payload | same |
+| Snapshot size | 1,051,507 B | ~22,529 B (interned TEXT) |
+| Export | 4.2 ms median | 0.25 ms |
+| Hydration (cold `encode`/`decode`) | 4.1 ms median | 0.22 ms |
+| Round-trip | ~8 ms | ~1.8 ms |
 
 **Incremental snapshots:** export always serializes the full database. A 1% row change still pays 100% export cost. Delta/incremental snapshots are a future opportunity, not implemented (architecture is full-state SQLM).
 
 Fidelity: `snapshot/fidelity/200` plus `tests/contract/snapshots` and determinism snapshot tests pass.
+
+## Test isolation (`open` vs migrate)
+
+Per-test databases should `snapshot()` a frozen template once and `open()` per case. `Snapshot.encode()` / `Snapshot.decode(bytes).open()` is for persistence and worker boot; cold `exec` of a schema dump is the migrate proxy. Warm `decode` of the **same** `Uint8Array` object is CoW after the first hydrate. CI-tier, 200 users + 800 items, Bun 1.4.0 darwin arm64:
+
+| Spec | p50 | p95 | ops/sec |
+| --- | --- | --- | --- |
+| `isolation/cold-migrate` | 5.7 ms | 7.6 ms | 165 |
+| `isolation/decode-open` (warm) | 2.9 µs | 9.9 µs | 216k |
+| `isolation/snapshot-open` | 1.9 µs | 3.5 µs | 415k |
+
+`Snapshot.open()` is the per-test path (~3000× faster than migrate on this corpus). SQLM v4 stores compact index keys and interned TEXT so `decode(bytes).open()` still skips the O(n) index rebuild; the first decode of a buffer is cached on a WeakMap.
 
 ## Compatibility
 
@@ -185,9 +196,9 @@ Fidelity: `snapshot/fidelity/200` plus `tests/contract/snapshots` and determinis
 
 ## Remaining bottlenecks
 
-1. **Insert / update row construction** — still Map-backed rows, affinity, index maintenance, trigger/FK checks. Uniqueness uses `IndexStore` / autoindexes. Native insert parity needs a columnar/row-representation rewrite.
+1. **Insert / update row construction** — affinity, index maintenance, trigger/FK checks. Uniqueness uses `IndexStore` / autoindexes. Native insert parity needs a columnar/row-representation rewrite.
 2. **BEGIN / SAVEPOINT** — copy-on-write: snapshots share frozen tables and clone on first write. Cheap on `hotspot/tx-begin/1000` (~0.03 ms). First write in a large TX still copies that table.
-3. **Row representation** — `Map<string, SqlValue>` + per-query `Cell[]` still dominate full scans and snapshot hydrate memory amplification (~8–10× heap vs payload)
+3. **Row representation** — heap rows are `SqlValue[]` parallel to `table.columns`. Per-query `Cell[]` still dominate some full scans; SQLM v4 intern + columnar packing removes the 8–10× hydrate Map amplifier.
 4. **FTS MATCH** still scans virtual-table rows (inverted index exists but is not the MATCH cursor path). Acceptable for small corpora; do not prioritize until product-critical.
 5. **RIGHT/FULL joins** still nested-loop (INNER/LEFT equality joins use index probe or hash-join fallback)
 6. **1M-row / 100 MB snapshot** cases are Bun/desktop-only; not claimed on throttled mobile
