@@ -432,8 +432,14 @@ export function evalExpr(expr: Expr, ctx: EvalContext): SqlValue {
         return truth === null ? null : booleanValue(!truth);
       }
       if (value === null) return null;
-      if (expr.op === "+") return asNumber(numberValue(value));
-      if (expr.op === "-") return asNumber(-numberValue(value));
+      if (expr.op === "+") {
+        const n = asNumber(numberValue(value));
+        return storageClassOf(value) === "real" ? asSqlReal(n) : n;
+      }
+      if (expr.op === "-") {
+        const n = asNumber(-numberValue(value));
+        return storageClassOf(value) === "real" ? asSqlReal(n) : n;
+      }
       return ~integerValue(value);
     }
     case "is_bool": {

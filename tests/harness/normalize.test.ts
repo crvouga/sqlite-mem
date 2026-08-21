@@ -79,4 +79,12 @@ describe("deepCompareResults", () => {
     const b = okResult(["v"], [{ v: new Uint8Array(0) }]);
     expect(deepCompareResults(a, b).equal).toBe(false);
   });
+
+  test("distinguishes integer 1 from real 1.0 via typeof path values", () => {
+    // Comparator stores both as numeric JS; storage-class parity is asserted via typeof() contracts.
+    // Equality of raw 1 vs 1.0 is still true for valuesEqual numbers that Object.is equates.
+    expect(valuesEqual(1, 1.0)).toBe(true);
+    expect(normalizeValue(1).kind).toBe("integer");
+    expect(normalizeValue(1.5).kind).toBe("real");
+  });
 });

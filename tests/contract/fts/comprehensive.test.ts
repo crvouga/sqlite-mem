@@ -184,7 +184,7 @@ sequenceParity(
   [
     { sql: "INSERT INTO posts VALUES (1, 'old phrase')", neutralizeCounters: true },
     { sql: "SELECT rowid FROM posts_fts WHERE posts_fts MATCH 'old'", query: true },
-    { sql: "UPDATE posts SET body='new phrase' WHERE id=1" },
+    { sql: "UPDATE posts SET body='new phrase' WHERE id=1", neutralizeCounters: true },
     { sql: "SELECT rowid FROM posts_fts WHERE posts_fts MATCH 'old'", query: true },
     { sql: "SELECT rowid FROM posts_fts WHERE posts_fts MATCH 'new'", query: true },
   ],
@@ -218,7 +218,7 @@ sequenceParity(
   ],
   [
     { sql: "INSERT INTO posts VALUES (1, 'old phrase')", neutralizeCounters: true },
-    { sql: "UPDATE posts SET body='brand new' WHERE id=1" },
+    { sql: "UPDATE posts SET body='brand new' WHERE id=1", neutralizeCounters: true },
     { sql: "SELECT rowid FROM posts_fts WHERE posts_fts MATCH 'old'", query: true },
     { sql: "SELECT rowid FROM posts_fts WHERE posts_fts MATCH 'brand'", query: true },
   ],

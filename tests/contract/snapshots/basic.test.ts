@@ -3,11 +3,43 @@ import { Database, SqliteError } from "../../../src/index.ts";
 import { InMemoryAdapter } from "../../adapters/in-memory.ts";
 import { expectParity } from "../../harness/assert.ts";
 import { matrixBoth } from "../../harness/matrix.ts";
+import { expectStateParity } from "../../harness/state-dump.ts";
 import { setupBoth } from "../helpers.ts";
 
 matrixBoth("SQL behavior matches before snapshot", (memory, sqlite) => {
   setupBoth(memory, sqlite, ["CREATE TABLE t(id INTEGER,name TEXT)", "INSERT INTO t VALUES (1,'a'),(2,'b')"]);
   expectParity(memory.query("SELECT * FROM t ORDER BY id"), sqlite.query("SELECT * FROM t ORDER BY id"));
+});
+
+/**
+ * Behavioral A/B: both engines run the same ops; memory snapshot/restore must stay
+ * lockstep with the live oracle under identical post-restore SQL (SQLM ≠ serialize()).
+ */
+matrixBoth("post-restore DML stays in lockstep with oracle", (memory, sqlite) => {
+  setupBoth(memory, sqlite, [
+    "CREATE TABLE t(id INTEGER PRIMARY KEY, name TEXT UNIQUE, n INT DEFAULT 0)",
+    "CREATE INDEX t_n ON t(n)",
+    "INSERT INTO t(name, n) VALUES ('a', 1),('b', 0)",
+  ]);
+  expectStateParity(memory, sqlite);
+
+  const snap = memory.snapshot();
+  memory.exec("INSERT INTO t(name, n) VALUES ('gone', 9)");
+  memory.restore(snap);
+
+  const ops = [
+    "INSERT INTO t(name, n) VALUES ('c', 2)",
+    "UPDATE t SET n = n + 1 WHERE name = 'b'",
+    "DELETE FROM t WHERE name = 'a'",
+  ];
+  for (const sql of ops) {
+    expectParity(memory.exec(sql), sqlite.exec(sql));
+  }
+  expectParity(
+    memory.query("SELECT id, name, n FROM t ORDER BY id"),
+    sqlite.query("SELECT id, name, n FROM t ORDER BY id"),
+  );
+  expectStateParity(memory, sqlite);
 });
 
 test("memory snapshot restores into a new adapter", () => {

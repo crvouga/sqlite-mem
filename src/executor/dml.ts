@@ -420,7 +420,7 @@ function executeUpdateCore(stmt: UpdateStmt, env: ExecutionEnv): ResultSet {
             if (conflict.rowid === row.rowid) continue;
             removeOne(table, conflict, env);
             table = env.state.getWritableTable(stmt.table);
-            changes++;
+            // SQLite changes() counts the updated row only, not replaced conflict deletions.
           }
         }
         const updated = updateOne(table, row, updates, env);

@@ -47,3 +47,24 @@ errorParity(
   ["CREATE TABLE t(a TEXT COLLATE NOCASE PRIMARY KEY, b TEXT) WITHOUT ROWID", "INSERT INTO t VALUES ('A','1')"],
   "INSERT INTO t VALUES ('a','2')",
 );
+
+parity(
+  "WITHOUT ROWID UPSERT DO UPDATE",
+  [
+    "CREATE TABLE t(a TEXT PRIMARY KEY, b INT) WITHOUT ROWID",
+    "INSERT INTO t VALUES ('x',1)",
+    "INSERT INTO t VALUES ('x',2) ON CONFLICT(a) DO UPDATE SET b = excluded.b + t.b",
+  ],
+  "SELECT a, b FROM t",
+);
+
+parity(
+  "WITHOUT ROWID DELETE and reinsert same primary key",
+  [
+    "CREATE TABLE t(a TEXT PRIMARY KEY, b INT) WITHOUT ROWID",
+    "INSERT INTO t VALUES ('a',1),('b',2)",
+    "DELETE FROM t WHERE a = 'a'",
+    "INSERT INTO t VALUES ('a',9)",
+  ],
+  "SELECT a, b FROM t ORDER BY a",
+);

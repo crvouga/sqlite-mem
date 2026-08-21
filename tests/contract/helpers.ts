@@ -78,27 +78,19 @@ export function sequenceParity(
         step.neutralizeCounters ||
         options?.neutralizeAllWrites ||
         (!step.query && a.ok && b.ok && shouldNeutralizeCounters(step.sql));
-      if (step.query || !a.ok || !b.ok || !neutralize) {
-        if (neutralize && !step.query && a.ok && b.ok) {
-          expectParity(
-            { ...a, changes: 0, lastInsertRowid: 0, totalChanges: 0 },
-            { ...b, changes: 0, lastInsertRowid: 0, totalChanges: 0 },
-            { ignoreWriteCounters: true, ignoreSession: true },
-          );
-        } else {
-          expectParity(a, b, {
-            ignoreSession: true,
-            ignoreWriteCounters: true,
-            ignoreErrorPhase: true,
-          });
-        }
-      } else {
+      if (neutralize && !step.query && a.ok && b.ok) {
         // DDL / transaction / pragma counters are not consistently defined across drivers.
         expectParity(
           { ...a, changes: 0, lastInsertRowid: 0, totalChanges: 0 },
           { ...b, changes: 0, lastInsertRowid: 0, totalChanges: 0 },
           { ignoreWriteCounters: true, ignoreSession: true },
         );
+      } else {
+        // DML compares live changes/lastInsertRowid; SELECTs still ignore counters via expectParity.
+        expectParity(a, b, {
+          ignoreSession: true,
+          ignoreErrorPhase: true,
+        });
       }
     }
     if (options?.compareFinalState) {
