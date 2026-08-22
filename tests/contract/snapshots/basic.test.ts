@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 import { Database, Snapshot, SqliteError } from "../../../src/index.ts";
-import { encodeDatabaseState } from "../../../src/serialization/codec.ts";
 import { InMemoryAdapter } from "../../adapters/in-memory.ts";
 import { expectParity } from "../../harness/assert.ts";
 import { matrixBoth } from "../../harness/matrix.ts";
@@ -185,33 +184,33 @@ test("current snapshot version round-trips", () => {
   const bytes = snap.encode();
   expect(String.fromCharCode(bytes[0]!, bytes[1]!, bytes[2]!, bytes[3]!)).toBe("SQLM");
   const version = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(4, true);
-  expect(version).toBe(4);
+  expect(version).toBe(5);
   const b = snap.open();
   expect(b.query("SELECT name FROM t")).toEqual([{ name: "Ada" }]);
   a.close();
   b.close();
 });
 
-test("SQLM v2 blobs still hydrate by rebuilding indexes", () => {
-  const source = new Database({ seed: 3 });
-  source.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, name TEXT UNIQUE)");
-  source.exec("INSERT INTO t(name) VALUES ('a'), ('b')");
-  const v2 = encodeDatabaseState(source.state, { prngState: source.prng.getState(), nowMs: source.now().getTime() }, 2);
-  expect(new DataView(v2.buffer, v2.byteOffset).getUint32(4, true)).toBe(2);
-  const opened = Snapshot.decode(v2).open();
-  expect(opened.query("SELECT name FROM t ORDER BY id")).toEqual([{ name: "a" }, { name: "b" }]);
-  expect(() => opened.exec("INSERT INTO t(name) VALUES ('a')")).toThrow(/UNIQUE/);
-  source.close();
-  opened.close();
+test("decode rejects legacy SQLM v4 blobs", () => {
+  const legacy = new Uint8Array(8);
+  legacy.set([0x53, 0x51, 0x4c, 0x4d]); // SQLM
+  new DataView(legacy.buffer).setUint32(4, 4, true);
+  try {
+    Snapshot.decode(legacy);
+    expect.unreachable("expected decode to throw");
+  } catch (err) {
+    expect(err).toBeInstanceOf(SqliteError);
+    expect((err as SqliteError).category).toBe("snapshot_version");
+  }
 });
 
-test("SQLM v4 round-trips index stores and is byte-stable", () => {
+test("SQLM v5 round-trips index stores and is byte-stable", () => {
   const a = new Database({ seed: 3 });
   a.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, name TEXT UNIQUE)");
   a.exec("INSERT INTO t(name) VALUES ('a'), ('b')");
   const snap = a.snapshot();
   const bytes = snap.encode();
-  expect(new DataView(bytes.buffer, bytes.byteOffset).getUint32(4, true)).toBe(4);
+  expect(new DataView(bytes.buffer, bytes.byteOffset).getUint32(4, true)).toBe(5);
   const b = snap.open();
   expect([...b.snapshot().encode()]).toEqual([...bytes]);
   expect(() => b.exec("INSERT INTO t(name) VALUES ('a')")).toThrow(/UNIQUE/);

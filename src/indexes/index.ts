@@ -177,6 +177,11 @@ export class IndexStore {
     this.keyValues.set(key, [...values]);
   }
 
+  /** Key component values for snapshot encode (binary keys). */
+  keyValuesFor(key: string): SqlValue[] {
+    return [...(this.keyValues.get(key) ?? [])];
+  }
+
   get size(): number {
     return this.entries.size;
   }

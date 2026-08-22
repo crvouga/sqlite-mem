@@ -7,6 +7,7 @@ import type { Affinity, SqlValue } from "../types/value.ts";
 import { affinityFromTypeName, applyAffinity, cloneSqlValue, compareSql } from "../types/value.ts";
 import type { NamedRowValues, Row, Rowid, RowValues } from "./row.ts";
 import { cloneRow, isValueArray, normalizeColumnName, rowValues } from "./row.ts";
+import type { ColumnarSlab } from "./columnar-slab.ts";
 
 /** Build a covering equality hash once a table is large enough that scans dominate. */
 const EQUALITY_HASH_MIN_ROWS = 16;
@@ -60,6 +61,8 @@ export class Table {
   strict: boolean;
   /** Clustered PK key string → row for WITHOUT ROWID tables. */
   clusteredRows: Map<string, Row>;
+  /** Frozen columnar storage after snapshot hydrate; `rows` stays empty until materialized. */
+  slab: ColumnarSlab | null = null;
   private scanCache: Row[] | null = null;
   /** Lazy covering hashes: column nameLower → serializeIndexKey → rowids. */
   private equalityHashes: Map<string, Map<string, Rowid[]>> | null = null;
@@ -133,11 +136,54 @@ export class Table {
   }
 
   get(rowid: Rowid): Row | undefined {
+    if (this.slab) {
+      const hit = this.slab.get(rowid);
+      return hit ?? undefined;
+    }
     try {
       return this.rows.get(canonicalRowid(rowid));
     } catch {
       return undefined;
     }
+  }
+
+  /** Row count (slab-backed or map-backed). */
+  rowCount(): number {
+    return this.slab ? this.slab.rowCount : this.rows.size;
+  }
+
+  /** Rows sorted by rowid for snapshot encode. */
+  sortedRows(): Row[] {
+    if (this.slab) return [...this.slab.scan()].map((r) => ({ rowid: r.rowid, values: [...r.values] }));
+    return [...this.rows.values()].sort((a, b) => compareRowids(a.rowid, b.rowid));
+  }
+
+  /** Attach decoded columnar slab (hydrate path). */
+  attachSlab(slab: ColumnarSlab): void {
+    this.slab = slab;
+    this.invalidateScan();
+  }
+
+  /** Materialize slab into `rows` Map for mutation. */
+  materializeSlab(): void {
+    if (!this.slab) return;
+    for (const row of this.slab.scan()) this.rows.set(row.rowid, { rowid: row.rowid, values: [...row.values] });
+    this.slab = null;
+    this.invalidateScan();
+  }
+
+  private hasRow(rowid: Rowid): boolean {
+    if (this.slab) return this.slab.get(rowid) !== undefined;
+    try {
+      return this.rows.has(canonicalRowid(rowid));
+    } catch {
+      return false;
+    }
+  }
+
+  private allRowids(): Iterable<Rowid> {
+    if (this.slab) return this.slab.rowids;
+    return this.rows.keys();
   }
 
   getByKey(value: SqlValue): Row | undefined {
@@ -188,21 +234,22 @@ export class Table {
     if (!rowids || rowids.length === 0) return [];
     const rows: Row[] = [];
     for (const rowid of rowids) {
-      const row = this.rows.get(rowid);
+      const row = this.get(rowid);
       if (row) rows.push(row);
     }
     return rows;
   }
 
   ensureEqualityHash(columnLower: string): boolean {
-    if (this.frozen || this.rows.size < EQUALITY_HASH_MIN_ROWS) return false;
+    if (this.frozen || this.rowCount() < EQUALITY_HASH_MIN_ROWS) return false;
     const column = this.columns.find((item) => item.nameLower === columnLower);
     if (!column) return false;
     this.equalityHashes ??= new Map();
     if (this.equalityHashes.has(columnLower)) return true;
     const map = new Map<string, Rowid[]>();
     const collate = column.collate ?? "BINARY";
-    for (const row of this.rows.values()) {
+    const iter = this.slab ? this.slab.scan() : this.rows.values();
+    for (const row of iter) {
       const key = serializeIndexKey([normalizeForCollation(this.cell(row, columnLower), collate)]);
       if (key === null) continue;
       const bucket = map.get(key);
@@ -276,7 +323,7 @@ export class Table {
     }
     rowid = canonicalRowid(rowid ?? this.allocateRowid());
 
-    if (this.rows.has(rowid)) {
+    if (this.hasRow(rowid)) {
       throw new SqliteError(
         `UNIQUE constraint failed: ${this.name}.rowid`,
         "constraint_primary",
@@ -333,7 +380,7 @@ export class Table {
     const alias = this.integerPrimaryKeyAlias();
     const aliasRow: Row = { rowid: key, values };
     const targetKey = alias ? asRowid(this.cell(aliasRow, normalizeColumnName(alias.name)), alias.name) : key;
-    if (targetKey !== key && this.rows.has(targetKey)) {
+    if (targetKey !== key && this.hasRow(targetKey)) {
       throw new SqliteError(
         `UNIQUE constraint failed: ${this.name}.${alias?.name ?? "rowid"}`,
         "constraint_unique",
@@ -370,6 +417,10 @@ export class Table {
   }
 
   *scan(): Iterable<Row> {
+    if (this.slab) {
+      yield* this.slab.scan();
+      return;
+    }
     if (!this.scanCache) {
       if (this.withoutRowid) {
         this.scanCache = [...this.clusteredRows.values()].sort((a, b) => this.comparePrimaryKeys(a, b));
@@ -390,7 +441,16 @@ export class Table {
     });
     copy.nextRowid = this.nextRowid;
     copy.maximumRowid = this.maximumRowid;
-    for (const [rowid, row] of this.rows) copy.rows.set(rowid, cloneRow(row));
+    if (this.slab) {
+      let max: Rowid | null = null;
+      for (const row of this.slab.scan()) {
+        copy.rows.set(row.rowid, cloneRow(row));
+        if (max === null || compareRowids(row.rowid, max) > 0) max = row.rowid;
+      }
+      copy.maximumRowid = max ?? undefined;
+    } else {
+      for (const [rowid, row] of this.rows) copy.rows.set(rowid, cloneRow(row));
+    }
     for (const [clusterKey, row] of this.clusteredRows) copy.clusteredRows.set(clusterKey, cloneRow(row));
     return copy;
   }
@@ -401,6 +461,7 @@ export class Table {
 
   private assertMutable(): void {
     if (this.frozen) throw new SqliteError("internal: cannot mutate a frozen table", "other");
+    if (this.slab) this.materializeSlab();
   }
 
   /** Rebuild clustered storage after snapshot decode or bulk load. */
@@ -408,7 +469,8 @@ export class Table {
     this.maximumRowid = undefined;
     if (!this.withoutRowid) return;
     this.clusteredRows.clear();
-    for (const row of this.rows.values()) {
+    const iter = this.slab ? this.slab.scan() : this.rows.values();
+    for (const row of iter) {
       this.clusteredRows.set(this.makeClusterKey(row.values), row);
     }
     this.invalidateScan();
@@ -553,7 +615,11 @@ export class Table {
     if (!this.columns.some((column) => column.autoincrement)) {
       if (this.maximumRowid === undefined) {
         this.maximumRowid = null;
-        for (const rowid of this.rows.keys()) {
+        for (const rowid of this.allRowids()) {
+          if (this.maximumRowid === null || compareRowids(rowid, this.maximumRowid) > 0) this.maximumRowid = rowid;
+        }
+      } else if (this.maximumRowid === null && this.rowCount() > 0) {
+        for (const rowid of this.allRowids()) {
           if (this.maximumRowid === null || compareRowids(rowid, this.maximumRowid) > 0) this.maximumRowid = rowid;
         }
       }
@@ -561,7 +627,7 @@ export class Table {
     }
     const maxSigned = 9223372036854775807n;
     let candidate = canonicalRowid(this.nextRowid);
-    while (this.rows.has(candidate)) {
+    while (this.hasRow(candidate)) {
       if (BigInt(candidate) >= maxSigned) {
         throw new SqliteError("database or disk is full", "other", "SQLITE_FULL");
       }
