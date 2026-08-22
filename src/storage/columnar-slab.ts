@@ -1,5 +1,5 @@
+import { asSqlReal, SqlJsonText, SqlReal, type SqlValue, utf8Decode } from "../types/value.ts";
 import type { Rowid } from "./row.ts";
-import { asSqlReal, SqlJsonText, SqlReal, type SqlValue } from "../types/value.ts";
 
 /** Column pack tags (SQLM v5). */
 export const PACK_NULL = 0;
@@ -16,12 +16,40 @@ export interface SlabColumn {
   nullBitmap: Uint8Array | null;
   /** Typed payload or inline blob region inside `buffer`. */
   payload: Uint8Array;
+  /** Cached view over `payload` (avoid per-cell DataView alloc). */
+  view?: DataView;
+  /** Prefix count of non-null cells before each row (when nulls exist). */
+  nonNullRank?: Uint32Array;
   /** For PACK_TEXT_INLINE: u32 offsets into payload per row. */
   inlineOffsets?: Uint32Array;
   /** For PACK_TAGGED: decoded values per non-null row in order. */
   tagged?: SqlValue[];
   /** For PACK_BLOB: one entry per non-null row. */
   blobChunks?: Uint8Array[];
+}
+
+/** Attach decode helpers; drop an all-zero null bitmap. */
+export function prepareSlabColumn(column: SlabColumn, rowCount: number, nonNull: number): SlabColumn {
+  if (column.payload.length > 0) {
+    column.view = new DataView(column.payload.buffer, column.payload.byteOffset, column.payload.byteLength);
+  }
+  if (!column.nullBitmap || nonNull === rowCount) {
+    column.nullBitmap = null;
+    column.nonNullRank = undefined;
+    return column;
+  }
+  column.nonNullRank = buildNonNullRank(column.nullBitmap, rowCount);
+  return column;
+}
+
+function buildNonNullRank(bits: Uint8Array, n: number): Uint32Array {
+  const rank = new Uint32Array(n);
+  let k = 0;
+  for (let i = 0; i < n; i++) {
+    rank[i] = k;
+    if ((bits[i >> 3]! & (1 << (i & 7))) === 0) k++;
+  }
+  return rank;
 }
 
 /** Frozen columnar row storage; zero-copy views into snapshot buffer. */
@@ -90,34 +118,39 @@ function isNull(bits: Uint8Array, i: number): boolean {
   return (bits[i >> 3]! & (1 << (i & 7))) !== 0;
 }
 
+function nonNullRowIndex(column: SlabColumn, rowIndex: number): number {
+  if (!column.nullBitmap) return rowIndex;
+  return column.nonNullRank?.[rowIndex] ?? rowIndex;
+}
+
 function readSlabCell(column: SlabColumn, rowIndex: number, intern: readonly string[]): SqlValue {
   const pack = column.pack;
   if (pack === PACK_NULL) return null;
   const nonNullIndex = nonNullRowIndex(column, rowIndex);
-  const view = new DataView(column.payload.buffer, column.payload.byteOffset, column.payload.byteLength);
+  const view = column.view;
 
   if (pack === PACK_I32) {
-    return view.getInt32(nonNullIndex * 4, true);
+    return view!.getInt32(nonNullIndex * 4, true);
   }
   if (pack === PACK_I64) {
-    const integer = view.getBigInt64(nonNullIndex * 8, true);
+    const integer = view!.getBigInt64(nonNullIndex * 8, true);
     return integer <= BigInt(Number.MAX_SAFE_INTEGER) && integer >= BigInt(Number.MIN_SAFE_INTEGER)
       ? Number(integer)
       : integer;
   }
   if (pack === PACK_F64) {
-    const value = view.getFloat64(nonNullIndex * 8, true);
+    const value = view!.getFloat64(nonNullIndex * 8, true);
     return Number.isInteger(value) && Number.isFinite(value) ? asSqlReal(value) : value;
   }
   if (pack === PACK_TEXT_INTERN) {
-    const id = view.getUint32(nonNullIndex * 4, true);
+    const id = view!.getUint32(nonNullIndex * 4, true);
     return intern[id] ?? "";
   }
   if (pack === PACK_TEXT_INLINE) {
     const offsets = column.inlineOffsets!;
     const start = offsets[nonNullIndex]!;
     const end = nonNullIndex + 1 < offsets.length ? offsets[nonNullIndex + 1]! : column.payload.length;
-    return new TextDecoder().decode(column.payload.subarray(start, end));
+    return utf8Decode(column.payload.subarray(start, end));
   }
   if (pack === PACK_BLOB) {
     const blob = column.blobChunks![nonNullIndex]!;
@@ -127,15 +160,6 @@ function readSlabCell(column: SlabColumn, rowIndex: number, intern: readonly str
     return column.tagged![nonNullIndex] ?? null;
   }
   return null;
-}
-
-function nonNullRowIndex(column: SlabColumn, rowIndex: number): number {
-  if (!column.nullBitmap) return rowIndex;
-  let idx = 0;
-  for (let i = 0; i < rowIndex; i++) {
-    if (!isNull(column.nullBitmap, i)) idx++;
-  }
-  return idx;
 }
 
 export function packKindOf(value: SqlValue): number {

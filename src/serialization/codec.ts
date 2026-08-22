@@ -1,8 +1,6 @@
 import type { Expr, TableConstraint } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
-import { IndexStore } from "../indexes/index.ts";
-import { serializeIndexEntry } from "../indexes/index.ts";
-import { indexKeyValues, tableRowEvalContext } from "../indexes/keys.ts";
+import { IndexStore, serializeIndexEntry } from "../indexes/index.ts";
 import {
   ColumnarSlab,
   PACK_BLOB,
@@ -14,6 +12,7 @@ import {
   PACK_TEXT_INLINE,
   PACK_TEXT_INTERN,
   packKindOf,
+  prepareSlabColumn,
   type SlabColumn,
 } from "../storage/columnar-slab.ts";
 import { DatabaseState, type IndexInfo, type ViewInfo } from "../storage/database-state.ts";
@@ -22,14 +21,14 @@ import { type ColumnInfo, Table } from "../storage/table.ts";
 import { asSqlReal, SqlJsonText, SqlReal, type SqlValue, utf8Encode } from "../types/value.ts";
 import {
   InternPool,
-  readBjv,
   Reader,
+  readBjv,
   readInternTable,
   readVarintU32,
+  Writer,
   writeBjv,
   writeInternTable,
   writeVarintU32,
-  Writer,
 } from "./wire.ts";
 
 const MAGIC = utf8Encode("SQLM");
@@ -58,6 +57,7 @@ export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRunti
   const tables = sortedValues(state.tables);
   const views = sortedValues(state.views);
   const indexes = sortedValues(state.indexes);
+  const tableRows: Row[][] = [];
 
   for (const table of tables) {
     pool.count(table.name);
@@ -68,7 +68,9 @@ export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRunti
       pool.count(column.collate ?? "");
     }
     for (const name of table.indexes) pool.count(name);
-    for (const row of table.sortedRows()) {
+    const rows = table.sortedRows();
+    tableRows.push(rows);
+    for (const row of rows) {
       for (const value of row.values) {
         if (typeof value === "string") pool.count(value);
         else if (value instanceof SqlJsonText) pool.count(value.value);
@@ -94,7 +96,8 @@ export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRunti
   writeInternTable(w, pool.list);
 
   writeVarintU32(w, tables.length);
-  for (const table of tables) {
+  for (let t = 0; t < tables.length; t++) {
+    const table = tables[t]!;
     writeVarintU32(w, forceId(table.name));
     writeVarintU32(w, table.columns.length);
     for (const column of table.columns) {
@@ -125,7 +128,7 @@ export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRunti
     writeVarintU32(w, indexNames.length);
     for (const name of indexNames) writeVarintU32(w, forceId(name));
     writeTaggedValue(w, table.nextRowid, internId);
-    const rows = table.sortedRows();
+    const rows = tableRows[t]!;
     writeVarintU32(w, rows.length);
     for (const row of rows) writeTaggedValue(w, row.rowid, internId);
     for (let c = 0; c < table.columns.length; c++) writePackedColumn(w, rows, c, internId);
@@ -256,18 +259,6 @@ function decodeInner(snapshot: Uint8Array): DecodedSnapshot {
   }
   for (const info of loadedIndexes) {
     info.store = readIndexStoreBinary(r, info.name, intern);
-    const table = state.tables.get(info.tableName.toLowerCase());
-    if (!table) continue;
-    for (const entry of info.store.snapshotKeys()) {
-      const rowid = entry.rowids[0];
-      if (rowid === undefined) continue;
-      const row = table.get(rowid);
-      if (!row) continue;
-      info.store.rememberKeyValues(
-        entry.key,
-        indexKeyValues(info.columns, row, tableRowEvalContext(table, row), table),
-      );
-    }
   }
 
   if (r.remaining() < 16) throw new SqliteError("invalid or truncated sqlite-mem snapshot", "other");
@@ -447,7 +438,7 @@ function writePackedColumn(w: Writer, rows: Row[], col: number, internId: (s: st
 
 function readPackedColumn(r: Reader, n: number, intern: readonly string[]): SlabColumn {
   const pack = r.u8();
-  if (pack === PACK_NULL) return { pack, nullBitmap: null, payload: new Uint8Array(0) };
+  if (pack === PACK_NULL) return prepareSlabColumn({ pack, nullBitmap: null, payload: new Uint8Array(0) }, n, 0);
   const bits = r.raw((n + 7) >> 3);
   const nonNull = countNonNull(bits, n);
 
@@ -455,7 +446,7 @@ function readPackedColumn(r: Reader, n: number, intern: readonly string[]): Slab
     r.skipAlign4();
     const width = pack === PACK_I32 || pack === PACK_TEXT_INTERN ? 4 : 8;
     const payload = r.raw(nonNull * width);
-    return { pack, nullBitmap: bits, payload };
+    return prepareSlabColumn({ pack, nullBitmap: bits, payload }, n, nonNull);
   }
   if (pack === PACK_TEXT_INLINE) {
     const count = readVarintU32(r);
@@ -463,7 +454,7 @@ function readPackedColumn(r: Reader, n: number, intern: readonly string[]): Slab
     for (let i = 0; i < count; i++) offsets[i] = readVarintU32(r);
     const total = readVarintU32(r);
     const payload = r.raw(total);
-    return { pack, nullBitmap: bits, payload, inlineOffsets: offsets };
+    return prepareSlabColumn({ pack, nullBitmap: bits, payload, inlineOffsets: offsets }, n, nonNull);
   }
   if (pack === PACK_BLOB) {
     const chunks: Uint8Array[] = [];
@@ -472,14 +463,14 @@ function readPackedColumn(r: Reader, n: number, intern: readonly string[]): Slab
       const len = readVarintU32(r);
       chunks.push(r.raw(len));
     }
-    return { pack, nullBitmap: bits, payload: new Uint8Array(0), blobChunks: chunks };
+    return prepareSlabColumn({ pack, nullBitmap: bits, payload: new Uint8Array(0), blobChunks: chunks }, n, nonNull);
   }
   const tagged: SqlValue[] = [];
   for (let i = 0; i < n; i++) {
     if (bits[i >> 3]! & (1 << (i & 7))) continue;
     tagged.push(readTaggedValue(r, intern));
   }
-  return { pack: PACK_TAGGED, nullBitmap: bits, payload: new Uint8Array(0), tagged };
+  return prepareSlabColumn({ pack: PACK_TAGGED, nullBitmap: bits, payload: new Uint8Array(0), tagged }, n, nonNull);
 }
 
 function countNonNull(bits: Uint8Array, n: number): number {

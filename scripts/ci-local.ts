@@ -199,7 +199,8 @@ await runStep("Canaries", ["bun", "run", "test:canaries"]);
 await runStep("Browser SQL smoke", ["bun", "run", "test:browser-sql"]);
 
 job("benchmark  (CI job)");
-// Mirrors .github/workflows/ci.yml Regression gate: real 2.5× p95 / 1.5× median
+// Mirrors .github/workflows/ci.yml Regression gate: 2.5× p95 / 1.5× median
+// (n<5 and sub-ms skip ratio gates; check-budgets.ts holds absolute ceilings)
 // compare when platforms match; otherwise gate current vs itself (committed baseline is linux).
 await runStep("CI benchmarks", [
   "bun",
