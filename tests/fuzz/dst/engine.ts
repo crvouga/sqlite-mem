@@ -6,10 +6,12 @@ import {
   compareWriteOrReport,
   withDatabases,
 } from "../helpers.ts";
+import { assertProbeResultsEqual, captureProbeResults, probesForState } from "../snapshot-helpers.ts";
 import {
   DEFAULT_SCHEMA,
   OUTCOME_KINDS,
   QUERY_KINDS,
+  READ_ONLY_QUERY_KINDS,
   SIMPLE_SCHEMA,
   type DmlOp,
   type MixedOp,
@@ -63,10 +65,19 @@ function runCheckpoint(
   if (memory.inTransaction()) {
     return;
   }
+  const probes = probesForState(state);
+  const before = captureProbeResults(memory, probes);
+
   const snap = memory.snapshot();
   state.snap = snap;
+  if (state.hasIndex) {
+    memory.exec("DROP INDEX IF EXISTS t_a");
+  }
   memory.exec("DELETE FROM t WHERE 1");
   memory.restore(snap);
+
+  const after = captureProbeResults(memory, probes);
+  assertProbeResultsEqual(`${label}-checkpoint-probes-${index}`, before, after);
   compareStateOrReport(`${label}-checkpoint-${index}`, { op, index, sqlLog: state.sqlLog }, memory, sqlite);
 }
 
@@ -118,16 +129,11 @@ export function runSequence(ops: readonly MixedOp[], options: RunSequenceOptions
       }
 
       const useOutcome = OUTCOME_KINDS.has(op.kind) || state.hasTrigger;
-      applyResolved(
-        label,
-        index,
-        op,
-        resolved.sql,
-        resolved.isQuery || QUERY_KINDS.has(op.kind),
-        memory,
-        sqlite,
-        useOutcome,
-      );
+      const isQuery = resolved.isQuery || QUERY_KINDS.has(op.kind);
+      if (READ_ONLY_QUERY_KINDS.has(op.kind) && resolved.sql !== "<checkpoint>") {
+        state.probeQueries.push(resolved.sql);
+      }
+      applyResolved(label, index, op, resolved.sql, isQuery, memory, sqlite, useOutcome);
       if (!resolved.isQuery && resolved.sql !== "<checkpoint>") {
         state.sqlLog.push(resolved.sql);
       }

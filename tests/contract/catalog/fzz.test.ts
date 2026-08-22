@@ -88,6 +88,11 @@ runCatalog("FZZ", [
     fn: () => expect(fuzzAssertConfig(3).numRuns === 3 || fuzzPath() !== undefined).toBe(true),
   },
   {
+    id: "FZZ-snap-01",
+    kind: "divergence",
+    fn: () => expect(fuzzAssertConfig(12).endOnFailure).toBe(true),
+  },
+  {
     id: "FZZ-prop-01",
     kind: "divergence",
     fn: () => expect(classifyDiff(undefined).kind).toBe("equal"),

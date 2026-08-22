@@ -102,7 +102,11 @@ export function dumpLogicalState(db: ContractDb): QueryResult {
     }
   }
 
-  for (const idx of indexRows) {
+  for (const idx of indexRows.sort((a, b) => {
+    const ak = `${a.table}.${a.name}`;
+    const bk = `${b.table}.${b.name}`;
+    return ak < bk ? -1 : ak > bk ? 1 : 0;
+  })) {
     const indexName = String(idx.name ?? "");
     if (indexName.startsWith("sqlite_autoindex_")) continue;
     outRows.push({

@@ -229,4 +229,88 @@ runCatalog("SNP", [
       opened.close();
     },
   },
+  {
+    id: "SNP-prop-01",
+    kind: "divergence",
+    fn: (db) => {
+      db.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, a INT)");
+      db.exec("INSERT INTO t VALUES (1, 10)");
+      const bytes = db.snapshot().encode();
+      const once = Snapshot.decode(bytes).open();
+      const twice = Snapshot.decode(Snapshot.decode(bytes).encode()).open();
+      expect(once.query("SELECT a FROM t")).toEqual(twice.query("SELECT a FROM t"));
+      once.close();
+      twice.close();
+    },
+  },
+  {
+    id: "SNP-prop-02",
+    kind: "divergence",
+    fn: (db) => {
+      db.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, a INT)");
+      db.exec("INSERT INTO t VALUES (1, 10)");
+      const before = db.query("SELECT a FROM t");
+      const snap = db.snapshot();
+      const scratch = snap.open();
+      scratch.exec("INSERT INTO t VALUES (2, 0)");
+      scratch.exec("DELETE FROM t WHERE id = 2");
+      expect(scratch.query("SELECT a FROM t")).toEqual(before);
+      const restored = snap.open();
+      expect(restored.query("SELECT a FROM t")).toEqual(before);
+      scratch.close();
+      restored.close();
+    },
+  },
+  {
+    id: "SNP-prop-03",
+    kind: "divergence",
+    fn: (db) => {
+      db.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, v INT, flag INT)");
+      db.exec("CREATE INDEX idx_partial ON t(v) WHERE flag = 1");
+      db.exec("INSERT INTO t VALUES (1, 10, 1)");
+      const probe = db.query("SELECT id, v FROM t WHERE flag = 1 AND v = 10");
+      const snap = db.snapshot();
+      const wiped = snap.open();
+      wiped.exec("DELETE FROM t");
+      const restored = snap.open();
+      expect(restored.query("SELECT id, v FROM t WHERE flag = 1 AND v = 10")).toEqual(probe);
+      wiped.close();
+      restored.close();
+    },
+  },
+  {
+    id: "SNP-obj-01",
+    kind: "divergence",
+    fn: (db) => {
+      db.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, v INT)");
+      db.exec("CREATE INDEX idx_expr ON t(v + 1)");
+      db.exec("INSERT INTO t VALUES (1, 5)");
+      const snap = db.snapshot();
+      const wiped = snap.open();
+      wiped.exec("DELETE FROM t");
+      const restored = snap.open();
+      expect(restored.query("SELECT id, v FROM t WHERE v + 1 = 6")).toEqual([{ id: 1, v: 5 }]);
+      wiped.close();
+      restored.close();
+    },
+  },
+  {
+    id: "SNP-obj-02",
+    kind: "divergence",
+    fn: (db) => {
+      db.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, a INT)");
+      db.exec("CREATE INDEX t_a ON t(a)");
+      db.exec("CREATE VIEW v AS SELECT id, a FROM t");
+      db.exec("INSERT INTO t VALUES (1, 5)");
+      const snap = db.snapshot();
+      const wiped = snap.open();
+      wiped.exec("DROP INDEX t_a");
+      wiped.exec("DELETE FROM t");
+      const restored = snap.open();
+      expect(restored.query("SELECT id, a FROM v")).toEqual([{ id: 1, a: 5 }]);
+      expect(restored.query("SELECT id FROM t WHERE a = 5")).toEqual([{ id: 1 }]);
+      wiped.close();
+      restored.close();
+    },
+  },
 ]);

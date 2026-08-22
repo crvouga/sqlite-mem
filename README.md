@@ -1,5 +1,7 @@
 # sqlite-mem
 
+[npm](https://www.npmjs.com/package/@crvouga/sqlite-mem) · [GitHub](https://github.com/crvouga/sqlite-mem)
+
 Pure TypeScript, completely in-memory SQLite implementation aiming for **full SQLite3 SQL dialect parity** (same statements → same results).
 
 - Runs in modern browsers and Node.js / Bun

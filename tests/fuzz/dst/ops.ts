@@ -27,6 +27,9 @@ export type MixedOp =
   | { kind: "rollback_to" }
   | { kind: "add_index" }
   | { kind: "drop_index" }
+  | { kind: "create_partial_index" }
+  | { kind: "create_expr_index" }
+  | { kind: "create_unique_index" }
   | { kind: "pragma_fk" }
   | { kind: "alter_add" }
   | { kind: "create_view" }
@@ -50,6 +53,9 @@ export interface SimState {
   inTxn: boolean;
   savepointDepth: number;
   hasIndex: boolean;
+  hasPartialIndex: boolean;
+  hasExprIndex: boolean;
+  hasUniqueIndex: boolean;
   hasNote: boolean;
   hasView: boolean;
   hasChild: boolean;
@@ -58,6 +64,8 @@ export interface SimState {
   schemaKind: SchemaKind;
   /** Applied SQL statements (for checkpoint rebuild / minimize). */
   sqlLog: string[];
+  /** SELECT probes executed during the sequence (for snapshot checkpoint verification). */
+  probeQueries: string[];
   /** Memory-only SQLM snapshot taken at last successful checkpoint mark. */
   snap: Uint8Array | null;
 }
@@ -69,6 +77,9 @@ export function initialSimState(schemaKind: SchemaKind = "plain"): SimState {
     inTxn: false,
     savepointDepth: 0,
     hasIndex: false,
+    hasPartialIndex: false,
+    hasExprIndex: false,
+    hasUniqueIndex: false,
     hasNote: false,
     hasView: false,
     hasChild: false,
@@ -76,6 +87,7 @@ export function initialSimState(schemaKind: SchemaKind = "plain"): SimState {
     hasAttach: false,
     schemaKind,
     sqlLog: [],
+    probeQueries: [],
     snap: null,
   };
 }
@@ -102,6 +114,9 @@ export const OUTCOME_KINDS = new Set<MixedOp["kind"]>([
   "rollback_to",
   "add_index",
   "drop_index",
+  "create_partial_index",
+  "create_expr_index",
+  "create_unique_index",
   "pragma_fk",
   "alter_add",
   "create_view",
@@ -117,10 +132,10 @@ export const OUTCOME_KINDS = new Set<MixedOp["kind"]>([
   "insert_other",
 ]);
 
+export const READ_ONLY_QUERY_KINDS = new Set<MixedOp["kind"]>(["select", "select_subquery", "select_compound"]);
+
 export const QUERY_KINDS = new Set<MixedOp["kind"]>([
-  "select",
-  "select_subquery",
-  "select_compound",
+  ...READ_ONLY_QUERY_KINDS,
   "returning_insert",
   "returning_update",
   "returning_delete",
@@ -267,6 +282,21 @@ export function resolveOp(
     state.hasIndex = false;
     return { sql: "DROP INDEX IF EXISTS t_a", isQuery: false };
   }
+  if (op.kind === "create_partial_index") {
+    if (state.hasPartialIndex || state.inTxn) return null;
+    state.hasPartialIndex = true;
+    return { sql: "CREATE INDEX IF NOT EXISTS t_partial ON t(a) WHERE a > 0", isQuery: false };
+  }
+  if (op.kind === "create_expr_index") {
+    if (state.hasExprIndex || state.inTxn) return null;
+    state.hasExprIndex = true;
+    return { sql: "CREATE INDEX IF NOT EXISTS t_expr ON t(a + 1)", isQuery: false };
+  }
+  if (op.kind === "create_unique_index") {
+    if (state.hasUniqueIndex || state.inTxn) return null;
+    state.hasUniqueIndex = true;
+    return { sql: "CREATE UNIQUE INDEX IF NOT EXISTS t_a_unique ON t(a)", isQuery: false };
+  }
   if (op.kind === "pragma_fk") {
     return { sql: "PRAGMA foreign_keys = ON", isQuery: false };
   }
@@ -381,6 +411,9 @@ export const mixedOpArb: fc.Arbitrary<MixedOp> = fc.oneof(
   { weight: 1, arbitrary: fc.record({ kind: fc.constant("rollback_to" as const) }) },
   { weight: 1, arbitrary: fc.record({ kind: fc.constant("add_index" as const) }) },
   { weight: 1, arbitrary: fc.record({ kind: fc.constant("drop_index" as const) }) },
+  { weight: 1, arbitrary: fc.record({ kind: fc.constant("create_partial_index" as const) }) },
+  { weight: 1, arbitrary: fc.record({ kind: fc.constant("create_expr_index" as const) }) },
+  { weight: 1, arbitrary: fc.record({ kind: fc.constant("create_unique_index" as const) }) },
   { weight: 1, arbitrary: fc.record({ kind: fc.constant("pragma_fk" as const) }) },
   { weight: 1, arbitrary: fc.record({ kind: fc.constant("alter_add" as const) }) },
   { weight: 1, arbitrary: fc.record({ kind: fc.constant("create_view" as const) }) },
@@ -393,7 +426,7 @@ export const mixedOpArb: fc.Arbitrary<MixedOp> = fc.oneof(
     arbitrary: fc.record({ kind: fc.constant("insert_other" as const), a: intArb, b: textArb }),
   },
   { weight: 1, arbitrary: fc.record({ kind: fc.constant("drop_view" as const) }) },
-  { weight: 1, arbitrary: fc.record({ kind: fc.constant("checkpoint" as const) }) },
+  { weight: 4, arbitrary: fc.record({ kind: fc.constant("checkpoint" as const) }) },
 );
 
 export const DEFAULT_SCHEMA = schemaFor("plain");
