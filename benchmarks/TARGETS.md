@@ -60,7 +60,7 @@ Run `bun run benchmark:memory`; CI runs the same fail-closed budget check.
 
 - p95 must remain within `BENCH_REGRESSION_FACTOR` (default **2.5×**) of the same-platform baseline, with a ≥2 ms absolute delta.
 - Median must remain within `BENCH_REGRESSION_MEDIAN` (default **1.50×**) for reliable (n≥5) benches whose baseline median is ≥12 ms (or p95 ≥25 ms), also with a ≥2 ms delta.
-- n<5 samples skip ratio gates (p50/p95 are one sample on insert / snapshot roundtrip); `budgets.json` `ciMedianMs` still fail-closes on blowups.
+- n<5 samples skip ratio gates (p50/p95 are one sample on insert / snapshot roundtrip). On **linux CI**, `budgets.json` `ciMedianMs` still fail-closes on blowups (with slack + a 50 ms floor). Darwin `ci:local` skips those ceilings — they are not comparable across OS, and compare-ci already self-gates.
 - Sub-millisecond CI benches skip both ratio gates (shared runners flap ~1.5–2×).
 - Sub-50µs measurements retain the existing absolute-noise exemption.
 - `bun run test:browser` applies Chromium **4× CPU throttle** and checks PK lookup / prepared execution p95 against `results/throttle-baseline.json` with a **3×** smoke tolerance.

@@ -137,7 +137,7 @@ Chromium with CDP 4× CPU throttle measured **0.60 ms p95** for 20 prepared PK l
 
 On `tx/batched-inserts/10000` (Darwin, default tier), the mean sample fell from **3.87 s to 1.95 s** (**49.6% lower**), while throughput rose from **2,582 to 5,133 inserts/sec** (**1.99×**). The remaining cost is constrained insert validation/index work.
 
-The CI regression gate enforces a **2.5× p95** ceiling and a **1.50× median** ceiling (`BENCH_REGRESSION_FACTOR`, `BENCH_REGRESSION_MEDIAN`) for benches with reliable percentiles (n≥5) and a ≥2 ms absolute delta. n<5 samples (insert / snapshot roundtrip) skip ratio gates; `budgets.json` `ciMedianMs` (~3–4× linux baseline) still fail-closes on blowups. Sub-millisecond CI benches skip both ratio gates; few-ms micros skip the median gate and keep 2.5× p95.
+The CI regression gate enforces a **2.5× p95** ceiling and a **1.50× median** ceiling (`BENCH_REGRESSION_FACTOR`, `BENCH_REGRESSION_MEDIAN`) for benches with reliable percentiles (n≥5) and a ≥2 ms absolute delta. n<5 samples (insert / snapshot roundtrip) skip ratio gates. On linux CI, `budgets.json` `ciMedianMs` still fail-closes on blowups (slack + 50 ms floor for n<5). Darwin `ci:local` skips those timing ceilings (compare-ci already self-gates across OS). Sub-millisecond CI benches skip both ratio gates; few-ms micros skip the median gate and keep 2.5× p95.
 
 ## Target status
 
