@@ -67,6 +67,8 @@ Hot / large files: `parser/parser.ts`, `executor/select.ts`, `executor/dml.ts`.
 - **`Database`** (API) vs **`DatabaseState`** (engine storage).
 - Throw **`SqliteError`** with an `ErrorCategory`. Missing SQL must fail loud via `unsupported()` — the inventory gate fails if the oracle exposes an unimplemented builtin/module.
 - Fast-path helpers (`tryExecuteSimpleSelect`, `tryFastInsert`, `tryIndexedTableRows`, …): return `null` → fall through. Update **both** paths when semantics change.
+- **Dual-path invariant:** residual `WHERE` filtering is skipped on an index/hash access path only when `whereFullyCovered(where, coveredColumns, …)` is true (see [`src/planner/access.ts`](src/planner/access.ts)). Any change to WHERE/join/insert semantics requires updating both fast and full paths **and** the fast≡full property tests under `tests/fuzz/fast-path.test.ts`.
+- Internal invariants use always-on asserts in [`src/runtime/assert.ts`](src/runtime/assert.ts) (`assert`, `assertUnreachable`, `assertRowShape`).
 - TypeScript: `strict` + `noUncheckedIndexedAccess`. Imports use `.ts` extensions. Biome: 2-space, double quotes, 120 columns.
 - IEEE `-0` is canonicalized to `+0` on bind, affinity, and arithmetic. Keep determinism invariants (see README).
 

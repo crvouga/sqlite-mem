@@ -10,10 +10,12 @@ import type {
 } from "../ast/nodes.ts";
 import { checkTableConstraints } from "../constraints/check.ts";
 import { SqliteError } from "../errors/index.ts";
+import { isExpectedFastPathMiss } from "../runtime/catch.ts";
 import { exprEquals } from "../expressions/equals.ts";
 import { evalExpr } from "../expressions/eval.ts";
 import { indexKeyValues } from "../indexes/keys.ts";
 import { tryIndexedTableRows } from "../planner/access.ts";
+import { normalizeForCollation } from "../types/collation.ts";
 import { splitQualifiedName, type ViewInfo } from "../storage/database-state.ts";
 import type { Row, Rowid } from "../storage/row.ts";
 import { cloneRow, normalizeColumnName } from "../storage/row.ts";
@@ -52,7 +54,7 @@ function executeInsertCore(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
   const totalBefore = env.state.totalChanges;
   const view = writableView(stmt.table, "INSERT", env);
   if (view) return executeViewInsert(stmt, view, env, totalBefore);
-  const fast = tryFastInsert(stmt, env);
+  const fast = env.forceFullInsert ? null : tryFastInsert(stmt, env);
   if (fast) return fast;
   let table = env.state.getWritableTable(stmt.table);
   const columnNames = stmt.columns ?? table.columns.map((column) => column.name);
@@ -299,7 +301,8 @@ function tryFastInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet | null {
   let table: Table;
   try {
     table = env.state.getWritableTable(plan.tableName);
-  } catch {
+  } catch (error) {
+    if (!isExpectedFastPathMiss(error)) throw error;
     return null;
   }
   if (env.state.databaseForTable(table).triggers.size > 0) return null;
@@ -315,7 +318,8 @@ function buildFastInsertPlan(stmt: InsertStmt, env: ExecutionEnv): FastInsertPla
   let table: Table;
   try {
     table = env.state.getTable(stmt.table);
-  } catch {
+  } catch (error) {
+    if (!isExpectedFastPathMiss(error)) throw error;
     return null;
   }
   if (!table.isUnconstrained()) return null;
@@ -1066,20 +1070,127 @@ function assertForeignKeyValues(
   const parent = env.state.getTable(constraint.refTable);
   const parentColumns =
     constraint.refColumns ?? parent.columns.filter((column) => column.primaryKey).map((column) => column.name);
-  if (
-    ![...parent.scan()].some((candidate) => {
-      if (excludeParent && candidate.rowid === excludeParent.rowid) return false;
-      return values.every((value, index) => {
-        const parentColumn = parentColumns[index];
-        return (
-          parentColumn !== undefined &&
-          compareSql(value, parent.cell(candidate, normalizeColumnName(parentColumn))) === 0
-        );
-      });
-    })
-  ) {
+  if (findParentRowsForFk(parent, parentColumns, values, env, excludeParent).length === 0) {
     throw new SqliteError("FOREIGN KEY constraint failed", "constraint_foreign", "SQLITE_CONSTRAINT_FOREIGNKEY");
   }
+}
+
+function parentRowMatchesFk(
+  parent: Table,
+  parentColumns: string[],
+  values: SqlValue[],
+  excludeParent: Row | null,
+  candidate: Row,
+): boolean {
+  if (excludeParent && candidate.rowid === excludeParent.rowid) return false;
+  return values.every((value, index) => {
+    const parentColumn = parentColumns[index];
+    return (
+      parentColumn !== undefined && compareSql(value, parent.cell(candidate, normalizeColumnName(parentColumn))) === 0
+    );
+  });
+}
+
+function findParentRowsForFk(
+  parent: Table,
+  parentColumns: string[],
+  values: SqlValue[],
+  env: ExecutionEnv,
+  excludeParent: Row | null,
+): Row[] {
+  const db = env.state.databaseForTable(parent);
+  const pk = parent.integerPkColumn();
+  if (parentColumns.length === 1) {
+    const col = parentColumns[0]!.toLowerCase();
+    if (
+      col === "rowid" ||
+      col === "_rowid_" ||
+      col === "oid" ||
+      (pk && col === (pk.nameLower ?? pk.name.toLowerCase()))
+    ) {
+      const row = parent.getByKey(values[0]!);
+      if (row && parentRowMatchesFk(parent, parentColumns, values, excludeParent, row)) return [row];
+      return [];
+    }
+  }
+
+  const normalizedValues = values.map((value, index) => {
+    const colName = parentColumns[index]!;
+    const column = parent.columns.find((item) => (item.nameLower ?? item.name.toLowerCase()) === colName.toLowerCase());
+    return normalizeForCollation(value, column?.collate ?? "BINARY");
+  });
+  for (const indexName of parent.indexes) {
+    const index = db.indexes.get(indexName.toLowerCase());
+    if (!index?.unique || index.where || index.columns.some((column) => column.expr)) continue;
+    if (index.columns.length !== parentColumns.length) continue;
+    if (!index.columns.every((column, idx) => column.name.toLowerCase() === parentColumns[idx]!.toLowerCase()))
+      continue;
+    const rows: Row[] = [];
+    for (const rowid of index.store.lookup(normalizedValues)) {
+      const candidate = parent.get(rowid);
+      if (candidate && parentRowMatchesFk(parent, parentColumns, values, excludeParent, candidate))
+        rows.push(candidate);
+    }
+    return rows;
+  }
+
+  return [...parent.scan()].filter((candidate) =>
+    parentRowMatchesFk(parent, parentColumns, values, excludeParent, candidate),
+  );
+}
+
+function findChildRowsForFk(
+  child: Table,
+  childColumns: string[],
+  parentColumns: string[],
+  parent: Table,
+  parentRow: Row,
+  env: ExecutionEnv,
+): Row[] {
+  const refValues = parentColumns.map((name) => parent.cell(parentRow, normalizeColumnName(name)));
+  if (refValues.some((value) => value === null)) return [];
+
+  if (childColumns.length === 1) {
+    const col = childColumns[0]!.toLowerCase();
+    const matches = child.lookupEquality(col, refValues[0]!);
+    if (matches) {
+      return matches.filter((candidate) =>
+        foreignKeyMatches(childColumns, candidate, parentColumns, parentRow, child, parent),
+      );
+    }
+  }
+
+  const db = env.state.databaseForTable(child);
+  const normalizedValues = refValues.map((value, index) => {
+    const colName = childColumns[index]!;
+    const column = child.columns.find((item) => (item.nameLower ?? item.name.toLowerCase()) === colName.toLowerCase());
+    return normalizeForCollation(value, column?.collate ?? "BINARY");
+  });
+  for (const indexName of child.indexes) {
+    const index = db.indexes.get(indexName.toLowerCase());
+    if (!index || index.where || index.columns.some((column) => column.expr)) continue;
+    if (index.columns.length < childColumns.length) continue;
+    if (!childColumns.every((name, idx) => index.columns[idx]?.name.toLowerCase() === name.toLowerCase())) {
+      continue;
+    }
+    const lookupValues = normalizedValues.slice(0, index.columns.length);
+    const rowids =
+      lookupValues.length === index.columns.length
+        ? index.store.lookup(lookupValues)
+        : index.store.lookupPrefix(lookupValues);
+    const rows: Row[] = [];
+    for (const rowid of rowids) {
+      const candidate = child.get(rowid);
+      if (candidate && foreignKeyMatches(childColumns, candidate, parentColumns, parentRow, child, parent)) {
+        rows.push(candidate);
+      }
+    }
+    return rows;
+  }
+
+  return [...child.scan()].filter((candidate) =>
+    foreignKeyMatches(childColumns, candidate, parentColumns, parentRow, child, parent),
+  );
 }
 
 export function checkDeferredForeignKeys(env: ExecutionEnv): void {
@@ -1105,10 +1216,8 @@ function applyReferentialDelete(parent: Table, row: Row, env: ExecutionEnv): num
       child = env.state.ensureWritableTable(child);
       const target = child;
       const referenced = constraint.refColumns ?? parentPk;
-      const matches = [...target.scan()].filter(
-        (candidate) =>
-          !(target === parent && candidate.rowid === row.rowid) &&
-          foreignKeyMatches(constraint.columns, candidate, referenced, row, target, parent),
+      const matches = findChildRowsForFk(target, constraint.columns, referenced, parent, row, env).filter(
+        (candidate) => !(target === parent && candidate.rowid === row.rowid),
       );
       for (const candidate of matches) {
         if (constraint.onDelete === "CASCADE") {
@@ -1157,9 +1266,7 @@ function applyReferentialUpdate(parent: Table, before: Row, after: Row, env: Exe
       const newValues = referenced.map((name) => parent.cell(after, normalizeColumnName(name)));
       if (oldValues.every((value, index) => compareSql(value, newValues[index] ?? null) === 0)) continue;
 
-      const matches = [...target.scan()].filter((candidate) =>
-        foreignKeyMatches(constraint.columns, candidate, referenced, before, target, parent),
-      );
+      const matches = findChildRowsForFk(target, constraint.columns, referenced, parent, before, env);
       for (const candidate of matches) {
         if (constraint.onUpdate === "CASCADE") {
           const updated = updateOne(

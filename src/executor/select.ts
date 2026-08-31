@@ -53,7 +53,7 @@ interface OutputRow {
 
 export function executeSelect(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalContext): ResultSet {
   env.selectRunner = executeSelect;
-  if (!parent && !stmt.with && !stmt.compound) {
+  if (!parent && !stmt.with && !stmt.compound && !env.forceFullSelect) {
     const simple = tryExecuteSimpleSelect(stmt, env) ?? tryExecuteSimpleJoin(stmt, env);
     if (simple) return simple;
   }

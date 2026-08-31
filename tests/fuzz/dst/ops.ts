@@ -39,6 +39,13 @@ export type MixedOp =
   | { kind: "drop_trigger" }
   | { kind: "attach_mem" }
   | { kind: "insert_other"; a: number; b: string }
+  | { kind: "create_fts" }
+  | { kind: "fts_insert"; text: string }
+  | { kind: "fts_update"; text: string }
+  | { kind: "fts_delete"; term: string }
+  | { kind: "fts_match"; term: string }
+  | { kind: "alter_rename_column" }
+  | { kind: "alter_drop_note" }
   | { kind: "checkpoint" };
 
 export type DmlOp =
@@ -61,6 +68,9 @@ export interface SimState {
   hasChild: boolean;
   hasTrigger: boolean;
   hasAttach: boolean;
+  hasFts: boolean;
+  ftsDocId: number;
+  renamedColumn: boolean;
   schemaKind: SchemaKind;
   /** Applied SQL statements (for checkpoint rebuild / minimize). */
   sqlLog: string[];
@@ -85,6 +95,9 @@ export function initialSimState(schemaKind: SchemaKind = "plain"): SimState {
     hasChild: false,
     hasTrigger: false,
     hasAttach: false,
+    hasFts: false,
+    ftsDocId: 0,
+    renamedColumn: false,
     schemaKind,
     sqlLog: [],
     probeQueries: [],
@@ -103,6 +116,16 @@ export function schemaFor(kind: SchemaKind): string {
     return "CREATE TABLE t(id INTEGER PRIMARY KEY, a INT, b TEXT, g INT GENERATED ALWAYS AS (a + 1) STORED)";
   }
   return "CREATE TABLE t(id INTEGER PRIMARY KEY, a INT, b TEXT)";
+}
+
+function bColumn(state: SimState): string {
+  return state.renamedColumn ? "b2" : "b";
+}
+
+function tColumns(state: SimState): string {
+  const b = bColumn(state);
+  const note = state.hasNote ? ", note" : "";
+  return state.schemaKind === "generated" ? `id, a, ${b}, g${note}` : `id, a, ${b}${note}`;
 }
 
 export const OUTCOME_KINDS = new Set<MixedOp["kind"]>([
@@ -125,6 +148,9 @@ export const OUTCOME_KINDS = new Set<MixedOp["kind"]>([
   "create_trigger",
   "drop_trigger",
   "attach_mem",
+  "create_fts",
+  "alter_rename_column",
+  "alter_drop_note",
   "upsert",
   "insert_select",
   "update_from",
@@ -132,7 +158,12 @@ export const OUTCOME_KINDS = new Set<MixedOp["kind"]>([
   "insert_other",
 ]);
 
-export const READ_ONLY_QUERY_KINDS = new Set<MixedOp["kind"]>(["select", "select_subquery", "select_compound"]);
+export const READ_ONLY_QUERY_KINDS = new Set<MixedOp["kind"]>([
+  "select",
+  "select_subquery",
+  "select_compound",
+  "fts_match",
+]);
 
 export const QUERY_KINDS = new Set<MixedOp["kind"]>([
   ...READ_ONLY_QUERY_KINDS,
@@ -148,14 +179,18 @@ export function resolveOp(
 ): { sql: string; isQuery: boolean; beginFirst?: boolean; extraSql?: string[] } | null {
   if (op.kind === "insert") {
     const id = state.nextId++;
+    const b = bColumn(state);
+    const cols = state.hasNote ? `id, a, ${b}, note` : `id, a, ${b}`;
+    const vals = state.hasNote ? `${id}, ${op.a}, ${sqlLiteral(op.b)}, ''` : `${id}, ${op.a}, ${sqlLiteral(op.b)}`;
     return {
-      sql: `INSERT INTO t(id, a, b) VALUES (${id}, ${op.a}, ${sqlLiteral(op.b)})`,
+      sql: `INSERT INTO t(${cols}) VALUES (${vals})`,
       isQuery: false,
     };
   }
   if (op.kind === "update") {
+    const b = bColumn(state);
     return {
-      sql: `UPDATE t SET a = ${op.a}, b = ${sqlLiteral(op.b)} WHERE id = (SELECT max(id) FROM t)`,
+      sql: `UPDATE t SET a = ${op.a}, ${b} = ${sqlLiteral(op.b)} WHERE id = (SELECT max(id) FROM t)`,
       isQuery: false,
     };
   }
@@ -163,12 +198,12 @@ export function resolveOp(
     return { sql: `DELETE FROM t WHERE a = ${op.a}`, isQuery: false };
   }
   if (op.kind === "select") {
-    const cols = state.schemaKind === "generated" ? "id, a, b, g" : "id, a, b";
-    return { sql: `SELECT ${cols} FROM t ORDER BY id`, isQuery: true };
+    return { sql: `SELECT ${tColumns(state)} FROM t ORDER BY id`, isQuery: true };
   }
   if (op.kind === "select_subquery") {
+    const b = bColumn(state);
     return {
-      sql: "SELECT id, a, b FROM t WHERE a IN (SELECT a FROM t WHERE id > 0) OR EXISTS (SELECT 1 FROM t t2 WHERE t2.id = t.id) ORDER BY id",
+      sql: `SELECT id, a, ${b} FROM t WHERE a IN (SELECT a FROM t WHERE id > 0) OR EXISTS (SELECT 1 FROM t t2 WHERE t2.id = t.id) ORDER BY id`,
       isQuery: true,
     };
   }
@@ -181,21 +216,23 @@ export function resolveOp(
   if (op.kind === "upsert") {
     const id = state.nextId;
     const conflictId = ((id - 1) % 5) + 1;
+    const b = bColumn(state);
     if (op.mode === "nothing") {
       return {
-        sql: `INSERT INTO t(id, a, b) VALUES (${conflictId}, ${op.a}, ${sqlLiteral(op.b)}) ON CONFLICT(id) DO NOTHING`,
+        sql: `INSERT INTO t(id, a, ${b}) VALUES (${conflictId}, ${op.a}, ${sqlLiteral(op.b)}) ON CONFLICT(id) DO NOTHING`,
         isQuery: false,
       };
     }
     return {
-      sql: `INSERT INTO t(id, a, b) VALUES (${conflictId}, ${op.a}, ${sqlLiteral(op.b)}) ON CONFLICT(id) DO UPDATE SET a = excluded.a, b = excluded.b`,
+      sql: `INSERT INTO t(id, a, ${b}) VALUES (${conflictId}, ${op.a}, ${sqlLiteral(op.b)}) ON CONFLICT(id) DO UPDATE SET a = excluded.a, ${b} = excluded.${b}`,
       isQuery: false,
     };
   }
   if (op.kind === "insert_select") {
     const id = state.nextId++;
+    const b = bColumn(state);
     return {
-      sql: `INSERT INTO t(id, a, b) SELECT ${id}, a, b FROM t WHERE id = (SELECT max(id) FROM t)`,
+      sql: `INSERT INTO t(id, a, ${b}) SELECT ${id}, a, ${b} FROM t WHERE id = (SELECT max(id) FROM t)`,
       isQuery: false,
     };
   }
@@ -222,8 +259,9 @@ export function resolveOp(
   }
   if (op.kind === "returning_insert") {
     const id = state.nextId++;
+    const b = bColumn(state);
     return {
-      sql: `INSERT INTO t(id, a, b) VALUES (${id}, ${op.a}, ${sqlLiteral(op.b)}) RETURNING id, a, b`,
+      sql: `INSERT INTO t(id, a, ${b}) VALUES (${id}, ${op.a}, ${sqlLiteral(op.b)}) RETURNING id, a, ${b}`,
       isQuery: true,
     };
   }
@@ -234,8 +272,9 @@ export function resolveOp(
     };
   }
   if (op.kind === "returning_delete") {
+    const b = bColumn(state);
     return {
-      sql: `DELETE FROM t WHERE a = ${op.a} RETURNING id, a, b`,
+      sql: `DELETE FROM t WHERE a = ${op.a} RETURNING id, a, ${b}`,
       isQuery: true,
     };
   }
@@ -348,11 +387,56 @@ export function resolveOp(
   }
   if (op.kind === "insert_other") {
     if (!state.hasAttach) return null;
-    const id = state.nextId;
+    const id = state.nextId++;
     return {
       sql: `INSERT INTO other.t(id, a, b) VALUES (${id}, ${op.a}, ${sqlLiteral(op.b)})`,
       isQuery: false,
     };
+  }
+  if (op.kind === "create_fts") {
+    if (state.hasFts || state.inTxn) return null;
+    state.hasFts = true;
+    return { sql: "CREATE VIRTUAL TABLE docs USING fts5(content)", isQuery: false };
+  }
+  if (op.kind === "fts_insert") {
+    if (!state.hasFts) return null;
+    const rowid = ++state.ftsDocId;
+    return {
+      sql: `INSERT INTO docs(rowid, content) VALUES (${rowid}, ${sqlLiteral(op.text)})`,
+      isQuery: false,
+    };
+  }
+  if (op.kind === "fts_update") {
+    if (!state.hasFts || state.ftsDocId === 0) return null;
+    return {
+      sql: `UPDATE docs SET content = ${sqlLiteral(op.text)} WHERE rowid = ${state.ftsDocId}`,
+      isQuery: false,
+    };
+  }
+  if (op.kind === "fts_delete") {
+    if (!state.hasFts) return null;
+    const term = op.term.replace(/[^\w]/g, "").trim();
+    if (!term) return null;
+    return { sql: `DELETE FROM docs WHERE content MATCH ${sqlLiteral(term)}`, isQuery: false };
+  }
+  if (op.kind === "fts_match") {
+    if (!state.hasFts) return null;
+    const term = op.term.replace(/[^\w]/g, "").trim();
+    if (!term) return null;
+    return {
+      sql: `SELECT rowid, content FROM docs WHERE content MATCH ${sqlLiteral(term)} ORDER BY rowid`,
+      isQuery: true,
+    };
+  }
+  if (op.kind === "alter_rename_column") {
+    if (state.renamedColumn || state.inTxn || state.schemaKind !== "plain") return null;
+    state.renamedColumn = true;
+    return { sql: "ALTER TABLE t RENAME COLUMN b TO b2", isQuery: false };
+  }
+  if (op.kind === "alter_drop_note") {
+    if (!state.hasNote || state.inTxn) return null;
+    state.hasNote = false;
+    return { sql: "ALTER TABLE t DROP COLUMN note", isQuery: false };
   }
   if (op.kind === "checkpoint") {
     return { sql: "<checkpoint>", isQuery: false };
@@ -426,6 +510,11 @@ export const mixedOpArb: fc.Arbitrary<MixedOp> = fc.oneof(
     arbitrary: fc.record({ kind: fc.constant("insert_other" as const), a: intArb, b: textArb }),
   },
   { weight: 1, arbitrary: fc.record({ kind: fc.constant("drop_view" as const) }) },
+  { weight: 1, arbitrary: fc.record({ kind: fc.constant("create_fts" as const) }) },
+  { weight: 2, arbitrary: fc.record({ kind: fc.constant("fts_insert" as const), text: textArb }) },
+  { weight: 1, arbitrary: fc.record({ kind: fc.constant("fts_update" as const), text: textArb }) },
+  { weight: 1, arbitrary: fc.record({ kind: fc.constant("fts_delete" as const), term: textArb }) },
+  { weight: 1, arbitrary: fc.record({ kind: fc.constant("fts_match" as const), term: textArb }) },
   { weight: 4, arbitrary: fc.record({ kind: fc.constant("checkpoint" as const) }) },
 );
 

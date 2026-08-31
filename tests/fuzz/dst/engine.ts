@@ -32,6 +32,11 @@ export interface RunSequenceOptions {
   finalizeCommit?: boolean;
 }
 
+function shouldDumpState(state: SimState): boolean {
+  // FTS shadow/aux tables differ in logical dump vs bun:sqlite (intentional divergence).
+  return !state.hasFts;
+}
+
 function applyResolved(
   label: string,
   index: number,
@@ -99,8 +104,8 @@ export function runSequence(ops: readonly MixedOp[], options: RunSequenceOptions
 
     for (const [index, op] of ops.entries()) {
       if (op.kind === "checkpoint") {
-        // SQLM snapshot intentionally omits triggers / ATTACH (snapshot-exclusions).
-        if (state.hasTrigger || state.hasAttach) continue;
+        // SQLM snapshot intentionally omits triggers / ATTACH / FTS (snapshot-exclusions).
+        if (state.hasTrigger || state.hasAttach || state.hasFts) continue;
         runCheckpoint(label, index, op, memory, sqlite, state);
         continue;
       }
@@ -118,17 +123,18 @@ export function runSequence(ops: readonly MixedOp[], options: RunSequenceOptions
             sqlite.exec(extra),
           );
           state.sqlLog.push(extra);
-          if (dump) compareStateOrReport(`${label}-extra-dump-${index}-${extraIndex}`, op, memory, sqlite);
+          if (dump && shouldDumpState(state))
+            compareStateOrReport(`${label}-extra-dump-${index}-${extraIndex}`, op, memory, sqlite);
         }
       }
 
       if (resolved.beginFirst) {
         compareOutcomeOrReport(`${label}-begin-${index}`, "BEGIN", op, memory.exec("BEGIN"), sqlite.exec("BEGIN"));
         state.sqlLog.push("BEGIN");
-        if (dump) compareStateOrReport(`${label}-begin-dump-${index}`, op, memory, sqlite);
+        if (dump && shouldDumpState(state)) compareStateOrReport(`${label}-begin-dump-${index}`, op, memory, sqlite);
       }
 
-      const useOutcome = OUTCOME_KINDS.has(op.kind) || state.hasTrigger;
+      const useOutcome = OUTCOME_KINDS.has(op.kind) || state.hasTrigger || state.hasFts;
       const isQuery = resolved.isQuery || QUERY_KINDS.has(op.kind);
       if (READ_ONLY_QUERY_KINDS.has(op.kind) && resolved.sql !== "<checkpoint>") {
         state.probeQueries.push(resolved.sql);
@@ -137,13 +143,13 @@ export function runSequence(ops: readonly MixedOp[], options: RunSequenceOptions
       if (!resolved.isQuery && resolved.sql !== "<checkpoint>") {
         state.sqlLog.push(resolved.sql);
       }
-      if (dump) compareStateOrReport(`${label}-dump-${index}`, { op, index }, memory, sqlite);
+      if (dump && shouldDumpState(state)) compareStateOrReport(`${label}-dump-${index}`, { op, index }, memory, sqlite);
     }
 
     if (options.finalizeCommit !== false && state.inTxn) {
       compareOutcomeOrReport(`${label}-final-commit`, "COMMIT", ops, memory.exec("COMMIT"), sqlite.exec("COMMIT"));
       state.sqlLog.push("COMMIT");
-      if (dump) compareStateOrReport(`${label}-final-dump`, ops, memory, sqlite);
+      if (dump && shouldDumpState(state)) compareStateOrReport(`${label}-final-dump`, ops, memory, sqlite);
     }
   });
 }

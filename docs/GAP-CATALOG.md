@@ -45,6 +45,13 @@ Do **not** reopen these as gaps. Differential evidence exists:
 | `PRAGMA case_sensitive_like` | [`tests/contract/expressions/like-glob-gaps.test.ts`](../tests/contract/expressions/like-glob-gaps.test.ts) |
 | INDEXED BY missing-index pin | [`tests/contract/indexes/indexed-by.test.ts`](../tests/contract/indexes/indexed-by.test.ts) |
 | Snapshot omissions (triggers / ATTACH / FTS / user_version) | `SNP-omit-01`…`04` in [`tests/contract/catalog/snp.test.ts`](../tests/contract/catalog/snp.test.ts) |
+| Simple-select partial-index WHERE (residual conjuncts) | [`tests/contract/select/partial-index-where.test.ts`](../tests/contract/select/partial-index-where.test.ts), [`tests/fuzz/simple-select-where.test.ts`](../tests/fuzz/simple-select-where.test.ts) |
+| Integer `+`/`-`/`*` i64 overflow → REAL | [`tests/contract/expressions/integer-overflow.test.ts`](../tests/contract/expressions/integer-overflow.test.ts), fuzz `expressions.test.ts` |
+| `randomblob` / `zeroblob` SQLITE_TOOBIG | [`tests/contract/limits/toobig.test.ts`](../tests/contract/limits/toobig.test.ts) |
+| FTS5 prefix `*` parse error (oracle message) | [`tests/contract/fts/parse-errors.test.ts`](../tests/contract/fts/parse-errors.test.ts) |
+| Dual-path fast ≡ full (simple SELECT / INSERT) | [`tests/fuzz/fast-path.test.ts`](../tests/fuzz/fast-path.test.ts) |
+| LEFT JOIN TLP metamorphic | [`tests/fuzz/metamorphic/tlp.test.ts`](../tests/fuzz/metamorphic/tlp.test.ts) |
+| Mixed DST with FTS ops (outcome compare; no checkpoint) | [`tests/fuzz/dst/ops.ts`](../tests/fuzz/dst/ops.ts), `mixed-stateful.test.ts` |
 
 ---
 
@@ -255,9 +262,10 @@ Columns: Area | SQLite 3.51 behavior | Current coverage | Severity | What proof 
 
 | Area | SQLite 3.51 behavior | Current coverage | Severity | What proof is missing | Suggested test type |
 | --- | --- | --- | --- | --- | --- |
-| Deterministic simulation harness | Long mixed sequences + snapshot + nested savepoints + PRAGMA | Proven (partial) — `tests/fuzz/dst/` + `mixed-stateful` (UPSERT/FK/trigger/RETURNING/ATTACH/schema variants) | medium | Broader schema mutation; FTS in mixed arb | simulation |
-| Expression / schema / query / bind / error fuzz expansion | Broad adversarial coverage | Proven (partial) — joins/subqueries/datetime/LIKE/windows/json/affinity-binds/triggers/generated/FK/counters | medium | Grammar-weighted generators; overflow/bigint edges | fuzz |
-| Metamorphic oracles | TLP / NoREC | Proven (partial) — `tests/fuzz/metamorphic/` incl. join TLP | medium | Larger multi-join / OUTER TLP | metamorphic |
+| Deterministic simulation harness | Long mixed sequences + snapshot + nested savepoints + PRAGMA | Proven (partial) — `tests/fuzz/dst/` + `mixed-stateful` (UPSERT/FK/trigger/RETURNING/ATTACH/FTS/schema variants) | medium | DROP/RENAME COLUMN dump parity in mixed arb; broader schema mutation | simulation |
+| Expression / schema / query / bind / error fuzz expansion | Broad adversarial coverage | Proven (partial) — joins/subqueries/datetime/LIKE/windows/json/affinity-binds/triggers/generated/FK/counters; i64 overflow / TOOBIG edges | medium | Grammar-weighted generators | fuzz |
+| Metamorphic oracles | TLP / NoREC | Proven (partial) — `tests/fuzz/metamorphic/` incl. INNER + LEFT join TLP | medium | FULL OUTER TLP; larger multi-join | metamorphic |
+| Dual-path executor parity | Fast vs full SELECT/INSERT must agree | Proven — `tests/fuzz/fast-path.test.ts` (`ExecutionEnv.forceFullSelect` / `forceFullInsert`) | low | Extend to UPDATE/DELETE fast paths if added | property |
 | SQLLogicTest | External corpus | Proven (partial) — trimmed `vendor/sqllogictest/` | medium | Larger upstream ingest | corpus |
 | Property invariants without oracle | Snapshot≡restore; rollback PRNG; counters | Partial — ISOLATED determinism + snapshot + robustness bit-flip | medium | More README invariants | property |
 | Fail-closed for claimed-but-unproven | Inventory + requirements gate | Proven for oracle names / requirements unknown=0 | medium | Optionally fail on smoke-baseline growth; browser gate | gate |

@@ -1,7 +1,9 @@
 import type { Expr, FromItem, TableRef } from "../ast/nodes.ts";
+import { SqliteError } from "../errors/index.ts";
 import type { ExecutionEnv } from "../executor/env.ts";
 import { exprEquals } from "../expressions/equals.ts";
 import { evalExpr } from "../expressions/eval.ts";
+import { isExpectedFastPathMiss } from "../runtime/catch.ts";
 import type { IndexInfo } from "../storage/database-state.ts";
 import type { Row, Rowid } from "../storage/row.ts";
 import type { Table } from "../storage/table.ts";
@@ -94,7 +96,8 @@ export function lookupTableRows(from: TableRef, where: Expr, env: ExecutionEnv):
   let table: Table;
   try {
     table = db.getTable(from.name);
-  } catch {
+  } catch (error) {
+    if (!isExpectedFastPathMiss(error)) throw error;
     return null;
   }
 
@@ -107,8 +110,9 @@ export function lookupTableRows(from: TableRef, where: Expr, env: ExecutionEnv):
   const evalConst = (expr: Expr): SqlValue | undefined => {
     try {
       return evalExpr(expr, env.createEvalContext(null));
-    } catch {
-      return undefined;
+    } catch (error) {
+      if (error instanceof SqliteError) return undefined;
+      throw error;
     }
   };
 
@@ -278,7 +282,8 @@ export function tryIndexedOrder(
   let table: Table;
   try {
     table = db.getTable(from.name);
-  } catch {
+  } catch (error) {
+    if (!isExpectedFastPathMiss(error)) throw error;
     return null;
   }
   const col = order.expr.name.toLowerCase();

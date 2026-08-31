@@ -148,6 +148,9 @@ export function parseFts5Query(input: string): FtsQueryNode {
     }
     if (p.kind === "TERM") {
       next();
+      if (p.prefix && (p.value === "" || p.value.includes("*"))) {
+        throw new SqliteError(`unknown special query: ${p.value}`, "other");
+      }
       return { type: "term", value: p.value, prefix: p.prefix, column: null, columns: null };
     }
     throw new SqliteError(`fts5: syntax error near "${displayTok(p)}"`, "syntax");
@@ -325,21 +328,5 @@ function displayTok(t: Tok): string {
 
 /** FTS3/4 query parser (ENABLE_FTS3_PARENTHESIS style). */
 export function parseFts3Query(input: string): FtsQueryNode {
-  // Reuse FTS5 parser with minor differences: column:term form already handled.
-  // FTS3 uses OR/AND/NOT/NEAR similarly when parenthesis enabled.
-  try {
-    return parseFts5Query(input);
-  } catch {
-    // Fallback: treat as AND of terms (legacy)
-    const terms = input
-      .split(/\s+/)
-      .filter(Boolean)
-      .filter((t) => !/^(AND|OR|NOT|NEAR)$/i.test(t));
-    if (terms.length === 0) return { type: "true" };
-    const nodes: FtsQueryNode[] = terms.map((t) => {
-      const prefix = t.endsWith("*");
-      return { type: "term" as const, value: prefix ? t.slice(0, -1) : t, prefix, column: null, columns: null };
-    });
-    return nodes.length === 1 ? nodes[0]! : { type: "and", children: nodes };
-  }
+  return parseFts5Query(input);
 }

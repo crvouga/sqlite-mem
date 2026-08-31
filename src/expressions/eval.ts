@@ -179,10 +179,19 @@ function evalBinary(op: BinaryOp, leftExpr: Expr, rightExpr: Expr, ctx: EvalCont
   if (left === null || right === null) return null;
   switch (op) {
     case "+":
+      if (storageClassOf(left) === "integer" && storageClassOf(right) === "integer") {
+        return integerArithmetic("+", left, right);
+      }
       return asNumber(numberValue(left) + numberValue(right));
     case "-":
+      if (storageClassOf(left) === "integer" && storageClassOf(right) === "integer") {
+        return integerArithmetic("-", left, right);
+      }
       return asNumber(numberValue(left) - numberValue(right));
     case "*":
+      if (storageClassOf(left) === "integer" && storageClassOf(right) === "integer") {
+        return integerArithmetic("*", left, right);
+      }
       return asNumber(numberValue(left) * numberValue(right));
     case "/": {
       const divisor = numberValue(right);
@@ -223,6 +232,19 @@ function evalBinary(op: BinaryOp, leftExpr: Expr, rightExpr: Expr, ctx: EvalCont
 
 function safeIntegerResult(value: bigint): number | bigint {
   return value <= BigInt(Number.MAX_SAFE_INTEGER) && value >= BigInt(Number.MIN_SAFE_INTEGER) ? Number(value) : value;
+}
+
+const I64_MIN = -(2n ** 63n);
+const I64_MAX = 2n ** 63n - 1n;
+
+function integerArithmetic(op: "+" | "-" | "*", left: SqlValue, right: SqlValue): SqlValue {
+  const a = integerValue(left);
+  const b = integerValue(right);
+  const result = op === "+" ? a + b : op === "-" ? a - b : a * b;
+  if (result < I64_MIN || result > I64_MAX) {
+    return asSqlReal(Number(result));
+  }
+  return safeIntegerResult(result);
 }
 
 function compareRowValues(op: BinaryOp, leftExprs: Expr[], rightExprs: Expr[], ctx: EvalContext): SqlValue {

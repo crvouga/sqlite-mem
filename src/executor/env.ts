@@ -79,6 +79,10 @@ export class ExecutionEnv {
 
   /** Cap SELECT output rows (used by Statement.get). */
   maxRows = Number.POSITIVE_INFINITY;
+  /** When true, skip simple-select / simple-join fast paths (tests only). */
+  forceFullSelect = false;
+  /** When true, skip tryFastInsert (tests only). */
+  forceFullInsert = false;
   includeNamedRows = true;
   includeValues = true;
   /** Source text of the statement currently executing (for sqlite_master.sql). */
@@ -107,6 +111,8 @@ export class ExecutionEnv {
     this.triggerDepth = 0;
     this.triggerScope = null;
     this.maxRows = Number.POSITIVE_INFINITY;
+    this.forceFullSelect = false;
+    this.forceFullInsert = false;
     this.includeNamedRows = true;
     this.includeValues = true;
     this.statementSql = null;

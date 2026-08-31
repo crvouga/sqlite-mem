@@ -1,12 +1,13 @@
 import type { Expr, TableConstraint } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
+import { assertRowShape } from "../runtime/assert.ts";
 import { serializeIndexKey } from "../indexes/index.ts";
 import { compareWithCollation, normalizeForCollation } from "../types/collation.ts";
 import { applyStrictValue } from "../types/strict.ts";
 import type { Affinity, SqlValue } from "../types/value.ts";
 import { affinityFromTypeName, applyAffinity, cloneSqlValue, compareSql } from "../types/value.ts";
 import type { NamedRowValues, Row, Rowid, RowValues } from "./row.ts";
-import { cloneRow, isValueArray, normalizeColumnName, rowValues } from "./row.ts";
+import { isValueArray, normalizeColumnName, rowValues } from "./row.ts";
 import type { ColumnarSlab } from "./columnar-slab.ts";
 
 /** Build a covering equality hash once a table is large enough that scans dominate. */
@@ -200,6 +201,7 @@ export class Table {
   }
 
   private commitRow(row: Row): void {
+    assertRowShape(this, row);
     this.indexEquality(row);
     this.invalidateScan();
   }
@@ -442,16 +444,11 @@ export class Table {
     copy.nextRowid = this.nextRowid;
     copy.maximumRowid = this.maximumRowid;
     if (this.slab) {
-      let max: Rowid | null = null;
-      for (const row of this.slab.scan()) {
-        copy.rows.set(row.rowid, cloneRow(row));
-        if (max === null || compareRowids(row.rowid, max) > 0) max = row.rowid;
-      }
-      copy.maximumRowid = max ?? undefined;
+      for (const row of this.slab.scan()) copy.rows.set(row.rowid, row);
     } else {
-      for (const [rowid, row] of this.rows) copy.rows.set(rowid, cloneRow(row));
+      for (const [rowid, row] of this.rows) copy.rows.set(rowid, row);
     }
-    for (const [clusterKey, row] of this.clusteredRows) copy.clusteredRows.set(clusterKey, cloneRow(row));
+    for (const [clusterKey, row] of this.clusteredRows) copy.clusteredRows.set(clusterKey, row);
     return copy;
   }
 

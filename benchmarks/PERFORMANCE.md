@@ -81,6 +81,16 @@ Engine changes (semantics preserved; differential suite green):
 - SQLM writer uses a growable `Uint8Array`; restore adopts decoded state
 - Uncorrelated equality RHS (including scalar subqueries) evaluated once for access-path selection
 
+### Phase 4 campaign (2026-08-30)
+
+Copy-on-write and index-backed paths (differential + dual-path PBT green):
+
+- **`Table.clone()`** shares `Row` references (and slab row refs materialized into the clone’s `rows` map) instead of `cloneRow` on every cell; first write in a transaction still forks via `update()`’s value slice or Map replacement.
+- **`IndexStore.clone()`** shares entry maps until the first mutating op (`forkMaps()`); sorted-key cache invalidated on fork.
+- **`IndexStore.lookupPrefix` / `rangeLookup`** use binary search on `orderedKeys()` + `keyValues` rather than linear scans over all entries.
+- **FK checks** (`assertForeignKeyValues`, referential CASCADE/UPDATE) probe INTEGER PK / unique indexes on parent and child before falling back to heap scan.
+- **`tryExecuteSimpleSelect`** handles indexed `ORDER BY col LIMIT n` (no `WHERE`) via `tryIndexedOrder`.
+
 SQLM v3 persists `IndexStore` payloads (v1/v2 blobs still hydrate by rebuilding indexes). Public snapshot API is unchanged.
 
 ## Final results
@@ -154,8 +164,8 @@ Indexed range / prefix / `ORDER BY LIMIT` at 1000 rows are no longer scan-class:
 | `hotspot/range-gt/1000` | 0.36 ms | ~5× faster than unindexed scan (1.74 ms) |
 | `hotspot/between/1000` | 0.08 ms | ordered IndexStore |
 | `hotspot/order-limit/1000` | walks the index then LIMIT | not a full sort of all rows |
-| `hotspot/index-prefix/1000` | 1.29 ms | leftmost prefix of `(a,b)` |
-| `hotspot/tx-begin/1000` | 0.03 ms | copy-on-write; not a full row clone |
+| `hotspot/index-prefix/1000` | binary search on ordered index keys | leftmost prefix of `(a,b)` |
+| `hotspot/tx-begin/1000` | 0.03 ms | CoW: shared Row refs + shared IndexStore maps until first write |
 | `hotspot/insert-pk/1000` | ~237k inserts/sec | ≥10× the previous ~3,200/sec TX insert bench |
 
 CI records `benchmarks/results/ci-baseline.json`. The regression gate **fails closed** if that file was recorded on a different OS than the runner (GitHub Actions is linux). Re-record on ubuntu and commit the file (or download the `ci-latest-linux` workflow artifact).
@@ -197,11 +207,12 @@ Per-test databases should `snapshot()` a frozen template once and `open()` per c
 ## Remaining bottlenecks
 
 1. **Insert / update row construction** — affinity, index maintenance, trigger/FK checks. Uniqueness uses `IndexStore` / autoindexes. Native insert parity needs a columnar/row-representation rewrite.
-2. **BEGIN / SAVEPOINT** — copy-on-write: snapshots share frozen tables and clone on first write. Cheap on `hotspot/tx-begin/1000` (~0.03 ms). First write in a large TX still copies that table.
-3. **Row representation** — heap rows are `SqlValue[]` parallel to `table.columns`. Per-query `Cell[]` still dominate some full scans; SQLM v4 intern + columnar packing removes the 8–10× hydrate Map amplifier.
-4. **FTS MATCH** still scans virtual-table rows (inverted index exists but is not the MATCH cursor path). Acceptable for small corpora; do not prioritize until product-critical.
-5. **RIGHT/FULL joins** still nested-loop (INNER/LEFT equality joins use index probe or hash-join fallback)
-6. **1M-row / 100 MB snapshot** cases are Bun/desktop-only; not claimed on throttled mobile
+2. **BEGIN / SAVEPOINT** — copy-on-write: snapshots share frozen table row refs and index maps; clone on first write. Cheap on `hotspot/tx-begin/1000` (~0.03 ms). First write in a large TX still copies that table’s Map shell (not every cell).
+3. **FK referential actions** — parent/child probes use PK and index lookup when keys align; heap scan remains fallback for non-indexed shapes.
+4. **Row representation** — heap rows are `SqlValue[]` parallel to `table.columns`. Per-query `Cell[]` still dominate some full scans; SQLM v4 intern + columnar packing removes the 8–10× hydrate Map amplifier.
+5. **FTS MATCH** still scans virtual-table rows (inverted index exists but is not the MATCH cursor path). Acceptable for small corpora; do not prioritize until product-critical.
+6. **RIGHT/FULL joins** still nested-loop (INNER/LEFT equality joins use index probe or hash-join fallback)
+7. **1M-row / 100 MB snapshot** cases are Bun/desktop-only; not claimed on throttled mobile
 
 ## Local-first guidance (JSON / FTS)
 

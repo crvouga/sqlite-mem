@@ -1,8 +1,17 @@
 import type { Expr, ResultColumn, SelectStmt } from "../ast/nodes.ts";
-import { conjunctions, equalityAgainstConst, lookupTableRows, tryJoinEqualityKeys } from "../planner/access.ts";
+import { SqliteError } from "../errors/index.ts";
+import {
+  conjunctions,
+  equalityAgainstConst,
+  lookupTableRows,
+  tryIndexedOrder,
+  tryJoinEqualityKeys,
+  whereFullyCovered,
+} from "../planner/access.ts";
+import { isExpectedFastPathMiss } from "../runtime/catch.ts";
 import type { Row } from "../storage/row.ts";
 import type { Table } from "../storage/table.ts";
-import { applyAffinity, compareSql, type SqlValue, toInteger } from "../types/value.ts";
+import { applyAffinity, canonicalizeNumber, compareSql, type SqlValue, toInteger } from "../types/value.ts";
 import type { ExecutionEnv } from "./env.ts";
 import { type ResultSet, valuesToResult } from "./result.ts";
 
@@ -13,7 +22,8 @@ import { type ResultSet, valuesToResult } from "./result.ts";
 export function tryExecuteSimpleSelect(stmt: SelectStmt, env: ExecutionEnv): ResultSet | null {
   if (stmt.with || stmt.compound || stmt.distinct || stmt.groupBy.length > 0 || stmt.having || stmt.windows.length > 0)
     return null;
-  if (stmt.orderBy.length > 0) return null;
+  if (stmt.orderBy.length > 1) return null;
+  if (stmt.orderBy.length === 1 && stmt.where) return null;
   if (stmt.from?.type !== "table") return null;
   for (const column of stmt.columns) {
     if (column.type === "star") continue;
@@ -31,7 +41,8 @@ export function tryExecuteSimpleSelect(stmt: SelectStmt, env: ExecutionEnv): Res
   let table: Table;
   try {
     table = db.getTable(from.name);
-  } catch {
+  } catch (error) {
+    if (!isExpectedFastPathMiss(error)) throw error;
     return null;
   }
   if (table.withoutRowid) return null;
@@ -58,8 +69,9 @@ export function tryExecuteSimpleSelect(stmt: SelectStmt, env: ExecutionEnv): Res
       let value: SqlValue;
       try {
         value = evalIndependent(eq.valueExpr, env);
-      } catch {
-        return null;
+      } catch (error) {
+        if (error instanceof SqliteError) return null;
+        throw error;
       }
       const column = eq.column.toLowerCase();
       const affinity = isRowidName(column)
@@ -79,8 +91,9 @@ export function tryExecuteSimpleSelect(stmt: SelectStmt, env: ExecutionEnv): Res
       offset = Math.max(0, Number(offsetValue));
       const n = Number(limitValue);
       if (n >= 0) limit = Math.min(limit, n);
-    } catch {
-      return null;
+    } catch (error) {
+      if (error instanceof SqliteError) return null;
+      throw error;
     }
   }
   const columns = projectNames(stmt.columns, table);
@@ -88,11 +101,18 @@ export function tryExecuteSimpleSelect(stmt: SelectStmt, env: ExecutionEnv): Res
 
   let source: Iterable<Row> = table.scan();
   let alreadyFiltered = false;
-  if (stmt.where) {
+
+  if (stmt.orderBy.length === 1 && stmt.orderBy[0]) {
+    const take = limit < Number.MAX_SAFE_INTEGER ? offset + limit : undefined;
+    const ordered = tryIndexedOrder(from, { expr: stmt.orderBy[0].expr, dir: stmt.orderBy[0].dir ?? "ASC" }, env, take);
+    if (!ordered) return null;
+    source = ordered.rows;
+    alreadyFiltered = true;
+  } else if (stmt.where) {
     const indexed = lookupTableRows(from, stmt.where, env);
     if (indexed) {
       source = indexed.rows;
-      alreadyFiltered = true;
+      alreadyFiltered = whereFullyCovered(stmt.where, indexed.coveredColumns, alias, table.name);
     }
   }
 
@@ -144,7 +164,8 @@ export function tryExecuteSimpleJoin(stmt: SelectStmt, env: ExecutionEnv): Resul
   try {
     leftTable = leftDb.getTable(leftRef.name);
     rightTable = rightDb.getTable(rightRef.name);
-  } catch {
+  } catch (error) {
+    if (!isExpectedFastPathMiss(error)) throw error;
     return null;
   }
   if (leftTable.withoutRowid || rightTable.withoutRowid) return null;
@@ -242,7 +263,7 @@ function evalIndependent(expr: Expr, env: ExecutionEnv): SqlValue {
   if (expr.type === "null") return null;
   if (expr.type === "parameter") return env.getBoundParameter(expr.name);
   if (expr.type === "unary" && expr.op === "-" && expr.expr.type === "literal" && typeof expr.expr.value === "number") {
-    return -expr.expr.value;
+    return canonicalizeNumber(-expr.expr.value);
   }
   throw new Error("not independent");
 }

@@ -1,4 +1,5 @@
 import { SqliteError } from "../errors/index.ts";
+import { assertBlobLength } from "../runtime/assert.ts";
 import { globMatch, likeMatch } from "../expressions/like.ts";
 import {
   affinityFromTypeName,
@@ -225,6 +226,7 @@ const scalarFunctions: Record<string, ScalarFunction> = {
     requireArgs("randomblob", args, 1);
     if (args[0] === null) return null;
     const length = Math.max(0, Math.trunc(numeric(args[0]!)));
+    assertBlobLength(length, "randomblob");
     const out = new Uint8Array(length);
     let offset = 0;
     while (offset < length) {
@@ -239,6 +241,7 @@ const scalarFunctions: Record<string, ScalarFunction> = {
     requireArgs("zeroblob", args, 1);
     if (args[0] === null) return null;
     const length = Math.max(0, Math.trunc(numeric(args[0]!)));
+    assertBlobLength(length, "zeroblob");
     return new Uint8Array(length);
   },
   hex(args) {

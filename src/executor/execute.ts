@@ -1,5 +1,6 @@
 import type { ReindexStmt, Statement } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
+import { assertUnreachable } from "../runtime/assert.ts";
 import { heapRowCells, rebuildIndexFromTable } from "../indexes/keys.ts";
 import type { DatabaseState, IndexInfo } from "../storage/database-state.ts";
 import { executeAttach, executeDetach } from "./attach.ts";
@@ -92,6 +93,8 @@ export function executeStatement(stmt: Statement, env: ExecutionEnv): ResultSet 
       // :memory: VACUUM is a successful no-op (matches bun:sqlite).
       env.state.recordChange(0);
       return emptyResult(0, env.state.lastInsertRowid);
+    default:
+      return assertUnreachable(stmt);
   }
 }
 

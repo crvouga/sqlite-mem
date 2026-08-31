@@ -47,4 +47,24 @@ describe("expression differential fuzz", () => {
       fuzzAssertConfig(30),
     );
   });
+
+  test("integer overflow edges near i64 match SQLite", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(
+          "9223372036854775807 + 1",
+          "9223372036854775807 + 9223372036854775807",
+          "-9223372036854775808 - 1",
+          "3037000500 * 3037000500",
+        ),
+        (expr) => {
+          const sql = `SELECT (${expr}) AS v, typeof((${expr})) AS t`;
+          withDatabases((memory, sqlite) => {
+            compareOrReport("i64-overflow", sql, { expr }, memory.query(sql), sqlite.query(sql));
+          });
+        },
+      ),
+      fuzzAssertConfig(20),
+    );
+  });
 });
