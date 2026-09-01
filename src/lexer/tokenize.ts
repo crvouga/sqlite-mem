@@ -1,4 +1,5 @@
 import { SqliteError } from "../errors/index.ts";
+import { sqliteAtoF } from "../types/sqlite-atof.ts";
 
 /** Lexer token kind: keywords, literals, operators, and punctuation. */
 export type TokenKind =
@@ -152,6 +153,7 @@ export type TokenKind =
   | "RENAME"
   | "REPLACE"
   | "RESTRICT"
+  | "RESPECT"
   | "RETURNING"
   | "RIGHT"
   | "ROLLBACK"
@@ -317,6 +319,7 @@ const KEYWORDS: Record<string, TokenKind> = {
   RENAME: "RENAME",
   REPLACE: "REPLACE",
   RESTRICT: "RESTRICT",
+  RESPECT: "RESPECT",
   RETURNING: "RETURNING",
   RIGHT: "RIGHT",
   ROLLBACK: "ROLLBACK",
@@ -549,7 +552,7 @@ export function tokenize(input: string): Token[] {
         const n = Number(raw);
         literal = Number.isSafeInteger(n) ? n : BigInt(raw);
       } else {
-        literal = Number(raw);
+        literal = sqliteAtoF(raw);
       }
       push("NUMBER", start, startLine, startCol, raw, { literal, forceReal: isFloat || undefined });
       continue;

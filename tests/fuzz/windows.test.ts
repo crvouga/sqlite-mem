@@ -133,4 +133,53 @@ describe("window differential fuzz", () => {
       fuzzAssertConfig(20),
     );
   });
+
+  test("IGNORE NULLS and RESPECT NULLS on lead/lag match SQLite", () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.record({ id: fc.integer({ min: 1, max: 20 }), v: fc.option(intArb, { nil: null }) }), {
+          minLength: 2,
+          maxLength: 10,
+        }),
+        fc.constantFrom("IGNORE NULLS", "RESPECT NULLS"),
+        (rows, nullsOpt) => {
+          withDatabases((memory, sqlite) => {
+            for (const db of [memory, sqlite]) {
+              db.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, v INT)");
+              for (const row of rows) {
+                db.exec("INSERT INTO t VALUES (?, ?)", [row.id, row.v]);
+              }
+            }
+            const sql = `SELECT id, v, lag(v) OVER (ORDER BY id ${nullsOpt}) AS p, lead(v) OVER (ORDER BY id ${nullsOpt}) AS n FROM t ORDER BY id`;
+            compareOrReport("window-nulls-opt", sql, { rows, nullsOpt }, memory.query(sql), sqlite.query(sql));
+          });
+        },
+      ),
+      fuzzAssertConfig(20),
+    );
+  });
+
+  test("nth_value and illegal window in WHERE error parity", () => {
+    fc.assert(
+      fc.property(fc.array(rowArb, { minLength: 2, maxLength: 6 }), fc.integer({ min: 1, max: 3 }), (rows, n) => {
+        withDatabases((memory, sqlite) => {
+          for (const db of [memory, sqlite]) {
+            db.exec("CREATE TABLE scores(team TEXT, name TEXT, score INTEGER)");
+            for (const row of rows) {
+              db.exec("INSERT INTO scores(team, name, score) VALUES (?, ?, ?)", [row.team, row.name, row.score]);
+            }
+          }
+          const okSql = `SELECT team, nth_value(score, ${n}) OVER (PARTITION BY team ORDER BY score, name) AS nv FROM scores ORDER BY team, score, name`;
+          compareOrReport("nth-value", okSql, { rows, n }, memory.query(okSql), sqlite.query(okSql));
+          const badSql = "SELECT id FROM scores WHERE row_number() OVER (ORDER BY score) = 1";
+          const memBad = memory.query(badSql);
+          const oraBad = sqlite.query(badSql);
+          if (memBad.ok !== oraBad.ok) {
+            throw new Error(`window-in-where outcome mismatch mem=${memBad.ok} sqlite=${oraBad.ok}`);
+          }
+        });
+      }),
+      fuzzAssertConfig(15),
+    );
+  });
 });

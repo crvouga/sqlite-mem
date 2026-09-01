@@ -6,7 +6,7 @@ import { measureSmallRowFootprint } from "./workloads/memory-footprint.ts";
 
 const failures: string[] = [];
 
-/** `ciMedianMs` is calibrated against GHA ubuntu. Darwin `ci:local` already self-gates compare-ci. */
+/** `ciMedianMs` is calibrated against GHA ubuntu. Darwin `check:full` already self-gates compare-ci. */
 const TIMING_BUDGET_PLATFORM = "linux";
 
 function timingCeilingMs(budget: number, result: BenchResult): number {

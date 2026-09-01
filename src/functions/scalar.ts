@@ -3,16 +3,19 @@ import { assertBlobLength } from "../runtime/assert.ts";
 import { globMatch, likeMatch } from "../expressions/like.ts";
 import {
   affinityFromTypeName,
-  applyAffinity,
   asSqlReal,
+  canonicalizeNumber,
   coerceToNumber,
   compareSql,
+  formatRealAsText,
+  isSqlReal,
   type SqlValue,
   storageClassOf,
   typeofSql,
   utf8Decode,
   utf8Encode,
 } from "../types/value.ts";
+import { sqliteAtoF } from "../types/sqlite-atof.ts";
 import type { FunctionContext, ScalarFunction } from "./registry.ts";
 
 /** Match bun:sqlite / SQLite 3.51.0 for drop-in parity. */
@@ -36,6 +39,41 @@ function text(value: SqlValue): string {
   return String(value);
 }
 
+/** CAST TEXT→INTEGER: leading space, optional sign, digit prefix (sqlite3Atoi64). */
+function castTextToInteger(raw: string): number {
+  let i = 0;
+  while (i < raw.length && raw[i] === " ") i++;
+  if (i >= raw.length) return 0;
+  let sign = 1;
+  if (raw[i] === "-") {
+    sign = -1;
+    i++;
+  } else if (raw[i] === "+") i++;
+  if (i >= raw.length || raw[i]! < "0" || raw[i]! > "9") return 0;
+  let n = 0;
+  while (i < raw.length && raw[i]! >= "0" && raw[i]! <= "9") {
+    n = n * 10 + (raw.charCodeAt(i) - 48);
+    i++;
+  }
+  return sign * n;
+}
+
+/** CAST TEXT→REAL/NUMERIC: prefix parse including fraction and exponent (sqlite3AtoF). */
+function castTextToReal(raw: string): number {
+  return sqliteAtoF(raw);
+}
+
+function castNumericFromValue(value: SqlValue, kind: "INTEGER" | "REAL" | "NUMERIC"): number {
+  if (typeof value === "string") {
+    return kind === "INTEGER" ? castTextToInteger(value) : castTextToReal(value);
+  }
+  if (value instanceof Uint8Array) {
+    const decoded = utf8Decode(value);
+    return kind === "INTEGER" ? castTextToInteger(decoded) : castTextToReal(decoded);
+  }
+  return coerceToNumber(value) ?? 0;
+}
+
 function numeric(value: SqlValue): number {
   return coerceToNumber(value) ?? 0;
 }
@@ -46,10 +84,22 @@ export function castSqlValue(value: SqlValue, typeName: string): SqlValue {
   if (affinity === "BLOB") {
     return value instanceof Uint8Array ? value : utf8Encode(text(value));
   }
-  if (affinity === "TEXT") return text(value);
-  if (affinity === "INTEGER") return Math.trunc(coerceToNumber(value) ?? 0);
-  if (affinity === "REAL") return asSqlReal(coerceToNumber(value) ?? 0);
-  return applyAffinity(value, "NUMERIC");
+  if (affinity === "TEXT") {
+    if (isSqlReal(value)) return formatRealAsText(value.value);
+    if (typeof value === "number") {
+      if (Number.isInteger(value) && Number.isSafeInteger(value)) return String(value);
+      return formatRealAsText(value);
+    }
+    return text(value);
+  }
+  if (affinity === "INTEGER") return Math.trunc(castNumericFromValue(value, "INTEGER"));
+  if (affinity === "REAL") return asSqlReal(castNumericFromValue(value, "REAL"));
+  if (affinity === "NUMERIC") {
+    const n = castNumericFromValue(value, "NUMERIC");
+    if (Number.isInteger(n) && Number.isSafeInteger(n)) return Math.trunc(n);
+    return canonicalizeNumber(n);
+  }
+  return value;
 }
 
 function trimChars(value: string, chars: string, left: boolean, right: boolean): string {

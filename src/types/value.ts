@@ -1,3 +1,6 @@
+import { sqliteAtoF } from "./sqlite-atof.ts";
+import { formatRealAsTextSqlite } from "./sqlite-real-format.ts";
+
 /** SQLite storage class of a {@link SqlValue} (`null` / `integer` / `real` / `text` / `blob`). */
 export type StorageClass = "null" | "integer" | "real" | "text" | "blob";
 
@@ -170,20 +173,9 @@ export function applyAffinity(value: SqlValue, affinity: Affinity): SqlValue {
   }
 }
 
-/** Format a REAL for TEXT affinity / CAST AS TEXT (SQLite-like). */
-function formatRealAsText(value: number): string {
-  const n = canonicalizeNumber(value);
-  if (Object.is(n, -0) || n === 0) return "0.0";
-  if (Number.isInteger(n) && Number.isSafeInteger(n)) return `${n}.0`;
-  // Match common SQLite scientific forms for large magnitudes.
-  const abs = Math.abs(n);
-  if (abs >= 1e16 || (abs > 0 && abs < 1e-4)) {
-    return n
-      .toExponential(1)
-      .replace(/e([+-])(\d)$/, "e$10$2")
-      .replace(/e\+/, "e+");
-  }
-  return String(n);
+/** Format a REAL for TEXT affinity / CAST AS TEXT (SQLite `%!.15g`). */
+export function formatRealAsText(value: number): string {
+  return formatRealAsTextSqlite(canonicalizeNumber(value));
 }
 
 /**
@@ -214,6 +206,18 @@ export function applyComparisonAffinity(
   return [left, right];
 }
 
+/** Prefix numeric parse for arithmetic / boolean (sqlite3AtoF). */
+export function coerceToNumberPrefix(value: SqlValue): number {
+  if (value === null) return 0;
+  if (value instanceof SqlReal) return value.value;
+  if (value instanceof SqlJsonText) return coerceToNumberPrefix(value.value);
+  if (typeof value === "number") return canonicalizeNumber(value);
+  if (typeof value === "bigint") return Number(value);
+  if (typeof value === "string") return canonicalizeNumber(sqliteAtoF(value));
+  if (value instanceof Uint8Array) return canonicalizeNumber(sqliteAtoF(utf8Decode(value)));
+  return 0;
+}
+
 /** Parse `value` as a number, or `null` when it is not numeric. */
 export function coerceToNumber(value: SqlValue): number | null {
   if (value === null) return null;
@@ -225,7 +229,7 @@ export function coerceToNumber(value: SqlValue): number | null {
     const s = value.trim();
     if (s === "") return null;
     const n = Number(s);
-    if (!Number.isNaN(n) && /^-?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/.test(s)) {
+    if (!Number.isNaN(n) && /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/.test(s)) {
       return canonicalizeNumber(n);
     }
     return null;
@@ -360,7 +364,7 @@ export function cloneSqlValue(v: SqlValue): SqlValue {
 
 /**
  * SQLite boolean truthiness (WHERE / HAVING / CASE / AND / OR / NOT).
- * Non-NULL values are cast to numeric; non-numeric text/blob become 0 (false).
+ * Text/blob use longest-prefix numeric conversion (sqlite3AtoF); non-numeric → 0.
  */
 export function isTruthySql(v: SqlValue): boolean | null {
   if (v === null) return null;
@@ -368,8 +372,9 @@ export function isTruthySql(v: SqlValue): boolean | null {
   if (typeof v === "number") return v !== 0 && !Number.isNaN(v);
   if (typeof v === "bigint") return v !== 0n;
   if (typeof v === "string" || v instanceof Uint8Array || v instanceof SqlJsonText) {
-    const n = coerceToNumber(v instanceof SqlJsonText ? v.value : v);
-    return n !== null && n !== 0 && !Number.isNaN(n);
+    const text = typeof v === "string" ? v : v instanceof SqlJsonText ? v.value : utf8Decode(v);
+    const n = sqliteAtoF(text);
+    return n !== 0 && !Number.isNaN(n);
   }
   return false;
 }

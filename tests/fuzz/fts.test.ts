@@ -100,9 +100,42 @@ describe("FTS differential fuzz", () => {
       fuzzAssertConfig(25),
     );
   });
-});
 
-describe("FTS stateful fuzz", () => {
+  test("matchinfo format strings match SQLite", () => {
+    const fmtArb = fc.constantFrom("p", "pcx", "pcn", "px");
+    fc.assert(
+      fc.property(fc.array(docArb, { minLength: 1, maxLength: 4 }), wordArb, fmtArb, (docs, term, fmt) => {
+        const memory = new InMemoryAdapter();
+        const sqlite = new RealSqliteAdapter();
+        try {
+          expect(memory.exec("CREATE VIRTUAL TABLE docs USING fts3(body)").ok).toBe(true);
+          expect(sqlite.exec("CREATE VIRTUAL TABLE docs USING fts3(body)").ok).toBe(true);
+          for (const doc of docs) {
+            expect(memory.exec("INSERT INTO docs(body) VALUES (?)", [doc]).ok).toBe(true);
+            expect(sqlite.exec("INSERT INTO docs(body) VALUES (?)", [doc]).ok).toBe(true);
+          }
+          const matchSql = `SELECT rowid FROM docs WHERE docs MATCH ? ORDER BY rowid LIMIT 1`;
+          const memHit = memory.query(matchSql, [term]);
+          const oraHit = sqlite.query(matchSql, [term]);
+          if (!memHit.ok || !oraHit.ok || memHit.rows.length === 0) return;
+          const rowid = memHit.rows[0]!.rowid;
+          const sql = `SELECT hex(matchinfo(docs, '${fmt}')) FROM docs WHERE docs MATCH ? AND rowid = ?`;
+          compareOrReport(
+            "fts-matchinfo",
+            sql,
+            { docs, term, fmt, rowid },
+            memory.query(sql, [term, rowid]),
+            sqlite.query(sql, [term, rowid]),
+          );
+        } finally {
+          memory.close();
+          sqlite.close();
+        }
+      }),
+      fuzzAssertConfig(15),
+    );
+  });
+
   test("insert update delete match sequences", () => {
     fc.assert(
       fc.property(

@@ -2,26 +2,59 @@ import type { IndexedColumn } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
 import type { EvalContext } from "../expressions/context.ts";
 import { evalExpr } from "../expressions/eval.ts";
+import type { Cell, ExecutionEnv } from "../executor/env.ts";
 import { defaultFunctionRegistry } from "../functions/registry.ts";
 import type { IndexInfo } from "../storage/database-state.ts";
 import { normalizeColumnName, type Row } from "../storage/row.ts";
 import type { Table } from "../storage/table.ts";
 import { normalizeForCollation } from "../types/collation.ts";
-import type { Affinity, SqlValue } from "../types/value.ts";
+import { applyAffinity, type SqlValue } from "../types/value.ts";
 import { isTruthySql } from "../types/value.ts";
 
 /** Heap cells for evaluating index expressions / partial `WHERE` via `ExecutionEnv`. */
-export function heapRowCells(
-  table: Table,
-  row: Row,
-): Array<{ table: string; name: string; value: SqlValue; affinity: Affinity; collate: string | null }> {
-  return table.columns.map((column) => ({
-    table: table.name,
-    name: column.name,
-    value: table.cell(row, normalizeColumnName(column.name)),
-    affinity: column.affinity,
-    collate: column.collate,
-  }));
+export function heapRowCells(table: Table, row: Row, env?: ExecutionEnv): Cell[] {
+  const alias = table.name;
+  const baseCells: Cell[] = table.columns
+    .filter((column) => !column.generated || column.generated.stored)
+    .map((column) => ({
+      table: alias,
+      name: column.name,
+      value: table.cell(row, normalizeColumnName(column.name)),
+      affinity: column.affinity,
+      collate: column.collate,
+    }));
+  const cells = [...baseCells];
+  if (env) {
+    for (const column of table.columns) {
+      if (!column.generated || column.generated.stored) continue;
+      const ctx = env.createEvalContext({ cells: baseCells, sourceTable: table.name });
+      const value = applyAffinity(evalExpr(column.generated.expr, ctx), column.affinity);
+      cells.push({
+        table: alias,
+        name: column.name,
+        value,
+        affinity: column.affinity,
+        collate: column.collate,
+      });
+    }
+  } else {
+    for (const column of table.columns) {
+      if (!column.generated || column.generated.stored) continue;
+      cells.push({
+        table: alias,
+        name: column.name,
+        value: null,
+        affinity: column.affinity,
+        collate: column.collate,
+      });
+    }
+  }
+  cells.sort((a, b) => {
+    const ai = table.columns.findIndex((column) => column.name.toLowerCase() === a.name.toLowerCase());
+    const bi = table.columns.findIndex((column) => column.name.toLowerCase() === b.name.toLowerCase());
+    return ai - bi;
+  });
+  return cells;
 }
 
 /** Indexed-column values for one heap row (expression indexes included when `ctx` is set). */
@@ -32,12 +65,17 @@ export function indexKeyValues(
   table?: Table,
 ): SqlValue[] {
   return columns.map((column) => {
-    const raw =
-      column.expr && ctx
-        ? evalExpr(column.expr, ctx)
-        : table
-          ? table.cell(row, normalizeColumnName(column.name))
-          : null;
+    let raw: SqlValue;
+    if (column.expr && ctx) {
+      raw = evalExpr(column.expr, ctx);
+    } else if (ctx) {
+      // Bare column refs (including VIRTUAL generated columns) come from scope, not heap storage.
+      raw = ctx.resolveColumn(null, column.name);
+    } else if (table) {
+      raw = table.cell(row, normalizeColumnName(column.name));
+    } else {
+      raw = null;
+    }
     return normalizeForCollation(raw, column.collate ?? "BINARY");
   });
 }

@@ -1,4 +1,4 @@
-# Local replica: bun run ci:local (scripts/ci-local.ts)
+# Local replica: bun run check:full (scripts/ci-local.ts)
 name: CI
 
 on:

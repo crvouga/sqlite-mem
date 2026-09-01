@@ -34,8 +34,9 @@ function storeColumnValue(
   column: { name: string; typeName: string | null; affinity: import("../types/value.ts").Affinity },
   value: SqlValue,
 ): SqlValue {
-  if (table.strict) return applyStrictValue(value, column.typeName ?? "", table.name, column.name);
-  return applyAffinity(value, column.affinity);
+  const affined = applyAffinity(value, column.affinity);
+  if (table.strict) return applyStrictValue(affined, column.typeName ?? "", table.name, column.name);
+  return affined;
 }
 
 export function executeInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
@@ -787,11 +788,8 @@ function updateOne(
   } catch (error) {
     if (after) {
       if (indexesAdded) removeIndexes(table, after, env);
-      table.delete(after.rowid);
-    }
-    table.rows.set(before.rowid, before);
-    if (table.withoutRowid) {
-      // best-effort restore handled by table.update failure paths
+      // Revert row storage (including WITHOUT ROWID clustered keys), not just `rows`.
+      table.update(before.rowid, table.namedValues(before));
     }
     addIndexes(table, before, env);
     throw error;

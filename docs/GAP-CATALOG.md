@@ -249,7 +249,7 @@ Columns: Area | SQLite 3.51 behavior | Current coverage | Severity | What proof 
 | Area | SQLite 3.51 behavior | Current coverage | Severity | What proof is missing | Suggested test type |
 | --- | --- | --- | --- | --- | --- |
 | Pure ESM, no `node:`/`fs` on public path | Isomorphic package | Proven pack gate — `scripts/verify-package.ts` (dist bans `node:`/`bun:`) | — | — | — |
-| In-browser SQL dialect parity | Same SQL → same results | **none** — no Playwright SQL suite; `test:browser` is optional perf smoke (`scripts/browser-perf.ts`) and is **not** in `ci:local` or `.github/workflows/ci.yml` | blocker | Real-browser smoke + fixture differential (pre-recorded oracle JSON when Node unavailable) wired into CI | browser differential |
+| In-browser SQL dialect parity | Same SQL → same results | **none** — no Playwright SQL suite; `test:browser` is optional perf smoke (`scripts/browser-perf.ts`) and is **not** in `check:full` or `.github/workflows/ci.yml` | blocker | Real-browser smoke + fixture differential (pre-recorded oracle JSON when Node unavailable) wired into CI | browser differential |
 | React+Vite example | Exercises binds, multi-statement, txn, snapshot | Thin — snapshot/restore + binds in `examples/react-vite`; `runSql` uses `prepare` (single-statement) so multi-statement sample “Insert user” fails; no `transaction()` sample | high | Example + browser suite covering exec multi-statement, binds, transactions, snapshot | simulation / browser |
 
 ### Catalog smoke ratchet

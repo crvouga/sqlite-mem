@@ -135,7 +135,7 @@ function rebuildOneIndex(env: ExecutionEnv, db: DatabaseState, index: IndexInfo)
   if (!table) return;
   const writable = db.ensureWritableIndex(index);
   rebuildIndexFromTable(writable, table, (row) =>
-    env.createEvalContext({ rowid: row.rowid, sourceTable: table.name, cells: heapRowCells(table, row) }),
+    env.createEvalContext({ rowid: row.rowid, sourceTable: table.name, cells: heapRowCells(table, row, env) }),
   );
 }
 

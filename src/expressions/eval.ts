@@ -10,19 +10,19 @@ import {
   applyComparisonAffinity,
   asSqlReal,
   canonicalizeNumber,
-  coerceToNumber,
+  coerceToNumberPrefix,
   compareSql,
+  isSqlReal,
   isTruthySql,
   type SqlValue,
   storageClassOf,
-  toInteger,
   utf8Decode,
 } from "../types/value.ts";
 import type { EvalContext } from "./context.ts";
 import { globMatch, likeMatch } from "./like.ts";
 
 function numberValue(value: SqlValue): number {
-  return coerceToNumber(value) ?? 0;
+  return coerceToNumberPrefix(value);
 }
 
 function asNumber(value: number): number {
@@ -30,8 +30,15 @@ function asNumber(value: number): number {
 }
 
 function integerValue(value: SqlValue): bigint {
-  const integer = toInteger(value);
-  return typeof integer === "bigint" ? integer : BigInt(integer ?? 0);
+  if (value === null) return 0n;
+  if (typeof value === "bigint") return value;
+  if (typeof value === "number") return BigInt(Math.trunc(value));
+  if (isSqlReal(value)) return BigInt(Math.trunc(value.value));
+  return BigInt(Math.trunc(coerceToNumberPrefix(value)));
+}
+
+function isRealStorage(value: SqlValue): boolean {
+  return storageClassOf(value) === "real" || isSqlReal(value);
 }
 
 function textValue(value: SqlValue): string {
@@ -208,9 +215,10 @@ function evalBinary(op: BinaryOp, leftExpr: Expr, rightExpr: Expr, ctx: EvalCont
       const divisor = integerValue(right);
       if (divisor === 0n) return null;
       const remainder = integerValue(left) % divisor;
-      return remainder <= BigInt(Number.MAX_SAFE_INTEGER) && remainder >= BigInt(Number.MIN_SAFE_INTEGER)
-        ? Number(remainder)
-        : remainder;
+      if (isRealStorage(left) || isRealStorage(right)) {
+        return asSqlReal(Number(remainder));
+      }
+      return safeIntegerResult(remainder);
     }
     case "||":
       return textValue(left) + textValue(right);
@@ -333,7 +341,8 @@ function rowValuesEqual(left: SqlValue[], right: SqlValue[]): boolean | null {
   return sawNull ? null : true;
 }
 
-function explicitCollation(expr: Expr): string | null {
+/** COLLATE name on `expr`, if any (does not walk column inheritance). */
+export function explicitCollation(expr: Expr): string | null {
   switch (expr.type) {
     case "collate":
       return expr.collation;

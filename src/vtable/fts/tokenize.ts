@@ -37,31 +37,65 @@ export function createTokenizer(config: FtsTokenizerConfig): TokenizerFn {
 }
 
 function createAsciiTokenizer(config: FtsTokenizerConfig): TokenizerFn {
-  const extraToken = new Set(config.tokenchars ?? "");
-  const extraSep = new Set(config.separators ?? "");
+  const tokenChar = defaultAsciiTokenChar();
+  for (const ch of config.tokenchars ?? "") {
+    const code = ch.charCodeAt(0);
+    if (code < 128) tokenChar[code] = 1;
+  }
+  for (const ch of config.separators ?? "") {
+    const code = ch.charCodeAt(0);
+    if (code < 128) tokenChar[code] = 0;
+  }
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
   return (text: string) => {
+    const bytes = encoder.encode(text);
     const tokens: FtsToken[] = [];
-    let i = 0;
+    let is = 0;
     let pos = 0;
-    while (i < text.length) {
-      while (i < text.length && !isAsciiTokenChar(text[i]!, extraToken, extraSep)) i++;
-      if (i >= text.length) break;
-      const startUnit = i;
-      while (i < text.length && isAsciiTokenChar(text[i]!, extraToken, extraSep)) i++;
-      const raw = text.slice(startUnit, i);
-      const term = raw.toLowerCase();
-      if (term.length === 0) continue;
+    while (is < bytes.length) {
+      while (is < bytes.length && (bytes[is]! & 0x80) === 0 && tokenChar[bytes[is]!] === 0) is++;
+      if (is >= bytes.length) break;
+      let ie = is + 1;
+      while (ie < bytes.length && ((bytes[ie]! & 0x80) !== 0 || tokenChar[bytes[ie]!] === 1)) ie++;
+      const raw = bytes.slice(is, ie);
+      const folded = new Uint8Array(raw.length);
+      for (let i = 0; i < raw.length; i++) {
+        const c = raw[i]!;
+        folded[i] = c >= 65 && c <= 90 ? c + 32 : c;
+      }
+      const term = decoder.decode(folded);
       tokens.push({
         term,
-        start: utf8Offset(text, startUnit),
-        length: utf8Length(raw),
+        start: is,
+        length: ie - is,
         position: pos++,
-        startUnit,
-        endUnit: i,
+        startUnit: utf16Offset(text, is),
+        endUnit: utf16Offset(text, ie),
       });
+      is = ie + 1;
     }
     return tokens;
   };
+}
+
+function defaultAsciiTokenChar(): Uint8Array {
+  const a = new Uint8Array(128);
+  for (let i = 48; i <= 57; i++) a[i] = 1;
+  for (let i = 65; i <= 90; i++) a[i] = 1;
+  for (let i = 97; i <= 122; i++) a[i] = 1;
+  return a;
+}
+
+function utf16Offset(text: string, byteOffset: number): number {
+  let units = 0;
+  let b = 0;
+  for (const ch of text) {
+    if (b >= byteOffset) break;
+    b += new TextEncoder().encode(ch).length;
+    units += ch.length;
+  }
+  return units;
 }
 
 function createUnicode61Tokenizer(config: FtsTokenizerConfig): TokenizerFn {
@@ -117,14 +151,6 @@ function createTrigramTokenizer(config: FtsTokenizerConfig): TokenizerFn {
     }
     return tokens;
   };
-}
-
-function isAsciiTokenChar(ch: string, extraToken: Set<string>, extraSep: Set<string>): boolean {
-  if (extraSep.has(ch)) return false;
-  if (extraToken.has(ch)) return true;
-  const code = ch.charCodeAt(0);
-  if (code > 127) return false;
-  return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
 }
 
 function isUnicodeTokenChar(ch: string, extraToken: Set<string>, extraSep: Set<string>): boolean {

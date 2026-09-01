@@ -11,7 +11,7 @@ import type {
 } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
 import type { EvalContext } from "../expressions/context.ts";
-import { evalExpr } from "../expressions/eval.ts";
+import { evalExpr, explicitCollation } from "../expressions/eval.ts";
 import { isPragmaTvfName } from "../functions/pragma-tvf.ts";
 import { evaluateTableFunction, hasTableValuedFunction, tableValuedColumns } from "../functions/table-valued.ts";
 import { serializeIndexKey } from "../indexes/index.ts";
@@ -205,8 +205,13 @@ function executeSelectCore(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalCon
       scopes = scanFrom(stmt.from, env, parent);
     }
   } else if (stmt.from && stmt.orderBy.length === 1 && stmt.orderBy[0]) {
+    const canUseIndexedOrderScan =
+      stmt.groupBy.length === 0 &&
+      stmt.having === null &&
+      !stmt.distinct &&
+      !stmt.columns.some((column) => column.type === "expr" && containsAggregate(column.expr));
     let take: number | undefined;
-    if (stmt.limit) {
+    if (canUseIndexedOrderScan && stmt.limit) {
       const ctx = env.createEvalContext(null, parent);
       const limitValue = toInteger(evalExpr(stmt.limit.limit, ctx));
       const offsetValue = stmt.limit.offset ? toInteger(evalExpr(stmt.limit.offset, ctx)) : 0;
@@ -216,15 +221,17 @@ function executeSelectCore(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalCon
         take = limit < 0 ? undefined : offset + limit;
       }
     }
-    const ordered = tryIndexedOrder(
-      stmt.from,
-      { expr: stmt.orderBy[0].expr, dir: stmt.orderBy[0].dir ?? "ASC" },
-      env,
-      take,
-    );
-    if (ordered) {
-      scopes = scopesFromTableRows(ordered.table, ordered.rows, ordered.alias, env, parent);
-      skipOrder = true;
+    if (canUseIndexedOrderScan) {
+      const ordered = tryIndexedOrder(
+        stmt.from,
+        { expr: stmt.orderBy[0].expr, dir: stmt.orderBy[0].dir ?? "ASC" },
+        env,
+        take,
+      );
+      if (ordered) {
+        scopes = scopesFromTableRows(ordered.table, ordered.rows, ordered.alias, env, parent);
+        skipOrder = true;
+      } else scopes = scanFrom(stmt.from, env, parent);
     } else scopes = scanFrom(stmt.from, env, parent);
   } else {
     scopes = stmt.from ? scanFrom(stmt.from, env, parent) : [{ cells: [] }];
@@ -311,6 +318,12 @@ function executeSelectCore(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalCon
     if (canStopEarly && !aggregate && !stmt.limit && output.length >= env.maxRows) break;
   }
 
+  // SQLite emits grouped rows sorted by GROUP BY keys (ASC) even without ORDER BY.
+  if (stmt.groupBy.length > 0 && stmt.orderBy.length === 0 && !skipOrder) {
+    const groupOrder = groupBy.map((expr) => ({ expr, dir: "ASC" as const, nulls: null }));
+    output.sort((left, right) => compareOutput(left, right, groupOrder, columns, env, parent, stmt.columns));
+  }
+
   if (stmt.distinct) {
     const seen = new Set<string>();
     output = output.filter((row) => {
@@ -321,7 +334,15 @@ function executeSelectCore(stmt: SelectStmt, env: ExecutionEnv, parent?: EvalCon
     });
   }
   if (stmt.orderBy.length > 0 && !skipOrder) {
-    output.sort((left, right) => compareOutput(left, right, stmt.orderBy, columns, env, parent));
+    const groupOrder =
+      stmt.groupBy.length > 0
+        ? groupBy.map((expr) => ({ expr, dir: "ASC" as const, nulls: null as OrderByItem["nulls"] }))
+        : [];
+    output.sort((left, right) => {
+      const primary = compareOutput(left, right, stmt.orderBy, columns, env, parent, stmt.columns);
+      if (primary !== 0 || groupOrder.length === 0) return primary;
+      return compareOutput(left, right, groupOrder, columns, env, parent, stmt.columns);
+    });
   }
   if (stmt.limit) {
     const ctx = env.createEvalContext(null, parent);
@@ -1104,6 +1125,7 @@ function compareOutput(
   columns: string[],
   env: ExecutionEnv,
   parent?: EvalContext,
+  resultColumns?: ResultColumn[],
 ): number {
   for (const item of order) {
     const value = (row: OutputRow): SqlValue => {
@@ -1117,21 +1139,34 @@ function compareOutput(
       }
       return evalExpr(item.expr, env.createEvalContext(row.scope, parent));
     };
-    const result = compareNullable(value(a), value(b), item, a.scope);
+    const result = compareNullable(value(a), value(b), item, a.scope, columns, resultColumns);
     if (result !== 0) return result;
   }
   return 0;
 }
 
-function compareNullable(left: SqlValue, right: SqlValue, item: OrderByItem, scope?: ScopeRow): number {
-  if (left === null || right === null) {
-    if (left === right) return 0;
-    const nullFirst = item.nulls ? item.nulls === "FIRST" : item.dir === "ASC";
-    return (left === null ? -1 : 1) * (nullFirst ? 1 : -1);
+function collationForOrderItem(
+  item: OrderByItem,
+  resultColumns: ResultColumn[],
+  columnNames: string[],
+  scope?: ScopeRow,
+): string | null {
+  if (item.expr.type === "collate") return item.expr.collation;
+  if (item.expr.type === "literal" && typeof item.expr.value === "number" && Number.isInteger(item.expr.value)) {
+    const column = resultColumns[item.expr.value - 1];
+    if (column?.type === "expr") return explicitCollation(column.expr);
   }
-  let collation: string | null = null;
-  if (item.expr.type === "collate") collation = item.expr.collation;
-  else if (scope && item.expr.type === "column") {
+  if (item.expr.type === "column" && item.expr.table === null) {
+    const key = item.expr.name.toLowerCase();
+    const byAlias = resultColumns.find((column) => column.type === "expr" && column.alias?.toLowerCase() === key);
+    if (byAlias?.type === "expr") return explicitCollation(byAlias.expr);
+    const index = columnNames.findIndex((name) => name.toLowerCase() === key);
+    if (index >= 0) {
+      const column = resultColumns[index];
+      if (column?.type === "expr") return explicitCollation(column.expr);
+    }
+  }
+  if (scope && item.expr.type === "column") {
     const key = item.expr.name.toLowerCase();
     const match = scope.cells.find(
       (cell) =>
@@ -1139,8 +1174,41 @@ function compareNullable(left: SqlValue, right: SqlValue, item: OrderByItem, sco
         item.expr.type === "column" &&
         (item.expr.table === null || cell.table?.toLowerCase() === item.expr.table.toLowerCase()),
     );
-    collation = match?.collate ?? null;
+    if (match?.collate) return match.collate;
   }
+  return null;
+}
+
+function compareNullable(
+  left: SqlValue,
+  right: SqlValue,
+  item: OrderByItem,
+  scope?: ScopeRow,
+  columnNames?: string[],
+  resultColumns?: ResultColumn[],
+): number {
+  if (left === null || right === null) {
+    if (left === right) return 0;
+    const nullFirst = item.nulls ? item.nulls === "FIRST" : item.dir === "ASC";
+    return (left === null ? -1 : 1) * (nullFirst ? 1 : -1);
+  }
+  const collation =
+    resultColumns && columnNames
+      ? collationForOrderItem(item, resultColumns, columnNames, scope)
+      : scope && item.expr.type === "column"
+        ? (() => {
+            const key = item.expr.name.toLowerCase();
+            const match = scope.cells.find(
+              (cell) =>
+                cell.name.toLowerCase() === key &&
+                item.expr.type === "column" &&
+                (item.expr.table === null || cell.table?.toLowerCase() === item.expr.table.toLowerCase()),
+            );
+            return match?.collate ?? null;
+          })()
+        : item.expr.type === "collate"
+          ? item.expr.collation
+          : null;
   const comparison = collation ? compareWithCollation(left, right, collation) : compareSql(left, right);
   return (comparison ?? 0) * (item.dir === "DESC" ? -1 : 1);
 }

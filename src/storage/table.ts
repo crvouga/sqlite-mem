@@ -170,7 +170,8 @@ export class Table {
     if (!this.slab) return;
     for (const row of this.slab.scan()) this.rows.set(row.rowid, { rowid: row.rowid, values: [...row.values] });
     this.slab = null;
-    this.invalidateScan();
+    if (this.withoutRowid) this.rebuildClusteredRows();
+    else this.invalidateScan();
   }
 
   private hasRow(rowid: Rowid): boolean {
@@ -495,11 +496,9 @@ export class Table {
     const result: SqlValue[] = [];
     for (const column of this.columns) {
       const key = normalizeColumnName(column.name);
-      result.push(
-        this.strict
-          ? applyStrictValue(cloneSqlValue(supplied.get(key) ?? null), column.typeName ?? "", this.name, column.name)
-          : applyAffinity(cloneSqlValue(supplied.get(key) ?? null), column.affinity),
-      );
+      const raw = cloneSqlValue(supplied.get(key) ?? null);
+      const affined = applyAffinity(raw, column.affinity);
+      result.push(this.strict ? applyStrictValue(affined, column.typeName ?? "", this.name, column.name) : affined);
     }
     return result;
   }

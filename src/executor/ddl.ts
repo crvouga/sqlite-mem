@@ -40,7 +40,7 @@ export function executeCreateTable(stmt: CreateTableStmt, env: ExecutionEnv): Re
     const index = db.indexes.get(indexName.toLowerCase());
     if (!index) continue;
     rebuildIndexFromTable(index, table, (row) =>
-      env.createEvalContext({ rowid: row.rowid, sourceTable: table.name, cells: heapRowCells(table, row) }),
+      env.createEvalContext({ rowid: row.rowid, sourceTable: table.name, cells: heapRowCells(table, row, env) }),
     );
   }
   env.state.recordChange(0);
@@ -52,7 +52,7 @@ export function executeCreateIndex(stmt: CreateIndexStmt, env: ExecutionEnv): Re
   const table = env.state.getTable(stmt.table);
   try {
     rebuildIndexFromTable(index, table, (row) =>
-      env.createEvalContext({ rowid: row.rowid, sourceTable: table.name, cells: heapRowCells(table, row) }),
+      env.createEvalContext({ rowid: row.rowid, sourceTable: table.name, cells: heapRowCells(table, row, env) }),
     );
   } catch (error) {
     env.state.dropIndex(stmt.name, true);
@@ -88,7 +88,7 @@ export function executeAlterTable(stmt: AlterTableStmt, env: ExecutionEnv): Resu
       throw new SqliteError(`duplicate column name: ${action.column.name}`, "other");
     const primary = action.column.constraints.some((item) => item.type === "primary_key");
     const unique = action.column.constraints.some((item) => item.type === "unique");
-    if ((primary || unique) && table.rows.size > 0)
+    if ((primary || unique) && table.rowCount() > 0)
       throw new SqliteError("Cannot add a PRIMARY KEY or UNIQUE column", "other");
     const defaultExpr = action.column.constraints.find((item) => item.type === "default")?.expr ?? null;
     const collate = action.column.constraints.find((item) => item.type === "collate");
@@ -102,8 +102,9 @@ export function executeAlterTable(stmt: AlterTableStmt, env: ExecutionEnv): Resu
       generated: generated?.type === "generated" ? { expr: generated.expr, stored: generated.stored } : null,
     });
     const defaultValue = defaultExpr ? evalExpr(defaultExpr, env.createEvalContext()) : null;
-    if (column.notNull && defaultValue === null && table.rows.size > 0)
+    if (column.notNull && defaultValue === null && table.rowCount() > 0)
       throw new SqliteError("Cannot add a NOT NULL column with default value NULL", "other");
+    table.materializeSlab();
     table.columns.push(column);
     table.rebuildColIndex();
     for (const row of table.rows.values()) row.values.push(defaultValue);

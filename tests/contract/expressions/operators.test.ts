@@ -2,6 +2,7 @@ import { parity } from "../helpers.ts";
 
 parity("arithmetic and concatenation operators", [], "SELECT 7+3 a,7-3 b,7*3 c,7/3 d,7%3 e,'ab'||'cd' f");
 parity("boolean precedence", [], "SELECT 1 OR 0 AND 0 a,(1 OR 0) AND 0 b,NOT 0 c");
+parity("NOT binds looser than comparison", [], "SELECT (NOT 2 <= 1) a,((NOT 2) <= 1) b,(NOT 543 <= 366) c");
 parity(
   "searched and simple CASE",
   [],

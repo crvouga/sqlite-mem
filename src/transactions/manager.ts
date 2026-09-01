@@ -58,7 +58,8 @@ export class TransactionManager {
       const index = this.findSavepoint(savepoint);
       const snapshot = this.savepoints[index];
       if (!snapshot) throw new SqliteError(`no such savepoint: ${savepoint}`, "transaction", "SQLITE_ERROR");
-      this.state.replaceWith(snapshot.state, { adopt: true });
+      // Clone — adopting would alias live state with the savepoint snapshot Map.
+      this.state.replaceWith(snapshot.state);
       this.prng.setState(snapshot.prngState);
       this.state.totalChanges = preserved.totalChanges;
       this.state.changes = preserved.changes;

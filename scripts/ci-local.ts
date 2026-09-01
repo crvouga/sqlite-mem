@@ -1,8 +1,8 @@
 /**
  * Local replica of .github/workflows/ci.yml (except the main-only release/publish job).
  *
- *   bun run ci:local
- *   npm run ci:local
+ *   bun run check:full
+ *   npm run check:full
  */
 import { join } from "node:path";
 
@@ -36,8 +36,8 @@ async function runStep(label: string, argv: string[], opts?: { env?: Record<stri
   const seconds = (performance.now() - started) / 1000;
   if (code !== 0) {
     console.error("");
-    console.error(`ci:local FAILED at "${label}" (exit ${code}, ${seconds.toFixed(1)}s)`);
-    console.error("This is the same command CI runs. Fix it, then re-run: bun run ci:local");
+    console.error(`check:full FAILED at "${label}" (exit ${code}, ${seconds.toFixed(1)}s)`);
+    console.error("This is the same command CI runs. Fix it, then re-run: bun run check:full");
     process.exit(code);
   }
   console.log(`✓ ${label} (${seconds.toFixed(1)}s)`);
@@ -134,7 +134,7 @@ async function commitlintJob(): Promise<void> {
   if (code !== 0) {
     printCommitlintHelp("range");
     console.error("");
-    console.error(`ci:local FAILED at "Commitlint" (exit ${code}, ${seconds.toFixed(1)}s)`);
+    console.error(`check:full FAILED at "Commitlint" (exit ${code}, ${seconds.toFixed(1)}s)`);
     process.exit(code);
   }
   console.log(`✓ Commitlint (${seconds.toFixed(1)}s)`);
@@ -173,7 +173,7 @@ async function commitlintJob(): Promise<void> {
   }
 }
 
-console.log("sqlite-mem ci:local");
+console.log("sqlite-mem check:full");
 console.log("Mirrors .github/workflows/ci.yml — skip: release/publish (main + OIDC only)");
 if (process.platform !== "linux") {
   notes.push(

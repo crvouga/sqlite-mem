@@ -171,6 +171,7 @@ const IDENT_KEYWORDS: ReadonlySet<TokenKind> = new Set<TokenKind>([
   "RENAME",
   "REPLACE",
   "RESTRICT",
+  "RESPECT",
   "RETURNING",
   "RIGHT",
   "ROLLBACK",
@@ -223,6 +224,7 @@ const AGGREGATE_FUNCTIONS = new Set([
 const PREC = {
   OR: 10,
   AND: 20,
+  NOT: 25,
   IS_IN_LIKE: 30,
   COMPARE: 40,
   BIT_OR: 45,
@@ -1720,7 +1722,13 @@ export class Parser {
   }
 
   private parseExprPrec(minPrec: number): Expr {
-    let left = this.parseUnaryExpr();
+    let left: Expr;
+    if (this.at("NOT") && PREC.NOT >= minPrec && !this.isNotKeywordCompound()) {
+      this.advance();
+      left = { type: "unary", op: "NOT", expr: this.parseExprPrec(PREC.NOT + 1) };
+    } else {
+      left = this.parseUnaryExpr();
+    }
 
     while (true) {
       left = this.parsePostfix(left);
@@ -1953,14 +1961,12 @@ export class Parser {
     return result;
   }
 
+  private isNotKeywordCompound(): boolean {
+    const n = this.peek();
+    return n.kind === "IN" || n.kind === "LIKE" || n.kind === "GLOB" || n.kind === "BETWEEN" || n.kind === "REGEXP";
+  }
+
   private parseUnaryExpr(): Expr {
-    if (this.match("NOT")) {
-      const operand = this.parseUnaryExpr();
-      if (operand.type === "exists") {
-        return { ...operand, not: !operand.not };
-      }
-      return { type: "unary", op: "NOT", expr: operand };
-    }
     if (this.match("PLUS")) return { type: "unary", op: "+", expr: this.parseUnaryExpr() };
     if (this.match("MINUS")) return { type: "unary", op: "-", expr: this.parseUnaryExpr() };
     if (this.match("TILDE")) return { type: "unary", op: "~", expr: this.parseUnaryExpr() };
@@ -2093,6 +2099,12 @@ export class Parser {
     const orderBy = this.parseOrderBy();
     this.expect("RPAREN");
 
+    if (this.check("IGNORE", "RESPECT")) {
+      this.advance();
+      this.match("NULLS");
+      throw new SqliteError('near "NULLS": syntax error', "syntax");
+    }
+
     if (this.match("FILTER")) {
       this.expect("LPAREN");
       this.expect("WHERE");
@@ -2167,6 +2179,12 @@ export class Parser {
         }
         orderBy.push({ expr, dir, nulls });
       } while (this.match("COMMA"));
+    }
+
+    if (this.check("IGNORE", "RESPECT")) {
+      const keyword = this.advance().value.toUpperCase();
+      this.match("NULLS");
+      throw new SqliteError(`near "${keyword}": syntax error`, "syntax");
     }
 
     if (this.check("ROWS", "RANGE", "GROUPS")) {
