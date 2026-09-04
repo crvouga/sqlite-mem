@@ -122,6 +122,17 @@ SQLITE_MEM_FUZZ_SEED=12345 bun test tests/fuzz
 SQLITE_MEM_FUZZ_SEED=12345 SQLITE_MEM_FUZZ_PATH='0:1' bun test tests/fuzz
 ```
 
+### Random walk (state-dependent DST)
+
+`tests/fuzz/random-walk.test.ts` walks the SQL state space one enabled action at
+a time and asserts result + logical-state parity after every step.
+
+```bash
+bun run test:walk
+SQLITE_MEM_WALK_STEPS=80 bun run test:walk
+bun run test:walk:soak -- --depth 200 --runs 20
+```
+
 ## Compat system
 
 | Command | Role |

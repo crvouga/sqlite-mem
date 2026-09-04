@@ -9,6 +9,18 @@ Dump-after-each differential simulation lives under `tests/fuzz/dst/`:
 | `tests/fuzz/dst/minimize.ts` | Shrink a failing sequence to SQL |
 | `tests/fuzz/dst/repro.ts` | Write corpus / local shrink artifacts |
 
+## Random walk
+
+State-dependent walk under `tests/fuzz/walk/` (Antithesis-style): at each step
+the model computes **enabled** actions, a decision vector picks among them, and
+both engines assert result + logical-state parity.
+
+```bash
+bun run test:walk
+SQLITE_MEM_WALK_STEPS=80 SQLITE_MEM_FUZZ_SEED=12345 bun run test:walk
+bun run test:walk:soak -- --depth 200 --runs 20
+```
+
 ## Replay
 
 ```bash
@@ -29,5 +41,5 @@ Committed forever under `tests/corpus/regressions/` (replayed by `tests/fuzz/cor
 ## Soak overrides
 
 ```bash
-SQLITE_MEM_MIXED_STEPS=64 SQLITE_MEM_STATEFUL_STEPS=64 SQLITE_MEM_FUZZ_RUNS=100 bun run test:fuzz:soak
+SQLITE_MEM_MIXED_STEPS=64 SQLITE_MEM_STATEFUL_STEPS=64 SQLITE_MEM_WALK_STEPS=64 SQLITE_MEM_FUZZ_RUNS=100 bun run test:fuzz:soak
 ```
