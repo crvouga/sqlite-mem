@@ -31,11 +31,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/crvouga/sqlite-mem.git"
+    "url": "git+https://github.com/crvouga-organization/sqlite-mem.git"
   },
-  "homepage": "https://github.com/crvouga/sqlite-mem#readme",
+  "homepage": "https://github.com/crvouga-organization/sqlite-mem#readme",
   "bugs": {
-    "url": "https://github.com/crvouga/sqlite-mem/issues"
+    "url": "https://github.com/crvouga-organization/sqlite-mem/issues"
   },
   "publishConfig": {
     "access": "public",
@@ -94,7 +94,7 @@
     "secrets:check": "bun run scripts/secrets/check-vault.ts && bun run scripts/secrets/check-github.ts",
     "secrets:sync": "bun run scripts/secrets/sync-github.ts",
     "npm:seed": "bun run scripts/seed-npm.ts",
-    "gh": "open https://github.com/crvouga/sqlite-mem/actions",
+    "gh": "open https://github.com/crvouga-organization/sqlite-mem/actions",
     "example:react-vite": "cd examples/react-vite && bun install && bun run dev",
     "fc": "clear && bun format && bun check:full"
   },
