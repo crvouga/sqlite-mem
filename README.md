@@ -1,7 +1,7 @@
 # sqlite-mem
 
 > [!WARNING]
-> **Archived.** `@crvouga/sqlite-mem` is no longer maintained here. Development continues in the Mockingbird monorepo as [`@crvouga/mockingbird-service-sqlite`](https://www.npmjs.com/package/@crvouga/mockingbird-service-sqlite) ([source](https://github.com/crvouga-organization/mockingbird/tree/main/packages/service/sqlite)).
+> **Archived.** `@crvouga/sqlite-mem` is no longer maintained here. Development continues in the Mockingbird monorepo as [`@crvouga/mockingbird-service-sqlite`](https://www.npmjs.com/package/@crvouga/mockingbird-service-sqlite) ([source](https://github.com/crvouga/mockingbird/tree/main/packages/service/sqlite)).
 >
 > ```bash
 > npm uninstall @crvouga/sqlite-mem && npm install @crvouga/mockingbird-service-sqlite
@@ -9,7 +9,7 @@
 >
 > Then replace `@crvouga/sqlite-mem` with `@crvouga/mockingbird-service-sqlite` in your imports; the API is the same.
 
-[npm](https://www.npmjs.com/package/@crvouga/sqlite-mem) · [GitHub](https://github.com/crvouga-organization/sqlite-mem)
+[npm](https://www.npmjs.com/package/@crvouga/sqlite-mem) · [GitHub](https://github.com/crvouga/sqlite-mem)
 
 Pure TypeScript, completely in-memory SQLite implementation aiming for **full SQLite3 SQL dialect parity** (same statements → same results).
 
